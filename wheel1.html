@@ -229,11 +229,51 @@ const prizes = [
   { label: "🥈", sub: "بطاقة فضية",    full: "بطاقة أمازون الفضية",    weight: 5,  color1: "#C7C7C7", color2: "#8A8A8A" },
   { label: "🥉", sub: "بطاقة برونزية", full: "بطاقة أمازون البرونزية", weight: 15, color1: "#B5651D", color2: "#7A3E10" }
 ];
+
+/* ====================================================================
+   جوايز وضع "العروض الذهبية" - بتتفعّل لو الرابط فيه ?mode=golden
+   (Placeholder مبدئي - عدّليها زي ما تحبي)
+   ==================================================================== */
+const goldenPrizes = [
+  { label: "100", sub: "جنيه", full: "100 جنيه",                weight: 0.05, color1: "#2E3A6B", color2: "#161B33" },
+  { label: "50",  sub: "جنيه", full: "50 جنيه",                 weight: 0.3,  color1: "#FF9A3D", color2: "#D9600C" },
+  { label: "20",  sub: "جنيه", full: "20 جنيه",                 weight: 2,    color1: "#2FBF9F", color2: "#177A64" },
+  { label: "🥇",  sub: "بطاقة ذهبية كبيرة", full: "بطاقة أمازون الذهبية الكبيرة", weight: 1,  color1: "#D8A324", color2: "#8A6206" },
+  { label: "🥈",  sub: "بطاقة فضية كبيرة",  full: "بطاقة أمازون الفضية الكبيرة",  weight: 5,  color1: "#C7C7C7", color2: "#8A8A8A" },
+  { label: "🥉",  sub: "بطاقة برونزية كبيرة", full: "بطاقة أمازون البرونزية الكبيرة", weight: 15, color1: "#B5651D", color2: "#7A3E10" }
+];
+
+const isGoldenMode = new URLSearchParams(window.location.search).get('mode') === 'golden';
+const isSelectMode = new URLSearchParams(window.location.search).get('mode') === 'select';
+
+/* ====================================================================
+   وضع "الاختيار" - عجلة بصرية بس (بدون قيم حقيقية) بتختار عرض عشوائي
+   قبل ما نطلع السؤال. القيم هنا شكلية للحماس بس، مش لها قيمة فعلية.
+   ==================================================================== */
+const selectPrizes = [
+  { label: "🎁", sub: "عرض", full: "عرض", weight: 1, color1: "#2E3A6B", color2: "#161B33" },
+  { label: "🏆", sub: "عرض", full: "عرض", weight: 1, color1: "#D8A324", color2: "#8A6206" },
+  { label: "⭐", sub: "عرض", full: "عرض", weight: 1, color1: "#2FBF9F", color2: "#177A64" },
+  { label: "🔥", sub: "عرض", full: "عرض", weight: 1, color1: "#FF9A3D", color2: "#D9600C" },
+  { label: "🎯", sub: "عرض", full: "عرض", weight: 1, color1: "#C7C7C7", color2: "#8A8A8A" },
+  { label: "💫", sub: "عرض", full: "عرض", weight: 1, color1: "#B5651D", color2: "#7A3E10" }
+];
+
+const activePrizes = isGoldenMode ? goldenPrizes : (isSelectMode ? selectPrizes : prizes);
+if (isSelectMode) {
+  document.querySelector('h1').textContent = 'عجلة اختيار العرض 🏆';
+  document.querySelector('.sub').textContent = 'دوس ولف واكتشف عرض النهاردة 🎁';
+  document.querySelector('.hint').textContent = 'بعد ما العجلة تقف، هيوصلك تفاصيل العرض والسؤال.';
+}
+if (isGoldenMode) {
+  document.querySelector('h1').textContent = 'عجلة العروض الذهبية 🏆';
+  document.querySelector('.sub').textContent = 'دوس ولف واكسب جوايز ذهبية أكبر 🏆';
+}
 /* ==================================================================== */
 
 const canvas = document.getElementById('wheel');
 const ctx = canvas.getContext('2d');
-const N = prizes.length;
+const N = activePrizes.length;
 const seg = (2 * Math.PI) / N;
 const R = canvas.width / 2;
 
@@ -254,8 +294,8 @@ function drawWheel() {
     const x2 = R + Math.cos(mid) * R;
     const y2 = R + Math.sin(mid) * R;
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    grad.addColorStop(0, prizes[i].color1);
-    grad.addColorStop(1, prizes[i].color2);
+    grad.addColorStop(0, activePrizes[i].color1);
+    grad.addColorStop(1, activePrizes[i].color2);
     ctx.fillStyle = grad;
     ctx.fill();
 
@@ -296,12 +336,12 @@ function drawLabels() {
 
     const amt = document.createElement('span');
     amt.className = 'amt';
-    amt.textContent = prizes[i].label;
+    amt.textContent = activePrizes[i].label;
     el.appendChild(amt);
 
     const sub = document.createElement('span');
     sub.className = 'subtext';
-    sub.textContent = prizes[i].sub;
+    sub.textContent = activePrizes[i].sub;
     el.appendChild(sub);
 
     labelsLayer.appendChild(el);
@@ -324,11 +364,11 @@ for (let i = 0; i < BULB_COUNT; i++) {
 }
 
 function pickPrizeIndex() {
-  const total = prizes.reduce((s, p) => s + p.weight, 0);
+  const total = activePrizes.reduce((s, p) => s + p.weight, 0);
   let r = Math.random() * total;
   for (let i = 0; i < N; i++) {
-    if (r < prizes[i].weight) return i;
-    r -= prizes[i].weight;
+    if (r < activePrizes[i].weight) return i;
+    r -= activePrizes[i].weight;
   }
   return N - 1;
 }
@@ -372,7 +412,7 @@ spinBtn.addEventListener('click', () => {
   labelsLayer.style.transform = `rotate(${currentRotation}deg)`;
 
   setTimeout(() => {
-    prizeText.textContent = prizes[winnerIndex].full;
+    prizeText.textContent = activePrizes[winnerIndex].full;
     resultBox.classList.add('show');
     spinBtn.textContent = "تم اللف 🎉";
 
@@ -380,9 +420,9 @@ spinBtn.addEventListener('click', () => {
       if (window.Telegram && window.Telegram.WebApp) {
         const tg = window.Telegram.WebApp;
         tg.sendData(JSON.stringify({
-          type: "wheel_result",
-          prize: prizes[winnerIndex].full,
-          isWin: prizes[winnerIndex].isWin !== false,
+          type: isSelectMode ? "golden_select" : (isGoldenMode ? "golden_prize_result" : "wheel_result"),
+          prize: activePrizes[winnerIndex].full,
+          isWin: activePrizes[winnerIndex].isWin !== false,
           user_id: tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : null
         }));
       }
