@@ -9,6 +9,8 @@
 """
 import logging
 import json
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from telegram import (
     InlineKeyboardButton,
@@ -582,28 +584,57 @@ async def join_egypt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """برنامج مصر: العميل بيطلب استبدال رصيد جوايزه المتجمّع."""
+    """العميل يطلب استبدال الرصيد؛ الرصيد ينتقل لطلب مالي مستقل بدل تصفيره وقت الدفع."""
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or row["program"] != "egypt":
         await update.message.reply_text("الأمر ده متاح بس لبرنامج مصر.")
         return
-    balance = row["gift_balance"]
+
+    existing = database.get_open_redemption_request(user.id)
+    if existing:
+        await update.message.reply_text(
+            f"⏳ عندك طلب استبدال رقم #{existing['id']} قيد الانتظار بقيمة "
+            f"{_format_egp(existing['amount'])} جنيه.\n"
+            "أول ما يتم الدفع هيوصلك تأكيد هنا."
+        )
+        return
+
+    balance = float(row["gift_balance"] or 0)
     if balance < config.EGYPT_REDEEM_MIN_BALANCE:
         await update.message.reply_text(
             f"محتاج توصل لرصيد {config.EGYPT_REDEEM_MIN_BALANCE} جنيه على الأقل عشان تقدر تستبدله.\n"
             f"رصيدك الحالي: {_format_egp(balance)} جنيه. كمّل تلف واكسب هدايا! 🎁"
         )
         return
+
+    req = database.create_redemption_request(user.id)
+    if not req:
+        await update.message.reply_text("مقدرتش أنشئ طلب الاستبدال دلوقتي. جرّب تاني بعد شوية.")
+        return
+
+    amount = float(req["amount"])
     await update.message.reply_text(
-        f"✅ طلب الاستبدال اتبعت (رصيدك: {_format_egp(balance)} جنيه).\nفريق الدعم هيتواصل معاك خلال يومين لتسليم هديتك."
+        f"✅ اتسجل طلب الاستبدال رقم #{req['id']} بقيمة {_format_egp(amount)} جنيه.\n"
+        "المبلغ ده اتحجز للطلب، وأي جوايز جديدة تكسبها من دلوقتي هتتجمع في رصيد جديد منفصل.\n"
+        "فريق الدعم هيتابع الطلب وهيوصلك تأكيد هنا بعد الدفع."
     )
     username_line = f"@{user.username}" if user.username else "(مفيش يوزرنيم)"
-    _notify_admins(
-        context,
-        f"💰 طلب استبدال جديد!\nالعميل: {user.id} {username_line}\nالرصيد: {balance} جنيه\n"
-        f"استخدمي /markpaid {user.id} بعد ما تدفعيله.",
-    )
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"💰 طلب استبدال جديد #{req['id']}\n"
+                    f"العميل: {user.id} {username_line}\n"
+                    f"المبلغ: {_format_egp(amount)} جنيه"
+                ),
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+                    "فتح الطلب", callback_data=f"admin:redeem:{req['id']}"
+                )]]),
+            )
+        except Exception:
+            pass
 
 
 async def luckypool(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -620,45 +651,202 @@ async def luckypool(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
-async def pendingredeems(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """أدمن: كل عملاء مصر اللي عندهم رصيد جوايز لسه محتاج تسليم."""
+def _format_request_time(value: str | None) -> str:
+    if not value:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(value).replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Africa/Cairo"))
+        return dt.strftime("%d/%m/%Y %I:%M %p")
+    except Exception:
+        return value[:16].replace("T", " ")
+
+
+def _admin_home_markup():
+    summary = database.get_redemption_summary()
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            f"💰 طلبات الاستبدال ({summary['pending_count']})",
+            callback_data="admin:redeems:0",
+        )],
+        [InlineKeyboardButton("📊 الملخص المالي", callback_data="admin:summary")],
+    ])
+
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """لوحة إدارة بسيطة بالأزرار بدل أوامر السطر الواحد."""
     if not _require_admin(update):
         return
-    users = database.list_pending_gift_balances()
-    if not users:
-        await update.message.reply_text("مفيش حد معاه رصيد مستني تسليم دلوقتي 👍")
+    summary = database.get_redemption_summary()
+    text = (
+        "⚙️ لوحة إدارة وفر كاش\n\n"
+        f"⏳ طلبات بانتظار الدفع: {summary['pending_count']}\n"
+        f"💰 إجمالي المستحق حاليًا: {_format_egp(summary['pending_total'])} جنيه\n\n"
+        "اختاري اللي عاوزة تعمليه:"
+    )
+    await update.message.reply_text(text, reply_markup=_admin_home_markup())
+
+
+async def _show_pending_redeems(query, page: int = 0):
+    page = max(page, 0)
+    per_page = 8
+    total = database.count_redemption_requests("pending")
+    max_page = max((total - 1) // per_page, 0) if total else 0
+    page = min(page, max_page)
+    rows = database.list_redemption_requests("pending", per_page, page * per_page)
+
+    if not rows:
+        await query.edit_message_text(
+            "✅ مفيش طلبات استبدال مستنية دفع دلوقتي.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ لوحة الإدارة", callback_data="admin:home")]]),
+        )
         return
-    lines = []
-    total = 0
-    for u in users:
-        name = f"@{u['username']}" if u["username"] else str(u["user_id"])
-        lines.append(f"• {u['user_id']} ({name}) — {u['gift_balance']} جنيه")
-        total += u["gift_balance"]
+
+    buttons = []
+    for r in rows:
+        label_name = f"@{r['username']}" if r['username'] else str(r['user_id'])
+        buttons.append([InlineKeyboardButton(
+            f"#{r['id']} • {label_name} • {_format_egp(r['amount'])} ج",
+            callback_data=f"admin:redeem:{r['id']}",
+        )])
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("⬅️ السابق", callback_data=f"admin:redeems:{page-1}"))
+    if page < max_page:
+        nav.append(InlineKeyboardButton("التالي ➡️", callback_data=f"admin:redeems:{page+1}"))
+    if nav:
+        buttons.append(nav)
+    buttons.append([InlineKeyboardButton("🏠 لوحة الإدارة", callback_data="admin:home")])
+
+    await query.edit_message_text(
+        f"💰 طلبات الاستبدال المعلقة\nعددها: {total}\nالصفحة {page+1} من {max_page+1}\n\nدوسي على أي عميل لفتح الطلب:",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not database.is_admin(update.effective_user.id):
+        await query.answer("غير مسموح", show_alert=True)
+        return
+
+    data = query.data or ""
+    if data == "admin:home":
+        summary = database.get_redemption_summary()
+        await query.edit_message_text(
+            "⚙️ لوحة إدارة وفر كاش\n\n"
+            f"⏳ طلبات بانتظار الدفع: {summary['pending_count']}\n"
+            f"💰 إجمالي المستحق حاليًا: {_format_egp(summary['pending_total'])} جنيه\n\n"
+            "اختاري اللي عاوزة تعمليه:",
+            reply_markup=_admin_home_markup(),
+        )
+        return
+
+    if data == "admin:summary":
+        s = database.get_redemption_summary()
+        await query.edit_message_text(
+            "📊 الملخص المالي\n\n"
+            f"⏳ طلبات معلقة: {s['pending_count']}\n"
+            f"💰 مستحق حاليًا: {_format_egp(s['pending_total'])} جنيه\n"
+            f"✅ طلبات مدفوعة: {s['paid_count']}\n"
+            f"💵 إجمالي المدفوع تاريخيًا: {_format_egp(s['paid_total'])} جنيه",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ لوحة الإدارة", callback_data="admin:home")]]),
+        )
+        return
+
+    if data.startswith("admin:redeems:"):
+        try:
+            page = int(data.rsplit(":", 1)[1])
+        except ValueError:
+            page = 0
+        await _show_pending_redeems(query, page)
+        return
+
+    if data.startswith("admin:redeem:"):
+        request_id = int(data.rsplit(":", 1)[1])
+        r = database.get_redemption_request(request_id)
+        if not r:
+            await query.edit_message_text("الطلب مش موجود.")
+            return
+        name = f"@{r['username']}" if r.get('username') else "بدون username"
+        status_text = "⏳ بانتظار الدفع" if r['status'] == 'pending' else "✅ تم الدفع"
+        buttons = []
+        if r['status'] == 'pending':
+            buttons.append([InlineKeyboardButton("✅ تم الدفع", callback_data=f"admin:paid:{r['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ طلبات الاستبدال", callback_data="admin:redeems:0")])
+        await query.edit_message_text(
+            f"💰 طلب استبدال #{r['id']}\n\n"
+            f"👤 العميل: {name}\n"
+            f"🆔 Telegram ID: {r['user_id']}\n"
+            f"💵 المبلغ: {_format_egp(r['amount'])} جنيه\n"
+            f"🕐 وقت الطلب: {_format_request_time(r['requested_at'])}\n"
+            f"الحالة: {status_text}",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+        return
+
+    if data.startswith("admin:paid:"):
+        request_id = int(data.rsplit(":", 1)[1])
+        r = database.mark_redemption_paid(request_id, update.effective_user.id)
+        if not r:
+            await query.edit_message_text("الطلب مش موجود.")
+            return
+        try:
+            await context.bot.send_message(
+                chat_id=r['user_id'],
+                text=(
+                    f"🎁 تم تسجيل دفع مستحقات طلبك #{request_id} بقيمة "
+                    f"{_format_egp(r['amount'])} جنيه.\n"
+                    "تقدر تكمّل تجمع رصيد جديد من دلوقتي."
+                ),
+            )
+        except Exception:
+            pass
+        await query.edit_message_text(
+            f"✅ تم تعليم الطلب #{request_id} كمدفوع.\n"
+            f"المبلغ: {_format_egp(r['amount'])} جنيه",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ باقي الطلبات", callback_data="admin:redeems:0")]]),
+        )
+        return
+
+
+async def pendingredeems(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """أمر قديم متوافق: يفتح لوحة طلبات الاستبدال بدل القائمة النصية."""
+    if not _require_admin(update):
+        return
+    summary = database.get_redemption_summary()
     await update.message.reply_text(
-        f"💰 عدد العملاء المستنيين: {len(users)} | الإجمالي: {total} جنيه\n\n"
-        + "\n".join(lines[:60])
-        + "\n\nبعد ما تسلّمي أي حد، استخدمي /markpaid <آيدي العميل>"
+        f"💰 طلبات الاستبدال المعلقة: {summary['pending_count']}\n"
+        f"الإجمالي: {_format_egp(summary['pending_total'])} جنيه",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("فتح الطلبات", callback_data="admin:redeems:0")]]),
     )
 
 
 async def markpaid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """أدمن: صفّري رصيد عميل بعد ما تدفعيله هديته."""
+    """أمر قديم متوافق: يعلّم آخر طلب معلق للعميل كمدفوع بدون تصفير أرباحه الجديدة."""
     if not _require_admin(update):
         return
     if not context.args:
-        await update.message.reply_text("الاستخدام: /markpaid <آيدي العميل>")
+        await update.message.reply_text("الأفضل استخدمي /admin ثم دوسي ✅ تم الدفع.\nأو: /markpaid <آيدي العميل>")
         return
     try:
         target_id = int(context.args[0])
     except ValueError:
         await update.message.reply_text("آيدي العميل لازم يكون رقم.")
         return
-    old_balance = database.reset_gift_balance(target_id)
-    await update.message.reply_text(f"✅ اتصفّر رصيد العميل {target_id} (كان {old_balance} جنيه).")
+    req = database.get_pending_redemption_for_user(target_id)
+    if not req:
+        await update.message.reply_text("مفيش طلب استبدال معلق للعميل ده.")
+        return
+    paid = database.mark_redemption_paid(req['id'], update.effective_user.id)
+    await update.message.reply_text(
+        f"✅ تم تعليم الطلب #{req['id']} كمدفوع ({_format_egp(req['amount'])} جنيه)."
+    )
     try:
         await context.bot.send_message(
             chat_id=target_id,
-            text=f"🎁 تم تسليم هديتك ({old_balance} جنيه)! تقدر تكمّل تجمع رصيد جديد من دلوقتي.",
+            text=f"🎁 تم تسجيل دفع مستحقات طلبك #{req['id']} بقيمة {_format_egp(req['amount'])} جنيه.",
         )
     except Exception:
         pass

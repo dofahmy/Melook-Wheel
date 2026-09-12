@@ -51,6 +51,7 @@ def _build_admin_commands() -> list[BotCommand]:
     if config.EGYPT_GOLDEN_PRODUCTS_FILE:
         cmds.append(BotCommand("goldenstats", "🏆 تشخيص كاش العروض الذهبية"))
     cmds += [
+        BotCommand("admin", "⚙️ لوحة الإدارة"),
         BotCommand("wheelwinners", "قايمة الفايزين بالعجلة"),
         BotCommand("listusers", "كل العملاء وحالتهم"),
         BotCommand("removeuser", "احذفي عميل خالص"),
@@ -144,6 +145,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handlers.start_shopping_callback, pattern="^start_shopping$"))
     app.add_handler(CallbackQueryHandler(handlers.golden_wheel_entry, pattern="^golden_start$"))
     app.add_handler(CallbackQueryHandler(handlers.golden_answer_callback, pattern="^goldenans:"))
+    app.add_handler(CallbackQueryHandler(handlers.admin_callback, pattern="^admin:"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handlers.handle_webapp_data))
     app.add_handler(MessageHandler(filters.Regex("^📊 حسابي$"), handlers.account_button))
     app.add_handler(CommandHandler("myaccount", handlers.account_button))
@@ -158,6 +160,7 @@ def main():
     # العجلة الذهبية بتقرأ منتجاتها من الملف، مش من قناة أو جروب.
 
     # أوامر الأدمن
+    app.add_handler(CommandHandler("admin", handlers.admin_panel))
     app.add_handler(CommandHandler("addtag", handlers.addtag))
     app.add_handler(CommandHandler("addtags", handlers.addtags))
     app.add_handler(CommandHandler("removetag", handlers.removetag))

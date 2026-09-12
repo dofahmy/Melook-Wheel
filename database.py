@@ -129,6 +129,17 @@ CREATE TABLE IF NOT EXISTS lucky_wheel_pool (
     remaining INTEGER NOT NULL,
     total INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS redemption_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requested_at TEXT NOT NULL,
+    paid_at TEXT,
+    paid_by INTEGER,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 """
 
 _MIGRATIONS = [
@@ -265,6 +276,10 @@ def init_db():
             ON deals_cache(message_id);
         CREATE INDEX IF NOT EXISTS idx_golden_deals_posted
             ON golden_deals(posted_at);
+        CREATE INDEX IF NOT EXISTS idx_redemptions_status_requested
+            ON redemption_requests(status, requested_at);
+        CREATE INDEX IF NOT EXISTS idx_redemptions_user_status
+            ON redemption_requests(user_id, status);
         """)
         conn.execute("PRAGMA optimize")
 
@@ -717,6 +732,156 @@ def list_pending_gift_balances():
             """SELECT * FROM users WHERE program = 'egypt' AND gift_balance > 0
                ORDER BY gift_balance DESC"""
         ).fetchall()
+
+
+
+# ---------- طلبات استبدال الهدايا / المستحقات ----------
+
+def get_open_redemption_request(user_id: int):
+    """آخر طلب استبدال غير مدفوع للعميل، إن وجد."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT r.*, u.username
+               FROM redemption_requests r
+               JOIN users u ON u.user_id = r.user_id
+               WHERE r.user_id = ? AND r.status IN ('pending', 'processing')
+               ORDER BY r.id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def create_redemption_request(user_id: int):
+    """ينقل الرصيد الحالي إلى طلب مستحقات مستقل ويبدأ رصيدًا جديدًا للعميل.
+
+    يرجّع dict فيه created=True للطلب الجديد، أو created=False لو فيه طلب مفتوح بالفعل.
+    """
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            """SELECT * FROM redemption_requests
+               WHERE user_id = ? AND status IN ('pending', 'processing')
+               ORDER BY id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        if existing:
+            result = dict(existing)
+            result["created"] = False
+            return result
+
+        user = conn.execute(
+            "SELECT gift_balance FROM users WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        amount = float(user["gift_balance"] or 0) if user else 0.0
+        if amount <= 0:
+            return None
+
+        now = datetime.utcnow().isoformat()
+        cur = conn.execute(
+            """INSERT INTO redemption_requests
+               (user_id, amount, status, requested_at)
+               VALUES (?, ?, 'pending', ?)""",
+            (user_id, amount, now),
+        )
+        # الرصيد اتنقل للطلب، وأي مكسب جديد من هنا يبدأ في gift_balance من الصفر.
+        conn.execute("UPDATE users SET gift_balance = 0 WHERE user_id = ?", (user_id,))
+        return {
+            "id": cur.lastrowid,
+            "user_id": user_id,
+            "amount": amount,
+            "status": "pending",
+            "requested_at": now,
+            "paid_at": None,
+            "paid_by": None,
+            "created": True,
+        }
+
+
+def list_redemption_requests(status: str = "pending", limit: int = 10, offset: int = 0):
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT r.*, u.username
+               FROM redemption_requests r
+               JOIN users u ON u.user_id = r.user_id
+               WHERE r.status = ?
+               ORDER BY r.requested_at ASC, r.id ASC
+               LIMIT ? OFFSET ?""",
+            (status, limit, offset),
+        ).fetchall()
+
+
+def count_redemption_requests(status: str = "pending") -> int:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM redemption_requests WHERE status = ?", (status,)
+        ).fetchone()
+        return int(row["c"] or 0)
+
+
+def get_redemption_request(request_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT r.*, u.username
+               FROM redemption_requests r
+               JOIN users u ON u.user_id = r.user_id
+               WHERE r.id = ?""",
+            (request_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_pending_redemption_for_user(user_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT r.*, u.username
+               FROM redemption_requests r
+               JOIN users u ON u.user_id = r.user_id
+               WHERE r.user_id = ? AND r.status = 'pending'
+               ORDER BY r.id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def mark_redemption_paid(request_id: int, admin_id: int):
+    """يعلّم الطلب مدفوعًا بدون لمس الرصيد الجديد الذي كسبه العميل بعد الطلب."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM redemption_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+        if not row:
+            return None
+        if row["status"] == "paid":
+            return dict(row)
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            """UPDATE redemption_requests
+               SET status = 'paid', paid_at = ?, paid_by = ?
+               WHERE id = ?""",
+            (now, admin_id, request_id),
+        )
+        result = dict(row)
+        result.update({"status": "paid", "paid_at": now, "paid_by": admin_id})
+        return result
+
+
+def get_redemption_summary():
+    with get_conn() as conn:
+        pending = conn.execute(
+            """SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS total
+               FROM redemption_requests WHERE status = 'pending'"""
+        ).fetchone()
+        paid = conn.execute(
+            """SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS total
+               FROM redemption_requests WHERE status = 'paid'"""
+        ).fetchone()
+        return {
+            "pending_count": int(pending["c"] or 0),
+            "pending_total": float(pending["total"] or 0),
+            "paid_count": int(paid["c"] or 0),
+            "paid_total": float(paid["total"] or 0),
+        }
 
 
 # ---------- عروض القناة الذهبية (Golden Deals) ----------
