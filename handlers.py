@@ -162,8 +162,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # شاشة الانترو/الترحيب الحالية — بدون أي اختيار مصر/السعودية.
     await update.message.reply_text(
-        "🎉 أهلاً بيك في وفر كاش!\n\n"
-        "هنا هتدخل مباشرة على عجلة العروض الذهبية، تختار عرض وتبدأ أسئلة الجولة. 🏆",
+        "🎉 أهلاً بيك في وفر كاش! العروض والهدايا هتيجي لك لحد عندك ..\n\n"
+        "اختار من القائمه آخر عروض أمازون، علشان تطلع لك آخر أحدث عروض نزلت في أمازون خلال الكام دقيقه اللي فاتت ..\n\n"
+        "أما بقه لو عاوز تدخل على بطاقات الهدايا مباشرة دوس على لف عجلة العروض 👇🏻👇🏻",
         reply_markup=_egypt_customer_keyboard(user.id),
     )
 
@@ -803,7 +804,7 @@ def _select_wheel_keyboard():
     sep = "&" if "?" in config.WHEEL_URL else "?"
     select_url = f"{config.WHEEL_URL}{sep}t={int(time.time() * 1000)}&mode=select"
     return ReplyKeyboardMarkup(
-        [[KeyboardButton("🎡 لف واختار من عروض النهاردة", web_app=WebAppInfo(url=select_url))]],
+        [[KeyboardButton("🎡 لف عجلة العروض الذهبية", web_app=WebAppInfo(url=select_url))]],
         resize_keyboard=True, one_time_keyboard=False,
     )
 
