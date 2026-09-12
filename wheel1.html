@@ -333,8 +333,8 @@ const selectPrizes = [
 
 const activePrizes = isGoldenMode ? goldenPrizes : (isSelectMode ? selectPrizes : prizes);
 if (isSelectMode) {
-  document.querySelector('h1').textContent = 'عجلة بطاقات الهدايا 🎁';
-  document.querySelector('.sub').textContent = 'دوس ولف واكتشف عرض النهاردة 🎁';
+  document.querySelector('h1').textContent = 'عجلة العروض الذهبية';
+  document.querySelector('.sub').textContent = 'لف واختار عرضك';
   document.querySelector('.hint').textContent = 'بعد ما العجلة تقف، هيوصلك تفاصيل العرض والسؤال.';
 }
 if (isGoldenMode) {
@@ -469,6 +469,13 @@ const prizeText = document.getElementById('prizeText');
 const wheelInner = document.querySelector('.gold-rim');
 const goldenWheelImage = document.getElementById('goldenWheelImage');
 let currentRotation = 0;
+
+if (isSelectMode) {
+  spinBtn.textContent = '🎡 لف واختار عروض';
+} else if (isGoldenMode) {
+  spinBtn.textContent = '🎁 لف عجلة الهدايا وافتح صندوقك';
+}
+
 
 /* ====================================================================
    رصيد اللفّات بيوصل من البوت في رابط الصفحة (?balance=3).
