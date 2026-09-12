@@ -82,7 +82,7 @@ def _wheel_keyboard(spins_balance: int | None = None):
 
 
 ACCOUNT_BUTTON_TEXT = "📊 حسابي"
-GOLDEN_BUTTON_TEXT = "🎁 عجلة بطاقات الهدايا"
+GOLDEN_BUTTON_TEXT = "🏆 عجلة العروض الذهبية"
 
 
 def _format_egp(amount: float) -> str:
