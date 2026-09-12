@@ -145,24 +145,30 @@ async def _is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int, chann
 # ---------------- /start وتفرّع البرنامج ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بداية البوت الحالية: مصر فقط — ترحيب ثم عجلة العروض الذهبية مباشرة."""
     user = update.effective_user
     database.upsert_user(user.id, user.username)
-    existing = database.get_user(user.id)
+    database.set_user_program(user.id, "egypt")
 
-    program = existing["program"] if existing else None
-
-    if not program:
-        if _BOTH_PROGRAMS:
+    # لو قناة مصر متضبطة، نتأكد من الاشتراك الأول.
+    if config.EGYPT_BASE_CHANNEL:
+        subscribed = await _is_subscribed(context, user.id, config.EGYPT_BASE_CHANNEL)
+        if not subscribed:
             await update.message.reply_text(
-                "أهلاً بيك! اختار البرنامج اللي عايز تشترك فيه:",
-                reply_markup=_program_choice_keyboard(),
+                f"لازم الأول تكون مشترك في قناة {config.EGYPT_BASE_CHANNEL} عشان تفعّل البوت.\n"
+                "بعد الاشتراك ابعت /start تاني."
             )
             return
-        # لو برنامج واحد بس متظبط، استخدميه تلقائيًا
-        program = "ksa" if config.KSA_BASE_CHANNEL else "egypt"
-        database.set_user_program(user.id, program)
 
-    await _continue_start(update, context, user.id, program)
+    # شاشة الانترو/الترحيب الحالية — بدون أي اختيار مصر/السعودية.
+    await update.message.reply_text(
+        "🎉 أهلاً بيك في وفر كاش!\n\n"
+        "هنا هتدخل مباشرة على عجلة العروض الذهبية، تختار عرض وتبدأ أسئلة الجولة. 🏆",
+        reply_markup=_egypt_customer_keyboard(user.id),
+    )
+
+    # افتح مسار العجلة الذهبية فورًا بعد الترحيب.
+    await _offer_golden_round(context, update.effective_chat.id, user.id)
 
 
 async def program_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1138,7 +1144,11 @@ def _require_admin(update: Update) -> bool:
 
 
 def _parse_program_arg(args: list[str]) -> tuple[str, list[str]]:
-    """لو أول حاجة في الأوامر 'ksa' أو 'egypt' اعتبرها البرنامج، وإلا افتراضي ksa."""
+    """البوت الحالي مصر فقط؛ أي تاج جديد يتسجل على برنامج egypt."""
+    if args and args[0].lower() == "egypt":
+        return "egypt", args[1:]
+    return "egypt", args
+
     if args and args[0].lower() in ("ksa", "egypt"):
         return args[0].lower(), args[1:]
     return "ksa", args
@@ -1214,9 +1224,8 @@ async def addtags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "الاستخدام: اكتبي /addtags وتحتها (اختياري) ksa أو egypt في أول سطر، وبعدها كل تاج في سطر لوحده"
         )
         return
-    program = "ksa"
-    if lines[0].lower() in ("ksa", "egypt"):
-        program = lines[0].lower()
+    program = "egypt"
+    if lines and lines[0].lower() == "egypt":
         lines = lines[1:]
     added = sum(1 for kw in lines if database.add_tag(kw, program))
     assigned = await _drain_queue(context, program)

@@ -3,8 +3,8 @@
 شغّليه بالأمر: python main.py
 """
 import asyncio
-import logging
 import os
+import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
@@ -42,12 +42,6 @@ def _build_customer_commands() -> list[BotCommand]:
 
 def _build_admin_commands() -> list[BotCommand]:
     cmds = list(_build_customer_commands())
-    if config.KSA_BASE_CHANNEL:
-        cmds += [
-            BotCommand("verify", "🇸🇦 فعّلي عميل بعد ما تشوفي عمولته"),
-            BotCommand("verified", "🇸🇦 قايمة العملاء المفعّلين"),
-            BotCommand("notifywheel", "🇸🇦 ابعتي زرار العجلة لكل المفعّلين"),
-        ]
     if config.EGYPT_BASE_CHANNEL:
         cmds += [
             BotCommand("reclaimstale", "🇪🇬 اسحبي تاجات العملاء الساكنين"),
@@ -135,8 +129,6 @@ def main():
     app = (
         Application.builder()
         .token(config.BOT_TOKEN)
-        # نكبر HTTP connection pool عشان إرسال الصور/الرسائل مايبقاش عنق زجاجة.
-        # بنسيب معالجة updates تسلسلية عمدًا لحماية الأرصدة والجوائز من double-processing.
         .connection_pool_size(config.TELEGRAM_CONNECTION_POOL_SIZE)
         .pool_timeout(config.TELEGRAM_POOL_TIMEOUT)
         .post_init(_start_scheduler)
@@ -147,10 +139,6 @@ def main():
     app.add_handler(CommandHandler("start", handlers.start))
     app.add_handler(CommandHandler("mytag", handlers.mytag))
     app.add_handler(CommandHandler("stop", handlers.stop))
-    app.add_handler(CommandHandler("wheel", handlers.wheel))
-    app.add_handler(CommandHandler("ksa", handlers.join_ksa))
-    app.add_handler(CommandHandler("egypt", handlers.join_egypt))
-    app.add_handler(CallbackQueryHandler(handlers.program_choice_callback, pattern="^program:"))
     app.add_handler(CallbackQueryHandler(handlers.buyer_type_callback, pattern="^buyertype:"))
     app.add_handler(CallbackQueryHandler(handlers.show_offers_callback, pattern="^show_offers$"))
     app.add_handler(CallbackQueryHandler(handlers.start_shopping_callback, pattern="^start_shopping$"))
@@ -174,10 +162,7 @@ def main():
     app.add_handler(CommandHandler("addtags", handlers.addtags))
     app.add_handler(CommandHandler("removetag", handlers.removetag))
     app.add_handler(CommandHandler("listtags", handlers.listtags))
-    app.add_handler(CommandHandler("verify", handlers.verify))
-    app.add_handler(CommandHandler("verified", handlers.verified))
     app.add_handler(CommandHandler("wheelwinners", handlers.wheelwinners))
-    app.add_handler(CommandHandler("notifywheel", handlers.notifywheel))
     app.add_handler(CommandHandler("reclaimstale", handlers.reclaimstale))
     app.add_handler(CommandHandler("redeem", handlers.redeem))
     app.add_handler(CommandHandler("goldenwheel", handlers.golden_wheel_entry))
