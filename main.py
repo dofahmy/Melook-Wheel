@@ -15,6 +15,7 @@ import database
 import handlers
 import product_catalog
 import scheduler
+import admin_web
 
 os.makedirs("logs", exist_ok=True)
 
@@ -124,6 +125,7 @@ def main():
         asyncio.set_event_loop(asyncio.new_event_loop())
 
     database.init_db()
+    admin_web.start_admin_server()
     products = product_catalog.load_products()
     logger.info("تم تحميل %s منتج مقبول للعجلة الذهبية", len(products))
 

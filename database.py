@@ -138,6 +138,8 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     requested_at TEXT NOT NULL,
     paid_at TEXT,
     paid_by INTEGER,
+    gift_code TEXT,
+    code_sent_at TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 """
@@ -164,6 +166,8 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN pending_offer_from_id INTEGER",
     "ALTER TABLE users ADD COLUMN pending_offer_to_id INTEGER",
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
+    "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
+    "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
 ]
 @contextmanager
 def get_conn():
@@ -772,7 +776,12 @@ def create_redemption_request(user_id: int):
         user = conn.execute(
             "SELECT gift_balance FROM users WHERE user_id = ?", (user_id,)
         ).fetchone()
-        amount = float(user["gift_balance"] or 0) if user else 0.0
+        balance = float(user["gift_balance"] or 0) if user else 0.0
+
+        # نستبدل الجنيهات الصحيحة فقط، ونسيب الكسور في حساب العميل.
+        # مثال: 12.75 جنيه -> طلب الاستبدال 12 جنيه، والمتبقي 0.75 جنيه.
+        amount = int(balance + 1e-9)
+        remainder = round(balance - amount, 6)
         if amount <= 0:
             return None
 
@@ -783,12 +792,16 @@ def create_redemption_request(user_id: int):
                VALUES (?, ?, 'pending', ?)""",
             (user_id, amount, now),
         )
-        # الرصيد اتنقل للطلب، وأي مكسب جديد من هنا يبدأ في gift_balance من الصفر.
-        conn.execute("UPDATE users SET gift_balance = 0 WHERE user_id = ?", (user_id,))
+        # نخصم فقط المبلغ الصحيح المحجوز للطلب، ونحتفظ بالباقي في رصيد العميل.
+        conn.execute(
+            "UPDATE users SET gift_balance = ? WHERE user_id = ?",
+            (remainder, user_id),
+        )
         return {
             "id": cur.lastrowid,
             "user_id": user_id,
             "amount": amount,
+            "remainder": remainder,
             "status": "pending",
             "requested_at": now,
             "paid_at": None,
@@ -843,8 +856,43 @@ def get_pending_redemption_for_user(user_id: int):
         return dict(row) if row else None
 
 
-def mark_redemption_paid(request_id: int, admin_id: int):
-    """يعلّم الطلب مدفوعًا بدون لمس الرصيد الجديد الذي كسبه العميل بعد الطلب."""
+def reserve_redemption_for_send(request_id: int, gift_code: str):
+    """يحجز الطلب لأدمن واحد قبل إرسال الكود لمنع الإرسال المكرر."""
+    clean_code = (gift_code or "").strip()
+    if not clean_code:
+        return None
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM redemption_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+        if not row or row["status"] != "pending":
+            return None
+        conn.execute(
+            "UPDATE redemption_requests SET status='processing', gift_code=? WHERE id=?",
+            (clean_code, request_id),
+        )
+        result = dict(row)
+        result.update({"status": "processing", "gift_code": clean_code})
+        return result
+
+
+def release_redemption_send(request_id: int):
+    """يرجع الطلب Pending لو إرسال Telegram فشل."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE redemption_requests SET status='pending' WHERE id=? AND status='processing'",
+            (request_id,),
+        )
+
+
+def mark_redemption_paid(request_id: int, admin_id: int, gift_code: str | None = None):
+    """
+    يعلّم الطلب مدفوعًا بدون لمس الرصيد الجديد.
+    لو gift_code موجود بيتحفظ مع سجل الدفع للمراجعة والمحاسبة.
+    استدعاء الدالة يكون بعد نجاح إرسال الكود للعميل.
+    """
+    clean_code = (gift_code or "").strip() or None
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
@@ -853,18 +901,24 @@ def mark_redemption_paid(request_id: int, admin_id: int):
         if not row:
             return None
         if row["status"] == "paid":
-            return dict(row)
+            result = dict(row)
+            return result
         now = datetime.utcnow().isoformat()
         conn.execute(
             """UPDATE redemption_requests
-               SET status = 'paid', paid_at = ?, paid_by = ?
+               SET status = 'paid', paid_at = ?, paid_by = ?,
+                   gift_code = COALESCE(?, gift_code),
+                   code_sent_at = CASE WHEN ? IS NOT NULL THEN ? ELSE code_sent_at END
                WHERE id = ?""",
-            (now, admin_id, request_id),
+            (now, admin_id, clean_code, clean_code, now, request_id),
         )
         result = dict(row)
-        result.update({"status": "paid", "paid_at": now, "paid_by": admin_id})
+        result.update({
+            "status": "paid", "paid_at": now, "paid_by": admin_id,
+            "gift_code": clean_code or result.get("gift_code"),
+            "code_sent_at": now if clean_code else result.get("code_sent_at"),
+        })
         return result
-
 
 def get_redemption_summary():
     with get_conn() as conn:
@@ -1421,3 +1475,192 @@ def pop_sent_offer_messages(user_id: int) -> list[int]:
         ).fetchall()
         conn.execute("DELETE FROM sent_offer_messages WHERE user_id = ?", (user_id,))
         return [r["message_id"] for r in rows]
+
+
+# ---------- تقارير الـ Back Office ----------
+
+def _period_where(column: str, period: str) -> tuple[str, list[str]]:
+    """SQL fragment + params لفلاتر اليوم / 7 أيام / 30 يوم / كل الوقت."""
+    p = (period or "all").lower()
+    if p == "today":
+        return f"date({column}) = date('now')", []
+    if p == "7d":
+        return f"datetime({column}) >= datetime('now', '-7 days')", []
+    if p == "30d":
+        return f"datetime({column}) >= datetime('now', '-30 days')", []
+    return "1=1", []
+
+
+def get_admin_report_summary(period: str = "all") -> dict:
+    """ملخص مالي وتشغيلي للنظام كله."""
+    q_where, _ = _period_where("created_at", period)
+    s_where, _ = _period_where("created_at", period)
+    r_req_where, _ = _period_where("requested_at", period)
+    r_paid_where, _ = _period_where("paid_at", period)
+    with get_conn() as conn:
+        users = conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE program='egypt'"
+        ).fetchone()
+        active = conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE program='egypt' AND is_active=1"
+        ).fetchone()
+        q = conn.execute(f"""
+            SELECT COUNT(*) AS products_shown,
+                   COALESCE(SUM(epc),0) AS expected_revenue,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
+            FROM golden_questions WHERE {q_where}
+        """).fetchone()
+        spins = conn.execute(f"""
+            SELECT COUNT(*) AS spin_count,
+                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
+            FROM lucky_spins WHERE {s_where}
+        """).fetchone()
+        requested = conn.execute(f"""
+            SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
+            FROM redemption_requests WHERE {r_req_where}
+        """).fetchone()
+        paid = conn.execute(f"""
+            SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
+            FROM redemption_requests WHERE status='paid' AND {r_paid_where}
+        """).fetchone()
+        pending = conn.execute("""
+            SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
+            FROM redemption_requests WHERE status IN ('pending','processing')
+        """).fetchone()
+        balances = conn.execute("""
+            SELECT COALESCE(SUM(gift_balance),0) AS total
+            FROM users WHERE program='egypt'
+        """).fetchone()
+
+        expected_revenue = float(q["expected_revenue"] or 0)
+        product_rewards = float(q["product_rewards"] or 0)
+        return {
+            "users": int(users["c"] or 0),
+            "active_users": int(active["c"] or 0),
+            "products_shown": int(q["products_shown"] or 0),
+            "correct_answers": int(q["correct_answers"] or 0),
+            "spin_count": int(spins["spin_count"] or 0),
+            "expected_revenue": expected_revenue,
+            "product_rewards": product_rewards,
+            "claimed_prizes": float(spins["claimed_prizes"] or 0),
+            "requested_count": int(requested["c"] or 0),
+            "requested_total": float(requested["total"] or 0),
+            "paid_count": int(paid["c"] or 0),
+            "paid_total": float(paid["total"] or 0),
+            "pending_count": int(pending["c"] or 0),
+            "pending_total": float(pending["total"] or 0),
+            "unrequested_balance": float(balances["total"] or 0),
+            "expected_net": expected_revenue - product_rewards,
+        }
+
+
+def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0):
+    q_where, _ = _period_where("g.created_at", period)
+    s_where, _ = _period_where("ls.created_at", period)
+    search = (search or "").strip()
+    like = f"%{search.lstrip('@')}%"
+    with get_conn() as conn:
+        return conn.execute(f"""
+            SELECT u.user_id, u.username, u.is_active, u.gift_balance,
+                   COALESCE(q.products_shown,0) AS products_shown,
+                   COALESCE(q.expected_revenue,0) AS expected_revenue,
+                   COALESCE(q.product_rewards,0) AS product_rewards,
+                   COALESCE(s.spin_count,0) AS spin_count,
+                   COALESCE(s.claimed_prizes,0) AS claimed_prizes,
+                   COALESCE(r.paid_total,0) AS paid_total,
+                   COALESCE(r.pending_total,0) AS pending_total,
+                   COALESCE(r.redemption_count,0) AS redemption_count
+            FROM users u
+            LEFT JOIN (
+                SELECT g.user_id, COUNT(*) AS products_shown,
+                       SUM(g.epc) AS expected_revenue,
+                       SUM(CASE WHEN g.answered=1 AND g.was_correct=1 THEN g.reward_value ELSE 0 END) AS product_rewards
+                FROM golden_questions g WHERE {q_where} GROUP BY g.user_id
+            ) q ON q.user_id=u.user_id
+            LEFT JOIN (
+                SELECT ls.user_id, COUNT(*) AS spin_count,
+                       SUM(CASE WHEN ls.status='claimed' THEN ls.prize ELSE 0 END) AS claimed_prizes
+                FROM lucky_spins ls WHERE {s_where} GROUP BY ls.user_id
+            ) s ON s.user_id=u.user_id
+            LEFT JOIN (
+                SELECT user_id,
+                       COUNT(*) AS redemption_count,
+                       SUM(CASE WHEN status='paid' THEN amount ELSE 0 END) AS paid_total,
+                       SUM(CASE WHEN status IN ('pending','processing') THEN amount ELSE 0 END) AS pending_total
+                FROM redemption_requests GROUP BY user_id
+            ) r ON r.user_id=u.user_id
+            WHERE u.program='egypt'
+              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ?)
+            ORDER BY expected_revenue DESC, u.user_id DESC
+            LIMIT ? OFFSET ?
+        """, (search, like, like, int(limit), int(offset))).fetchall()
+
+
+def get_customer_report(user_id: int, period: str = "all") -> dict | None:
+    q_where, _ = _period_where("created_at", period)
+    s_where, _ = _period_where("created_at", period)
+    with get_conn() as conn:
+        u = conn.execute(
+            "SELECT * FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        if not u:
+            return None
+        q = conn.execute(f"""
+            SELECT COUNT(*) AS products_shown,
+                   COALESCE(SUM(epc),0) AS expected_revenue,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
+            FROM golden_questions WHERE user_id=? AND {q_where}
+        """, (user_id,)).fetchone()
+        s = conn.execute(f"""
+            SELECT COUNT(*) AS spin_count,
+                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
+            FROM lucky_spins WHERE user_id=? AND {s_where}
+        """, (user_id,)).fetchone()
+        r = conn.execute("""
+            SELECT COUNT(*) AS redemption_count,
+                   COALESCE(SUM(CASE WHEN status='paid' THEN amount ELSE 0 END),0) AS paid_total,
+                   COALESCE(SUM(CASE WHEN status IN ('pending','processing') THEN amount ELSE 0 END),0) AS pending_total
+            FROM redemption_requests WHERE user_id=?
+        """, (user_id,)).fetchone()
+        recent_products = conn.execute("""
+            SELECT asin, epc, reward_value, answered, was_correct, created_at
+            FROM golden_questions WHERE user_id=? ORDER BY id DESC LIMIT 50
+        """, (user_id,)).fetchall()
+        redeems = conn.execute("""
+            SELECT id, amount, status, requested_at, paid_at, gift_code
+            FROM redemption_requests WHERE user_id=? ORDER BY id DESC LIMIT 50
+        """, (user_id,)).fetchall()
+        expected_revenue = float(q["expected_revenue"] or 0)
+        product_rewards = float(q["product_rewards"] or 0)
+        return {
+            "user_id": int(u["user_id"]), "username": u["username"],
+            "is_active": int(u["is_active"] or 0),
+            "gift_balance": float(u["gift_balance"] or 0),
+            "products_shown": int(q["products_shown"] or 0),
+            "correct_answers": int(q["correct_answers"] or 0),
+            "expected_revenue": expected_revenue,
+            "product_rewards": product_rewards,
+            "spin_count": int(s["spin_count"] or 0),
+            "claimed_prizes": float(s["claimed_prizes"] or 0),
+            "redemption_count": int(r["redemption_count"] or 0),
+            "paid_total": float(r["paid_total"] or 0),
+            "pending_total": float(r["pending_total"] or 0),
+            "expected_net": expected_revenue - product_rewards,
+            "recent_products": [dict(x) for x in recent_products],
+            "redemptions": [dict(x) for x in redeems],
+        }
+
+
+def list_pending_redemptions_for_web(limit: int = 500):
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT r.id, r.user_id, r.amount, r.status, r.requested_at,
+                   u.username, u.gift_balance
+            FROM redemption_requests r
+            JOIN users u ON u.user_id=r.user_id
+            WHERE r.status IN ('pending','processing')
+            ORDER BY r.requested_at ASC, r.id ASC
+            LIMIT ?
+        """, (int(limit),)).fetchall()

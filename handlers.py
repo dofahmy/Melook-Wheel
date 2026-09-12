@@ -9,6 +9,7 @@
 """
 import logging
 import json
+import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -614,9 +615,11 @@ async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     amount = float(req["amount"])
+    remaining_balance = float(database.get_gift_balance(user.id) or 0)
     await update.message.reply_text(
         f"✅ اتسجل طلب الاستبدال رقم #{req['id']} بقيمة {_format_egp(amount)} جنيه.\n"
-        "المبلغ ده اتحجز للطلب، وأي جوايز جديدة تكسبها من دلوقتي هتتجمع في رصيد جديد منفصل.\n"
+        f"💰 المتبقي في رصيدك: {_format_egp(remaining_balance)} جنيه.\n"
+        "بنستبدل الجنيهات الصحيحة فقط، وأي كسور أو جوايز جديدة تفضل محفوظة في حسابك.\n"
         "فريق الدعم هيتابع الطلب وهيوصلك تأكيد هنا بعد الدفع."
     )
     username_line = f"@{user.username}" if user.username else "(مفيش يوزرنيم)"
@@ -661,15 +664,30 @@ def _format_request_time(value: str | None) -> str:
         return value[:16].replace("T", " ")
 
 
+
+def _admin_webapp_url() -> str | None:
+    explicit = (os.getenv("ADMIN_WEBAPP_URL") or "").strip()
+    if explicit:
+        return explicit
+    domain = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+    if domain:
+        return f"https://{domain}/admin"
+    return None
+
 def _admin_home_markup():
     summary = database.get_redemption_summary()
-    return InlineKeyboardMarkup([
+    rows = []
+    web_url = _admin_webapp_url()
+    if web_url:
+        rows.append([InlineKeyboardButton("🖥️ فتح لوحة الإدارة الكاملة", web_app=WebAppInfo(url=web_url))])
+    rows.extend([
         [InlineKeyboardButton(
             f"💰 طلبات الاستبدال ({summary['pending_count']})",
             callback_data="admin:redeems:0",
         )],
         [InlineKeyboardButton("📊 الملخص المالي", callback_data="admin:summary")],
     ])
+    return InlineKeyboardMarkup(rows)
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -683,6 +701,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 إجمالي المستحق حاليًا: {_format_egp(summary['pending_total'])} جنيه\n\n"
         "اختاري اللي عاوزة تعمليه:"
     )
+    if not _admin_webapp_url():
+        text += "\n\n⚠️ لوحة الويب لسه محتاجة Railway Public Domain."
     await update.message.reply_text(text, reply_markup=_admin_home_markup())
 
 
