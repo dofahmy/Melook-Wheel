@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS users (
     golden_answered_count INTEGER DEFAULT 0,
     golden_round_earnings REAL DEFAULT 0,
     golden_target INTEGER DEFAULT 5,
+    pending_offer_from_id INTEGER,
+    pending_offer_to_id INTEGER,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
 
@@ -148,6 +150,8 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN golden_target INTEGER DEFAULT 5",
     "ALTER TABLE users ADD COLUMN golden_answered_count INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN golden_round_earnings REAL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN pending_offer_from_id INTEGER",
+    "ALTER TABLE users ADD COLUMN pending_offer_to_id INTEGER",
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
 ]
 @contextmanager
@@ -1117,17 +1121,12 @@ def list_recent_deals():
 
 
 def get_pending_notify_count() -> int:
-    """كام عرض فعلي جديد اتضاف من آخر مرة بعتنا فيها تنبيه للعملاء.
-
-    بنعد السجلات نفسها بدل طرح أرقام الـ IDs، لأن SQLite ممكن يكمّل ترقيم
-    الـ IDs بعد مسح الكاش، وساعتها طرح الأرقام كان بيدي عددًا وهميًا كبيرًا.
-    """
+    """كام عرض فعلي جديد اتضاف من آخر دفعة تنبيه للعملاء."""
     with get_conn() as conn:
         state_row = conn.execute(
             "SELECT last_notified_deal_id FROM notify_state WHERE id = 1"
         ).fetchone()
         last_notified = state_row["last_notified_deal_id"] if state_row else 0
-
         row = conn.execute(
             "SELECT COUNT(*) AS c FROM deals_cache WHERE id > ?",
             (last_notified,),
@@ -1135,8 +1134,30 @@ def get_pending_notify_count() -> int:
         return row["c"] if row else 0
 
 
+def get_pending_notify_batch(batch_size: int):
+    """بترجع أول دفعة عروض لم يتم إرسال تنبيه عنها بعد، وبحد أقصى batch_size."""
+    with get_conn() as conn:
+        state_row = conn.execute(
+            "SELECT last_notified_deal_id FROM notify_state WHERE id = 1"
+        ).fetchone()
+        last_notified = state_row["last_notified_deal_id"] if state_row else 0
+        return conn.execute(
+            "SELECT * FROM deals_cache WHERE id > ? ORDER BY id ASC LIMIT ?",
+            (last_notified, int(batch_size)),
+        ).fetchall()
+
+
+def mark_notified_up_to(deal_id: int):
+    """تقدّم عداد التنبيهات لحد آخر عرض في الدفعة فقط، فلا نضيع أي عرض أحدث."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE notify_state SET last_notified_deal_id = ? WHERE id = 1",
+            (int(deal_id),),
+        )
+
+
 def mark_notified_up_to_latest():
-    """بتسجّل إننا بعتنا تنبيه لحد آخر عرض موجود دلوقتي، عشان العداد يبدأ من جديد."""
+    """توافق مع أي كود قديم: يسجل آخر عرض موجود حاليًا كآخر عرض تم التنبيه عنه."""
     with get_conn() as conn:
         row = conn.execute("SELECT MAX(id) AS max_id FROM deals_cache").fetchone()
         max_id = row["max_id"] or 0
@@ -1145,8 +1166,46 @@ def mark_notified_up_to_latest():
         )
 
 
+def set_pending_offer_batch_for_active_egypt_users(from_id: int, to_id: int):
+    """يثبت نفس دفعة العروض لكل العملاء النشطين وقت إرسال التنبيه."""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE users
+               SET pending_offer_from_id = ?, pending_offer_to_id = ?
+               WHERE is_active = 1 AND program = 'egypt'""",
+            (int(from_id), int(to_id)),
+        )
+
+
+def get_pending_offer_batch_for_user(user_id: int):
+    """ترجع حدود الدفعة التي وصل تنبيهها للعميل ولم يفتحها بعد."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT pending_offer_from_id, pending_offer_to_id FROM users WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+
+def clear_pending_offer_batch(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE users SET pending_offer_from_id = NULL, pending_offer_to_id = NULL
+               WHERE user_id = ?""",
+            (user_id,),
+        )
+
+
+def list_deals_between(from_id: int, to_id: int):
+    """ترجع نفس العروض التي كوّنت دفعة التنبيه، بالترتيب."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM deals_cache WHERE id BETWEEN ? AND ? ORDER BY id ASC",
+            (int(from_id), int(to_id)),
+        ).fetchall()
+
+
 def list_new_deals_for_user(user_id: int):
-    """بترجع بس العروض اللي العميل ده لسه ما شافهاش، من الأقدم للأحدث."""
+    """للاستخدام اليدوي خارج دفعة التنبيه: العروض التي لم يرها العميل بعد."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT last_seen_deal_id FROM users WHERE user_id = ?", (user_id,)
@@ -1155,6 +1214,20 @@ def list_new_deals_for_user(user_id: int):
         return conn.execute(
             "SELECT * FROM deals_cache WHERE id > ? ORDER BY id ASC", (last_seen,)
         ).fetchall()
+
+
+def mark_deals_seen_up_to(user_id: int, deal_id: int):
+    """يسجل مشاهدة العميل حتى نهاية دفعة بعينها فقط."""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE users
+               SET last_seen_deal_id = CASE
+                   WHEN COALESCE(last_seen_deal_id, 0) < ? THEN ?
+                   ELSE last_seen_deal_id
+               END
+               WHERE user_id = ?""",
+            (int(deal_id), int(deal_id), user_id),
+        )
 
 
 def mark_deals_seen(user_id: int):

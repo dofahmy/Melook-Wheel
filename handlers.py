@@ -1018,21 +1018,33 @@ async def handle_new_deal_post(update: Update, context: ContextTypes.DEFAULT_TYP
     database.add_deal(post.message_id, photo_file_id, caption, [link])
     logger.info("اتضاف عرض جديد للكاش من القناة: %s", link)
 
-    # منبعتش تنبيه مع كل عرض عرض - بنستنى لحد ما يتجمّع دفعة كاملة (10 افتراضيًا)
-    pending = database.get_pending_notify_count()
-    if pending < config.DEALS_NOTIFY_BATCH_SIZE:
+    # منبعتش تنبيه مع كل عرض؛ كل تنبيه مربوط بدفعة ثابتة من 10 عروض بالضبط.
+    batch_size = config.DEALS_NOTIFY_BATCH_SIZE
+    if database.get_pending_notify_count() < batch_size:
         return
+
+    batch = database.get_pending_notify_batch(batch_size)
+    if len(batch) < batch_size:
+        return
+
+    batch_from_id = batch[0]["id"]
+    batch_to_id = batch[-1]["id"]
+
+    # ثبتي نفس الـ10 عروض لكل عميل قبل إرسال الرسالة؛ حتى لو كان شاف بعضهم يدويًا قبلها.
+    database.set_pending_offer_batch_for_active_egypt_users(batch_from_id, batch_to_id)
 
     users = database.list_active_egypt_users()
     for u in users:
         try:
             await context.bot.send_message(
                 chat_id=u["user_id"],
-                text="🔥 عروض جديدة النهاردة! دوس /offers عشان تشوفها.",
+                text=f"🔥 عندك {batch_size} عروض جديدة! دوس /offers عشان تشوفهم.",
             )
         except Exception:
             pass
-    database.mark_notified_up_to_latest()
+
+    # نعلّم فقط لحد نهاية الدفعة دي، وأي عروض أحدث تفضل محسوبة للدفعة التالية.
+    database.mark_notified_up_to(batch_to_id)
 
 
 async def offers(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1108,8 +1120,25 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
     database.set_user_activity_now(user_id)
 
     tag = database.get_user_tag_keyword(user_id)  # None لو معندوش تاج شخصي
-    deals = database.list_new_deals_for_user(user_id)
+
+    # لو العميل وصله تنبيه دفعة، /offers يعرض نفس الدفعة بالضبط حتى لو كان
+    # شاف بعض عروضها قبل وصول التنبيه. ده يمنع رسالة "10 عروض" ثم ظهور 4 فقط.
+    pending_batch = database.get_pending_offer_batch_for_user(user_id)
+    batch_to_id = None
+    if (
+        pending_batch
+        and pending_batch["pending_offer_from_id"] is not None
+        and pending_batch["pending_offer_to_id"] is not None
+    ):
+        batch_from_id = pending_batch["pending_offer_from_id"]
+        batch_to_id = pending_batch["pending_offer_to_id"]
+        deals = database.list_deals_between(batch_from_id, batch_to_id)
+    else:
+        deals = database.list_new_deals_for_user(user_id)
+
     if not deals:
+        if batch_to_id is not None:
+            database.clear_pending_offer_batch(user_id)
         await context.bot.send_message(
             chat_id=user_id,
             text="مفيش عروض جديدة من آخر مرة شفت فيها 🙏 تابعينا وهتوصلك أول ما تنزل 🛍️",
@@ -1124,7 +1153,7 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
         except Exception:
             pass
 
-    intro = await context.bot.send_message(chat_id=user_id, text=f"🔥 {len(deals)} عرض جديد من آخر مرة:")
+    intro = await context.bot.send_message(chat_id=user_id, text=f"🔥 {len(deals)} عرض جديد:")
     database.record_sent_offer_message(user_id, intro.message_id)
 
     for deal in deals:
@@ -1161,7 +1190,11 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
         except Exception as exc:
             logger.warning("فشل إرسال عرض للعميل %s: %s", user_id, exc)
 
-    database.mark_deals_seen(user_id)
+    if batch_to_id is not None:
+        database.mark_deals_seen_up_to(user_id, batch_to_id)
+        database.clear_pending_offer_batch(user_id)
+    else:
+        database.mark_deals_seen(user_id)
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
