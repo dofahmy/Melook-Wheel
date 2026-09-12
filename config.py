@@ -25,6 +25,12 @@ ADMIN_IDS = _split_ids(os.getenv("ADMIN_IDS", ""))
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot_data.db")
 
+# إعدادات تحمّل الترافيك - مناسبة كبداية لحوالي 10,000 مستخدم/يوم على Worker واحد
+DATABASE_BUSY_TIMEOUT_MS = int(os.getenv("DATABASE_BUSY_TIMEOUT_MS", "30000"))
+DATABASE_CACHE_MB = int(os.getenv("DATABASE_CACHE_MB", "64"))
+TELEGRAM_CONNECTION_POOL_SIZE = int(os.getenv("TELEGRAM_CONNECTION_POOL_SIZE", "64"))
+TELEGRAM_POOL_TIMEOUT = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
+
 # لو عميل واخد لينك ولسه ما اتفعّلش (ما اشتركش في برايم) خلال المدة دي
 # بالدقايق، اللينك يترجع للـ Pool تلقائيًا ويتاخد من حد تاني (برنامج السعودية بس)
 TAG_LINK_TTL_MINUTES = int(os.getenv("TAG_LINK_TTL_MINUTES", "60"))

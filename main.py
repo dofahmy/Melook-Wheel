@@ -132,6 +132,10 @@ def main():
     app = (
         Application.builder()
         .token(config.BOT_TOKEN)
+        # نكبر HTTP connection pool عشان إرسال الصور/الرسائل مايبقاش عنق زجاجة.
+        # بنسيب معالجة updates تسلسلية عمدًا لحماية الأرصدة والجوائز من double-processing.
+        .connection_pool_size(config.TELEGRAM_CONNECTION_POOL_SIZE)
+        .pool_timeout(config.TELEGRAM_POOL_TIMEOUT)
         .post_init(_start_scheduler)
         .build()
     )

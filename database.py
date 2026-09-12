@@ -152,23 +152,67 @@ _MIGRATIONS = [
 ]
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(config.DATABASE_PATH)
+    # WAL + busy_timeout يقللوا أخطاء "database is locked" وقت الضغط.
+    # كل عملية تفتح connection قصيرة؛ ده آمن مع Worker واحد ومناسب لـ 10k مستخدم/يوم.
+    conn = sqlite3.connect(
+        config.DATABASE_PATH,
+        timeout=max(1.0, config.DATABASE_BUSY_TIMEOUT_MS / 1000),
+    )
     conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout = {int(config.DATABASE_BUSY_TIMEOUT_MS)}")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute(f"PRAGMA cache_size = {-1024 * int(config.DATABASE_CACHE_MB)}")
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
 
 def init_db():
     with get_conn() as conn:
+        # WAL يسمح بالقراءة أثناء الكتابة ويقلل التزاحم على ملف SQLite.
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA wal_autocheckpoint = 1000")
+        conn.execute("PRAGMA mmap_size = 268435456")
+
         conn.executescript(SCHEMA)
         for stmt in _MIGRATIONS:
             try:
                 conn.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # العمود موجود بالفعل
+
+        # Indexes لأكثر الاستعلامات تكرارًا مع المستخدمين والأسئلة واللفات.
+        conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_users_program_active
+            ON users(program, is_active);
+        CREATE INDEX IF NOT EXISTS idx_users_tag_id
+            ON users(tag_id);
+        CREATE INDEX IF NOT EXISTS idx_users_queue
+            ON users(program, queued_at);
+        CREATE INDEX IF NOT EXISTS idx_users_last_activity
+            ON users(program, last_activity_at);
+        CREATE INDEX IF NOT EXISTS idx_tags_pool
+            ON tags(program, in_pool, id);
+        CREATE INDEX IF NOT EXISTS idx_wheel_spins_user
+            ON wheel_spins(user_id, spun_at);
+        CREATE INDEX IF NOT EXISTS idx_lucky_spins_user_status
+            ON lucky_spins(user_id, status, id);
+        CREATE INDEX IF NOT EXISTS idx_golden_questions_user_answered
+            ON golden_questions(user_id, answered, id);
+        CREATE INDEX IF NOT EXISTS idx_sent_offer_messages_user
+            ON sent_offer_messages(user_id);
+        CREATE INDEX IF NOT EXISTS idx_deals_cache_message_id
+            ON deals_cache(message_id);
+        CREATE INDEX IF NOT EXISTS idx_golden_deals_posted
+            ON golden_deals(posted_at);
+        """)
         # أي مستخدمين أو تاجات قديمة من قبل دعم البرامج، اعتبريها ksa تلقائيًا
         conn.execute("UPDATE users SET program = 'ksa' WHERE program IS NULL")
         # تصحيح بيانات قديمة: أي حد ماسك تاج بالفعل بس معندوش تصنيف
@@ -225,6 +269,8 @@ def init_db():
 
 
 # ---------- المستخدمين ----------
+        conn.execute("PRAGMA optimize")
+
 
 def upsert_user(user_id: int, username: str | None):
     with get_conn() as conn:
