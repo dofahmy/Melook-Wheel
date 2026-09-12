@@ -350,17 +350,54 @@ async def _assign_new_tag(context, chat_id: int, user_id: int, program: str):
 
 
 async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """لما العميل يدوس زرار "📊 حسابي" - بيوريله رصيد جوايزه ومراحله في العجلة الذهبية."""
+    """شاشة حساب عميل مصر: حالة الجولة، الهدية المعلقة، ورصيد الجوائز."""
     user = update.effective_user
     row = database.get_user(user.id)
-    if not row or row["program"] != "egypt" or not row["tag_id"]:
-        return  # الزرار ده مفروض مش ظاهر أصلًا في الحالة دي، تجاهلي أي محاولة
+
+    if not row:
+        await update.message.reply_text("لسه حسابك مش متفعّل. ابعت /start الأول.")
+        return
+
+    # النسخة الحالية مصر فقط. ما نربطش فتح الحساب بوجود tag_id؛
+    # العميل الجديد بيدخل العجلة الذهبية مباشرة وممكن مايبقاش عنده تاج شخصي.
+    if row["program"] != "egypt":
+        database.set_user_program(user.id, "egypt")
+        row = database.get_user(user.id)
+
+    answered = int(row["golden_answered_count"] or 0)
+    target = int(row["golden_target"] or config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND)
+    correct = int(row["golden_opened_count"] or 0)
+    remaining = max(target - answered, 0)
+    round_earnings = float(row["golden_round_earnings"] or 0)
+    gift_balance = float(row["gift_balance"] or 0)
+    pending = database.get_pending_lucky_spin(user.id)
+
+    if pending:
+        round_status = "🎁 عندك لفة هدية مستنية الاستلام"
+    elif answered >= target:
+        round_status = "✅ خلّصت أسئلة الجولة — عجلة الهدية جاهزة"
+    elif answered == 0:
+        round_status = "🎡 جاهز تبدأ جولة جديدة"
+    else:
+        round_status = f"🎯 مكمل الجولة — فاضلك {remaining} سؤال"
+
+    pending_line = (
+        f"\n🎁 هدية مستنية: {_format_egp(pending['prize'])} جنيه"
+        if pending else ""
+    )
+
     await update.message.reply_text(
-        f"📊 حسابك:\n"
-        f"إجابات الجولة: {row['golden_answered_count']}/{row['golden_target']} "
-        f"(الصح: {row['golden_opened_count']})\n"
-        f"رصيد جوايزك (جاهز للاستبدال): {_format_egp(row['gift_balance'])} جنيه\n\n"
-        "عايز تستبدل رصيدك؟ ابعت /redeem"
+        "📊 حسابك\n\n"
+        f"الحالة: {round_status}\n"
+        f"📝 الأسئلة: {answered}/{target}\n"
+        f"✅ الإجابات الصح: {correct}\n"
+        f"⏳ المتبقي في الجولة: {remaining}\n"
+        f"💰 قيمة الجولة الحالية: {_format_egp(round_earnings)} جنيه"
+        f"{pending_line}\n"
+        f"🎁 رصيد جوايزك الجاهز للاستبدال: {_format_egp(gift_balance)} جنيه\n\n"
+        f"الحد الأدنى للاستبدال: {_format_egp(config.EGYPT_REDEEM_MIN_BALANCE)} جنيه\n"
+        "للاستبدال ابعت /redeem",
+        reply_markup=_egypt_customer_keyboard(user.id),
     )
 
 
