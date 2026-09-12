@@ -4,6 +4,7 @@
 """
 import asyncio
 import logging
+import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
@@ -14,6 +15,8 @@ import database
 import handlers
 import product_catalog
 import scheduler
+
+os.makedirs("logs", exist_ok=True)
 
 logging.basicConfig(
     filename="logs/bot.log",
