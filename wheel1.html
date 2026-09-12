@@ -115,11 +115,16 @@
     filter: drop-shadow(0 18px 28px rgba(0,0,0,.58));
   }
   body.golden-mode .lights-ring { display: none; }
-  body.golden-mode .gold-rim { inset: 0; padding: 0; background: transparent; box-shadow: none; }
+  body.golden-mode .gold-rim {
+    inset: 7.5%;
+    padding: 3.2%;
+    background: linear-gradient(145deg, #fff5c9, #c1840f 42%, #ffe88f 72%, #925900);
+    box-shadow: inset 0 0 0 2px #fff2b1, 0 0 0 2px #8e5900, 0 16px 30px rgba(0,0,0,.45);
+  }
   body.golden-mode canvas#wheel,
   body.golden-mode #labels,
-  body.golden-mode .hub { display: none; }
-  body.golden-mode #goldenWheelImage { display: block; }
+  body.golden-mode .hub { display: block; }
+  body.golden-mode #goldenWheelImage { display: none; }
   #labels {
     position: absolute;
     inset: 12.5%;
@@ -132,20 +137,24 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     text-align: center;
     direction: rtl;
     white-space: nowrap;
+    min-width: 78px;
+    min-height: 72px;
+    transform-origin: center center;
   }
   .label .bow { font-size: 0; line-height: 0; margin: 0; }
   .label .amt {
-    font-size: clamp(27px, 7vw, 34px);
+    font-size: clamp(36px, 10vw, 50px);
     font-weight: 800;
     color: #ffffff;
     line-height: 1;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   }
   .label .subtext {
-    font-size: clamp(13px, 3.5vw, 17px);
+    font-size: clamp(18px, 5vw, 25px);
     font-weight: 900;
     color: rgba(255,255,255,0.85);
     text-shadow: 0 1px 2px rgba(0,0,0,0.6);
@@ -198,10 +207,10 @@
   .gift-box {
     display: none;
     position: relative;
-    margin-top: 20px;
+    margin: 6px 0 24px;
     border: 0;
     background: transparent;
-    width: min(58vw, 240px); height: min(58vw, 240px);
+    width: min(82vw, 330px); height: min(82vw, 330px);
     cursor: pointer;
     filter: drop-shadow(0 14px 20px rgba(216, 163, 36, 0.5));
     animation: giftPulse 1s ease-in-out infinite alternate;
@@ -212,13 +221,21 @@
   .open-hint { display: none; color: #ffe27a; margin-top: 5px; font-weight: 700; }
   .open-hint.show { display: block; }
   .hint { font-size: 12px; color: #86a396; margin-top: 24px; text-align: center; max-width: 280px; line-height: 1.6; }
+
+  .wheel-wrap.finished {
+    display: none;
+  }
+  button#spin.finished {
+    display: none;
+  }
+
 </style>
 </head>
 <body>
 
 <div class="brand">وفر كاش</div>
-<h1>عجلة الحظ</h1>
-<p class="sub">دوس ولف واكسب بطاقات هدايا أمازون 🎁</p>
+<h1>عجلة بطاقات الهدايا 🎁</h1>
+<p class="sub">لف عجلة الهدايا وبعد ما تقف افتح صندوقك</p>
 
 <div class="wheel-wrap">
   <svg class="pin" viewBox="0 0 44 54">
@@ -384,6 +401,7 @@ function drawLabels() {
     el.className = 'label';
     el.style.left = x + '%';
     el.style.top = y + '%';
+    el.dataset.index = i;
     el.style.transform = `translate(-50%, -50%) rotate(0deg)`;
 
     const bow = document.createElement('span');
@@ -405,6 +423,20 @@ function drawLabels() {
   }
 }
 drawLabels();
+
+function updateLabelPositions(rotationDeg = 0) {
+  const labels = labelsLayer.querySelectorAll('.label');
+  labels.forEach((el, i) => {
+    const baseMid = i * seg + seg / 2 - Math.PI / 2;
+    const rotatedMid = baseMid + (rotationDeg * Math.PI / 180);
+    const x = 50 + LABEL_RADIUS_PERCENT * Math.cos(rotatedMid);
+    const y = 50 + LABEL_RADIUS_PERCENT * Math.sin(rotatedMid);
+    el.style.left = x + '%';
+    el.style.top = y + '%';
+    // مهم: النص يفضل واقف بالعرض مهما العجلة تلف
+    el.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+  });
+}
 
 const lightsRing = document.getElementById('lightsRing');
 const BULB_COUNT = 16;
@@ -473,6 +505,21 @@ function sendResult(payload) {
   } catch (e) {}
 }
 
+function animateUprightLabels(fromDeg, toDeg, duration = 5500) {
+  const start = performance.now();
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+  function frame(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = easeOutCubic(p);
+    const deg = fromDeg + (toDeg - fromDeg) * eased;
+    updateLabelPositions(deg);
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
 spinBtn.addEventListener('click', () => {
   if (spun) return;
   spun = true;
@@ -485,16 +532,22 @@ spinBtn.addEventListener('click', () => {
   const target = fullSpins + (360 - winnerMidAngleDeg);
   currentRotation += target;
 
+  const previousRotation = currentRotation - target;
   canvas.style.transform = `rotate(${currentRotation}deg)`;
-  labelsLayer.style.transform = `rotate(${currentRotation}deg)`;
   goldenWheelImage.style.transform = `rotate(${currentRotation}deg)`;
+  labelsLayer.style.transform = 'none';
+  animateUprightLabels(previousRotation, currentRotation, 5500);
 
   setTimeout(() => {
     spinBtn.textContent = "تم اللف 🎉";
 
     if (isGoldenMode) {
-      document.getElementById('giftBox').classList.add('show');
+      document.querySelector('.wheel-wrap').classList.add('finished');
+      spinBtn.classList.add('finished');
+      const giftBox = document.getElementById('giftBox');
+      giftBox.classList.add('show');
       document.getElementById('openHint').classList.add('show');
+      giftBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
