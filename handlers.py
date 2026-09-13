@@ -354,7 +354,7 @@ async def _assign_new_tag(context, chat_id: int, user_id: int, program: str):
 
 
 async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """شاشة حساب عميل مصر: حالة الجولة، الهدية المعلقة، ورصيد الجوائز."""
+    """شاشة حساب عميل مصر: الرصيد، حالة الجولة، وسجل الاستبدالات بالأكواد."""
     user = update.effective_user
     row = database.get_user(user.id)
 
@@ -362,8 +362,6 @@ async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لسه حسابك مش متفعّل. ابعت /start الأول.")
         return
 
-    # النسخة الحالية مصر فقط. ما نربطش فتح الحساب بوجود tag_id؛
-    # العميل الجديد بيدخل العجلة الذهبية مباشرة وممكن مايبقاش عنده تاج شخصي.
     if row["program"] != "egypt":
         database.set_user_program(user.id, "egypt")
         row = database.get_user(user.id)
@@ -390,18 +388,47 @@ async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if pending else ""
     )
 
+    # نفس سجل الاستبدالات اللي بيظهر في الويب.
+    report = database.get_customer_report(user.id, "all") or {}
+    redemptions = report.get("redemptions") or []
+
+    lines = [
+        "📊 حسابك",
+        "",
+        f"الحالة: {round_status}",
+        f"📝 الأسئلة: {answered}/{target}",
+        f"✅ الإجابات الصح: {correct}",
+        f"⏳ المتبقي في الجولة: {remaining}",
+        f"💰 قيمة الجولة الحالية: {_format_egp(round_earnings)} جنيه{pending_line}",
+        f"🎁 رصيد جوايزك الجاهز للاستبدال: {_format_egp(gift_balance)} جنيه",
+        "",
+        f"الحد الأدنى للاستبدال: {_format_egp(config.EGYPT_REDEEM_MIN_BALANCE)} جنيه",
+    ]
+
+    if redemptions:
+        lines += ["", "🎁 سجل الاستبدال:"]
+        for r in redemptions[:10]:
+            status = str(r.get("status") or "")
+            status_text = {
+                "paid": "✅ تم الاستبدال",
+                "pending": "⏳ قيد الانتظار",
+                "processing": "🔄 قيد الإرسال",
+            }.get(status, status or "—")
+            amount = _format_egp(float(r.get("amount") or 0))
+            lines.append(f"\nطلب #{r.get('id')} • {amount} جنيه • {status_text}")
+            code = str(r.get("gift_code") or "").strip()
+            if status == "paid" and code:
+                lines.append(f"كود بطاقة الهدية: {code}")
+                lines.append("استرداد البطاقة: https://link.amazon/B02oNEoYz")
+    else:
+        lines += ["", "🎁 سجل الاستبدال: لسه مفيش طلبات استبدال."]
+
+    lines += ["", "للاستبدال ابعت /redeem"]
+
     await update.message.reply_text(
-        "📊 حسابك\n\n"
-        f"الحالة: {round_status}\n"
-        f"📝 الأسئلة: {answered}/{target}\n"
-        f"✅ الإجابات الصح: {correct}\n"
-        f"⏳ المتبقي في الجولة: {remaining}\n"
-        f"💰 قيمة الجولة الحالية: {_format_egp(round_earnings)} جنيه"
-        f"{pending_line}\n"
-        f"🎁 رصيد جوايزك الجاهز للاستبدال: {_format_egp(gift_balance)} جنيه\n\n"
-        f"الحد الأدنى للاستبدال: {_format_egp(config.EGYPT_REDEEM_MIN_BALANCE)} جنيه\n"
-        "للاستبدال ابعت /redeem",
+        "\n".join(lines),
         reply_markup=_egypt_customer_keyboard(user.id),
+        disable_web_page_preview=True,
     )
 
 
@@ -1827,23 +1854,3 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ اترسلت الرسالة.")
     except Exception as exc:
         await update.message.reply_text(f"❌ مقدرتش أبعت الرسالة: {exc}")
-
-# ---------------- ربط حساب Web App بحساب Telegram ----------------
-async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if not context.args:
-        await update.message.reply_text(
-            "افتحي حساب وفر كاش من الموقع، اضغطي «اعمل كود ربط Telegram»، "
-            "وبعدين ابعتي هنا:\n/linkweb الكود"
-        )
-        return
-    code = context.args[0].strip()
-    # Ensure Telegram user exists before the merge/link operation.
-    database.upsert_user(user.id, user.username)
-    database.set_user_program(user.id, "egypt")
-    import web_auth
-    ok, message = web_auth.consume_link_code(code, user.id)
-    if ok:
-        await update.message.reply_text("✅ " + message + "\nرصيدك ونشاطك بقوا على حساب واحد.")
-    else:
-        await update.message.reply_text("❌ " + message)
