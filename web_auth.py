@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import hmac
 import os
@@ -45,33 +44,48 @@ def normalize_egypt_phone(raw: str) -> str | None:
     return "+20" + local[1:]
 
 
-def _twilio_auth_header() -> str:
-    raw = f"{config.TWILIO_ACCOUNT_SID}:{config.TWILIO_AUTH_TOKEN}".encode("utf-8")
-    return "Basic " + base64.b64encode(raw).decode("ascii")
+def _authevo_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {config.AUTHEVO_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def _authevo_error(response, fallback: str) -> str:
+    try:
+        data = response.json() if response.content else {}
+        err = data.get("error")
+        if isinstance(err, dict):
+            return str(err.get("message") or fallback)
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+        message = data.get("message")
+        if message:
+            return str(message)
+    except Exception:
+        pass
+    return fallback
 
 
 def send_otp(phone_e164: str) -> tuple[bool, str]:
-    mode = (config.OTP_DELIVERY_MODE or "twilio_verify").strip().lower()
-    if mode == "twilio_verify":
-        if not (config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN and config.TWILIO_VERIFY_SERVICE_SID):
-            return False, "خدمة كود التحقق لسه مش متوصلة. ضيفي بيانات Twilio Verify في Railway."
-        url = f"https://verify.twilio.com/v2/Services/{config.TWILIO_VERIFY_SERVICE_SID}/Verifications"
+    mode = (config.OTP_DELIVERY_MODE or "authevo").strip().lower()
+
+    if mode == "authevo":
+        if not config.AUTHEVO_API_KEY:
+            return False, "خدمة كود التحقق لسه مش متوصلة. ضيفي AUTHEVO_API_KEY في Railway."
         try:
             r = requests.post(
-                url,
-                data={"To": phone_e164, "Channel": "sms"},
-                headers={"Authorization": _twilio_auth_header()},
+                "https://api.authevo.dev/v1/otp/send",
+                json={"phone": phone_e164},
+                headers=_authevo_headers(),
                 timeout=20,
             )
             if 200 <= r.status_code < 300:
                 return True, ""
-            try:
-                msg = r.json().get("message") or "تعذر إرسال الكود"
-            except Exception:
-                msg = "تعذر إرسال الكود"
-            return False, msg
-        except Exception:
-            return False, "تعذر الاتصال بخدمة كود التحقق"
+            return False, _authevo_error(r, "تعذر إرسال كود WhatsApp")
+        except requests.RequestException:
+            return False, "تعذر الاتصال بخدمة كود WhatsApp"
 
     # Development mode only: code is saved server-side and returned in Railway logs.
     if mode == "dev":
@@ -85,25 +99,28 @@ def send_otp(phone_e164: str) -> tuple[bool, str]:
 
 def verify_otp(phone_e164: str, code: str) -> tuple[bool, str]:
     code = re.sub(r"\D", "", code or "")
-    if len(code) < 4:
-        return False, "كود التحقق غير صحيح"
-    mode = (config.OTP_DELIVERY_MODE or "twilio_verify").strip().lower()
+    if len(code) != 6:
+        return False, "اكتبي كود التحقق المكوّن من 6 أرقام"
 
-    if mode == "twilio_verify":
-        if not (config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN and config.TWILIO_VERIFY_SERVICE_SID):
+    mode = (config.OTP_DELIVERY_MODE or "authevo").strip().lower()
+
+    if mode == "authevo":
+        if not config.AUTHEVO_API_KEY:
             return False, "خدمة كود التحقق لسه مش متوصلة"
-        url = f"https://verify.twilio.com/v2/Services/{config.TWILIO_VERIFY_SERVICE_SID}/VerificationCheck"
         try:
             r = requests.post(
-                url,
-                data={"To": phone_e164, "Code": code},
-                headers={"Authorization": _twilio_auth_header()},
+                "https://api.authevo.dev/v1/otp/verify",
+                json={"phone": phone_e164, "code": code},
+                headers=_authevo_headers(),
                 timeout=20,
             )
             data = r.json() if r.content else {}
-            if 200 <= r.status_code < 300 and data.get("status") == "approved":
+            verified = bool((data.get("data") or {}).get("verified")) if isinstance(data, dict) else False
+            if 200 <= r.status_code < 300 and verified:
                 return True, ""
-            return False, "الكود غير صحيح أو انتهت صلاحيته"
+            return False, _authevo_error(r, "الكود غير صحيح أو انتهت صلاحيته")
+        except requests.RequestException:
+            return False, "تعذر التحقق من الكود"
         except Exception:
             return False, "تعذر التحقق من الكود"
 

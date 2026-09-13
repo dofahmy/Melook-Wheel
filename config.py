@@ -116,8 +116,6 @@ TELEGRAM_POOL_TIMEOUT = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
 # -------- حساب وفر كاش المستقل / Web App --------
 # استخدمي قيمة عشوائية طويلة في Railway. لو فاضية هيستخدم BOT_TOKEN كبديل.
 WEB_AUTH_SECRET = os.getenv("WEB_AUTH_SECRET", "")
-# production: twilio_verify | local testing only: dev
-OTP_DELIVERY_MODE = os.getenv("OTP_DELIVERY_MODE", "twilio_verify")
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_VERIFY_SERVICE_SID = os.getenv("TWILIO_VERIFY_SERVICE_SID", "")
+# production: authevo | local testing only: dev
+OTP_DELIVERY_MODE = os.getenv("OTP_DELIVERY_MODE", "authevo")
+AUTHEVO_API_KEY = os.getenv("AUTHEVO_API_KEY", "")
