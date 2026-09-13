@@ -129,7 +129,13 @@ async function showOffers(){
         const a=norm(captionLines[firstIndex]), b=norm(title);
         if(a===b || a.includes(b) || b.includes(a)) captionLines.splice(firstIndex,1);
       }
-      const cleanCaption=captionLines.join('\n').replace(/^\s+|\s+$/g,'');
+      // شيل أي لينك ظاهر من نص العرض؛ اللينك يفضل فقط داخل زر "اشتري من هنا".
+      const cleanCaption=captionLines
+        .filter(line=>!/(?:https?:\/\/|www\.|amazon\.(?:eg|sa)|amzn\.|link\.amazon)/i.test(line))
+        .join('\n')
+        .replace(/https?:\/\/\S+/gi,'')
+        .replace(/\bwww\.\S+/gi,'')
+        .replace(/^\s+|\s+$/g,'');
       const imageSrc=x.image_url||p.image_url||'';
       const badge=Number(p.discount_percent)>0?`<span class="discount-badge">خصم ${money(p.discount_percent)}%</span>`:'';
       const img=imageSrc?`<img class="offer-image" src="${esc(imageSrc)}" alt="${esc(title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'<span></span>';
