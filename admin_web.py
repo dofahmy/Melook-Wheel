@@ -793,6 +793,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
             return
 
+        if parsed.path == "/api/admin/suspend-customer":
+            try:
+                user_id = int(payload.get("user_id") or 0)
+            except Exception:
+                user_id = 0
+            if not user_id:
+                self._send_json(400, {"ok": False, "error": "رقم العميل غير صحيح"})
+                return
+
+            account = database.suspend_web_account_by_user_id(user_id, "manual_admin")
+            if not account:
+                self._send_json(
+                    409,
+                    {"ok": False, "error": "العميل ده ملوش حساب Web مربوط علشان نوقف تسجيل الدخول"}
+                )
+                return
+
+            self._send_json(200, {
+                "ok": True,
+                "data": {
+                    "account_id": int(account["id"]),
+                    "user_id": int(account["user_id"]),
+                    "phone": account.get("phone_e164"),
+                    "is_suspended": True,
+                },
+                "message": "تم إيقاف الحساب ونقله إلى صفحة الموقوفين ✅"
+            })
+            return
+
         if parsed.path == "/api/admin/reactivate-customer":
             try:
                 account_id = int(payload.get("account_id") or 0)
@@ -802,27 +831,43 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": "رقم الحساب غير صحيح"})
                 return
 
-            account = database.reactivate_web_account(account_id)
+            # Read the suspended account first. Do NOT reactivate yet.
+            account = database.get_web_account_by_id(account_id)
             if not account:
                 self._send_json(404, {"ok": False, "error": "الحساب غير موجود"})
                 return
 
-            phone = str(account.get("phone_e164") or "").strip()
-            otp_ok, otp_err = web_auth.send_otp(phone) if phone else (False, "رقم الموبايل غير موجود")
+            raw_phone = str(account.get("phone_e164") or "").strip()
+            phone = web_auth.normalize_egypt_phone(raw_phone)
+            if not phone:
+                self._send_json(400, {"ok": False, "error": "رقم الموبايل المسجل غير صحيح"})
+                return
+
+            # Use the exact same OTP sender used by normal customer login.
+            otp_ok, otp_err = web_auth.send_otp(phone)
+            if not otp_ok:
+                # Keep the account suspended so the admin can retry safely.
+                self._send_json(502, {
+                    "ok": False,
+                    "error": "فشل إرسال OTP: " + (otp_err or "سبب غير معروف")
+                })
+                return
+
+            # Only after Authevo accepts the OTP request do we reactivate.
+            account = database.reactivate_web_account(account_id)
+            if not account:
+                self._send_json(500, {"ok": False, "error": "تم إرسال OTP لكن تعذر إعادة تفعيل الحساب"})
+                return
 
             self._send_json(200, {
                 "ok": True,
                 "data": {
                     "account_id": account_id,
                     "phone": phone,
-                    "otp_sent": bool(otp_ok),
-                    "otp_error": otp_err if not otp_ok else "",
+                    "otp_sent": True,
+                    "message": "تم إعادة تفعيل الحساب وإرسال OTP للعميل ✅"
                 },
-                "message": (
-                    "تم إعادة تفعيل الحساب وإرسال OTP للعميل ✅"
-                    if otp_ok else
-                    "تم إعادة تفعيل الحساب ✅ — لكن إرسال OTP فشل: " + (otp_err or "غير معروف")
-                ),
+                "message": "تم إعادة تفعيل الحساب وإرسال OTP للعميل ✅"
             })
             return
 

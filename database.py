@@ -1597,6 +1597,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance,
                    wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id,
+                   COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
                    COALESCE(q.products_shown,0) AS products_shown,
                    COALESCE(q.expected_revenue,0) AS expected_revenue,
@@ -2328,6 +2329,41 @@ def list_suspended_web_accounts(limit: int = 500):
             item["today_cycles"] = min(int(item["today_logins"] or 0), int(item["today_logouts"] or 0))
             result.append(item)
         return result
+
+
+
+def suspend_web_account_by_user_id(user_id: int, reason: str = "manual_admin"):
+    """Manually suspend a Web account from the admin Customers page.
+
+    Existing browser sessions are deleted immediately.  The same suspended
+    flag used by the automatic 3-login/logout rule is used, so the customer
+    sees exactly the same protection message on the next login attempt.
+    """
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM web_accounts WHERE user_id=? LIMIT 1",
+            (int(user_id),),
+        ).fetchone()
+        if not row:
+            return None
+
+        account_id = int(row["id"])
+        conn.execute(
+            """UPDATE web_accounts
+               SET is_suspended=1, suspended_at=?, suspended_reason=?
+               WHERE id=?""",
+            (now, str(reason or "manual_admin"), account_id),
+        )
+        # Log out the customer immediately on every browser/device.
+        conn.execute("DELETE FROM web_sessions WHERE account_id=?", (account_id,))
+
+        fresh = conn.execute(
+            "SELECT * FROM web_accounts WHERE id=? LIMIT 1",
+            (account_id,),
+        ).fetchone()
+        return dict(fresh) if fresh else None
 
 
 def reactivate_web_account(account_id: int):
