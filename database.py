@@ -1942,7 +1942,7 @@ def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8
         if needed <= 0:
             return list(rows)
         existing_ids = {int(r["id"]) for r in rows}
-        # نجيب أحدث عروض إضافية، ثم نرتب الكل تصاعديًا لعرضها زمنيًا.
+        # نجيب أحدث عروض إضافية، ثم نرتب الكل تنازليًا: الأحدث يظهر أول الصفحة.
         extra = conn.execute(
             "SELECT * FROM deals_cache ORDER BY id DESC LIMIT ?",
             (max(needed + len(existing_ids) + 10, min_display * 2),),
@@ -1956,7 +1956,7 @@ def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8
             existing_ids.add(rid)
             if len(out) >= min_display:
                 break
-        out.sort(key=lambda r: int(r["id"]))
+        out.sort(key=lambda r: int(r["id"]), reverse=True)
         return out[:limit]
 
     with get_conn() as conn:
@@ -1969,10 +1969,10 @@ def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8
             primary = conn.execute(
                 """SELECT * FROM deals_cache
                    WHERE id BETWEEN ? AND ?
-                   ORDER BY id ASC LIMIT ?""",
+                   ORDER BY id DESC LIMIT ?""",
                 (int(pending["pending_offer_from_id"]), int(pending["pending_offer_to_id"]), limit),
             ).fetchall()
-            seen_up_to = int(primary[-1]["id"]) if primary else None
+            seen_up_to = max((int(r["id"]) for r in primary), default=None)
             rows = _fill_recent(conn, primary, min_display - len(primary))
             return rows, "pending", seen_up_to
 
@@ -1981,12 +1981,12 @@ def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8
         ).fetchone()
         last_seen = int((user["last_seen_deal_id"] if user else 0) or 0)
         new_rows = conn.execute(
-            "SELECT * FROM deals_cache WHERE id>? ORDER BY id ASC LIMIT ?",
+            "SELECT * FROM deals_cache WHERE id>? ORDER BY id DESC LIMIT ?",
             (last_seen, limit),
         ).fetchall()
 
         if new_rows:
-            seen_up_to = int(new_rows[-1]["id"])
+            seen_up_to = max(int(r["id"]) for r in new_rows)
             rows = _fill_recent(conn, new_rows, min_display - len(new_rows))
             return rows, "new", seen_up_to
 
@@ -1994,7 +1994,7 @@ def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8
             "SELECT * FROM deals_cache ORDER BY id DESC LIMIT ?",
             (min_display,),
         ).fetchall()
-        rows = list(reversed(recent))
+        rows = list(recent)
         return rows, "recent", None
 
 def mark_web_offers_seen(user_id: int, mode: str, seen_up_to_id: int | None):
