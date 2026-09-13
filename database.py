@@ -1566,10 +1566,6 @@ def get_admin_report_summary(period: str = "all") -> dict:
             FROM users WHERE program='egypt'
         """).fetchone()
 
-        wa = conn.execute(
-            "SELECT id, phone_e164, telegram_user_id, source_first, source_last, created_at, last_login_at FROM web_accounts WHERE user_id=? LIMIT 1",
-            (user_id,),
-        ).fetchone()
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
         return {
