@@ -17,7 +17,7 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 .info-row{display:flex;gap:10px}.mini{flex:1;background:var(--soft);padding:14px;border-radius:16px;text-align:center}.mini span{font-size:12px;color:var(--muted)}.mini b{display:block;margin-top:5px;font-size:17px}.code{font-size:28px;letter-spacing:5px;font-weight:900;text-align:center;background:#f7f8fa;padding:14px;border-radius:14px;direction:ltr}
 .link-status{background:var(--green2);color:#027a48;padding:12px;border-radius:14px;font-weight:800;text-align:center}.footer-note{text-align:center;color:#98a2b3;font-size:12px;margin-top:18px}
 
-.offers-panel{margin-top:18px;background:#f8faf9;border-radius:28px;padding:18px}.offers-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:16px}.offers-head h2{margin:0;font-size:27px;letter-spacing:-.5px}.close-link{border:0;background:#fff;border-radius:14px;padding:10px 14px;font-weight:900;cursor:pointer;box-shadow:0 4px 14px rgba(16,24,40,.06)}
+.offers-panel{margin-top:18px;background:#f8faf9;border-radius:28px;padding:18px}.offers-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:16px}.offers-head h2{margin:0;font-size:27px;letter-spacing:-.5px}.refresh-note{font-size:11px;color:#98a2b3;margin-top:4px}.close-link{border:0;background:#fff;border-radius:14px;padding:10px 14px;font-weight:900;cursor:pointer;box-shadow:0 4px 14px rgba(16,24,40,.06)}
 .offers-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.offer-card{background:#fff;border-radius:22px;overflow:hidden;border:1px solid #e9eeeb;box-shadow:0 8px 25px rgba(16,24,40,.06);display:flex;flex-direction:column;min-width:0}.offer-media{position:relative;background:#fff;height:245px;display:flex;align-items:center;justify-content:center;padding:14px}.offer-image{width:100%;height:100%;object-fit:contain;display:block}.img-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f8fafc,#eef2f0);font-size:52px;color:#98a2b3}.discount-badge{position:absolute;top:12px;right:12px;background:#ef2b36;color:#fff;font-size:12px;font-weight:950;padding:7px 10px;border-radius:11px;z-index:2}.offer-body{padding:14px 15px 16px;display:flex;flex-direction:column;flex:1}.offer-title{font-size:16px;font-weight:950;line-height:1.55;min-height:50px;margin-bottom:7px;color:#101828}.offer-caption{white-space:pre-wrap;font-size:12px;line-height:1.7;color:#667085;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;min-height:78px}.offer-price{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.price-now{font-size:21px;font-weight:950;color:#089455}.price-old{text-decoration:line-through;color:#98a2b3;font-size:13px}.discount{display:none}.offer-links{display:grid;gap:8px;margin-top:auto;padding-top:12px}.buy-btn{display:block;text-align:center;text-decoration:none;background:#101828;color:#fff;border-radius:13px;padding:13px 14px;font-weight:950}.empty-box{grid-column:1/-1;background:#fff;border-radius:18px;padding:30px;text-align:center;color:#667085;border:1px solid #e9eeeb}.loading{grid-column:1/-1;text-align:center;padding:28px;color:#667085}
 .wrap.offers-mode{max-width:1180px}.wrap.offers-mode .offers-panel{margin-top:10px}
 @media(max-width:900px){.offers-list{grid-template-columns:repeat(2,minmax(0,1fr))}.offer-media{height:220px}}
@@ -109,12 +109,17 @@ async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;docu
 async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
 function money(v){const n=Number(v||0);return Number.isFinite(n)?n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'):'0'}
 function esc(s){return String(s??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]))}
-async function showOffers(){
-  const panel=document.getElementById('offersPanel'),list=document.getElementById('offersList'),status=document.getElementById('offersStatus');
-  document.querySelector('.wrap').classList.add('offers-mode');
-  panel.classList.remove('hide'); list.innerHTML='<div class="loading">جاري تحميل العروض…</div>'; status.textContent=''; panel.scrollIntoView({behavior:'smooth',block:'start'});
+let offersRefreshTimer=null;
+let offersLoading=false;
+async function loadOffers({silent=false}={}){
+  if(offersLoading) return;
+  offersLoading=true;
+  const list=document.getElementById('offersList'),status=document.getElementById('offersStatus');
+  if(!silent) list.innerHTML='<div class="loading">جاري تحميل العروض…</div>';
   try{
-    const d=await api('/api/app/offers'); const items=d.data||[]; status.textContent=d.message||'';
+    const d=await api('/api/app/offers'); const items=d.data||[];
+    const now=new Date();
+    status.textContent=(d.message?d.message+' • ':'')+'آخر تحديث '+now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     if(!items.length){list.innerHTML='<div class="empty-box">مفيش عروض متاحة دلوقتي. ارجعي تاني بعد شوية 🔥</div>';return}
     list.innerHTML=items.map(x=>{
       const p=x.product||{};
@@ -144,9 +149,31 @@ async function showOffers(){
       const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 اشتري من هنا'}</a>`).join('');
       return `<article class="offer-card"><div class="offer-media">${badge}${img}${placeholder}</div><div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}${cleanCaption?`<div class="offer-caption">${esc(cleanCaption)}</div>`:''}<div class="offer-links">${links}</div></div></article>`
     }).join('');
-  }catch(e){list.innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
+  }catch(e){
+    if(!silent) list.innerHTML=`<div class="empty-box">${esc(e.message)}</div>`;
+    status.textContent='تعذر تحديث العروض الآن — هنجرب تلقائيًا بعد دقيقة';
+  }finally{offersLoading=false}
 }
-function hideOffers(){document.getElementById('offersPanel').classList.add('hide');document.querySelector('.wrap').classList.remove('offers-mode')}
+async function showOffers(){
+  const panel=document.getElementById('offersPanel');
+  document.querySelector('.wrap').classList.add('offers-mode');
+  panel.classList.remove('hide');
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  await loadOffers();
+  if(offersRefreshTimer) clearInterval(offersRefreshTimer);
+  offersRefreshTimer=setInterval(()=>{
+    if(!document.hidden && !panel.classList.contains('hide')) loadOffers({silent:true});
+  },60000);
+}
+function hideOffers(){
+  document.getElementById('offersPanel').classList.add('hide');
+  document.querySelector('.wrap').classList.remove('offers-mode');
+  if(offersRefreshTimer){clearInterval(offersRefreshTimer);offersRefreshTimer=null}
+}
+document.addEventListener('visibilitychange',()=>{
+  const panel=document.getElementById('offersPanel');
+  if(!document.hidden && panel && !panel.classList.contains('hide')) loadOffers({silent:true});
+});
 function coming(kind){const names={wheel:'عجلة العروض الذهبية',redeem:'استبدال الرصيد'};alert('هنوصل '+names[kind]+' بالحساب في الخطوة الجاية.');}
 async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){}location.reload()}
 loadMe();
