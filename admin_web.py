@@ -47,7 +47,12 @@ def _telegram_send_message(chat_id: int, text: str) -> tuple[bool, str]:
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
-            json={"chat_id": int(chat_id), "text": text},
+            json={
+                "chat_id": int(chat_id),
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
             timeout=20,
         )
         data = r.json()
@@ -178,11 +183,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             amount = float(r["amount"] or 0)
             amount_text = f"{amount:g}"
+            import html
+            safe_code = html.escape(code)
+            redeem_url = "https://link.amazon/B02oNEoYz"
             ok, err = _telegram_send_message(
                 r["user_id"],
-                f"🎁 تم استبدال {amount_text} جنيه من رصيدك بنجاح.\n\n"
-                f"كود بطاقة الهدية:\n{code}\n\n"
-                "احتفظ بالكود واستخدمه عند الشراء. شكرًا لاستخدام وفر كاش ❤️",
+                f"🎁 تم استبدال <b>{amount_text} جنيه</b> من رصيدك بنجاح.\n\n"
+                f"كود بطاقة الهدية:\n<code>{safe_code}</code>\n\n"
+                "📋 اضغط على الكود لنسخه.\n\n"
+                "يمكنك استرداد قيمة البطاقة باستخدام الكود أعلاه من خلال الرابط التالي:\n"
+                f'<a href="{redeem_url}">استرداد قيمة بطاقة الهدية</a>\n\n'
+                "شكرًا لاستخدام وفر كاش ❤️",
             )
             if not ok:
                 database.release_redemption_send(request_id)
