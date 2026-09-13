@@ -5,79 +5,98 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>وفر كاش</title>
 <style>
-:root{font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;color:#17202a;background:#f5f7f6}
-*{box-sizing:border-box} body{margin:0;min-height:100vh}.wrap{max-width:520px;margin:auto;padding:24px 16px 40px}
-.brand{text-align:center;margin:18px 0 24px}.brand h1{margin:0;font-size:34px}.brand p{margin:8px 0 0;color:#667085}
-.card{background:#fff;border-radius:22px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);margin-bottom:16px}
-label{display:block;font-weight:700;margin:0 0 8px}.input{width:100%;padding:14px;border:1px solid #d0d5dd;border-radius:14px;font-size:17px;direction:ltr;text-align:center}
-.btn{width:100%;border:0;border-radius:14px;padding:14px 16px;font-size:17px;font-weight:800;cursor:pointer;background:#111827;color:#fff;margin-top:12px}.btn.secondary{background:#eef2f0;color:#111827}.btn:disabled{opacity:.55;cursor:not-allowed}
-.note{font-size:13px;color:#667085;line-height:1.7}.msg{margin-top:12px;padding:11px 12px;border-radius:12px;display:none}.msg.ok{display:block;background:#ecfdf3;color:#027a48}.msg.err{display:block;background:#fef3f2;color:#b42318}
-.row{display:flex;gap:10px}.row>*{flex:1}.stat{background:#f7f8fa;border-radius:16px;padding:15px;text-align:center}.stat b{font-size:24px;display:block}.muted{color:#667085}.code{font-size:28px;letter-spacing:5px;font-weight:900;text-align:center;background:#f7f8fa;padding:14px;border-radius:14px;direction:ltr}.hide{display:none!important}
-.source{display:inline-block;background:#eef2f0;border-radius:999px;padding:5px 10px;font-size:12px;color:#475467;margin-top:8px}
+:root{font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;color:#101828;background:#f4f7f5;--ink:#111827;--muted:#667085;--soft:#f7f9f8;--green:#14804a;--green2:#ecfdf3;--gold:#f0b429}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fbf9 0,#f3f6f4 100%)}
+.wrap{max-width:560px;margin:auto;padding:18px 14px 90px}.brand{text-align:center;margin:12px 0 18px}.brand h1{margin:0;font-size:34px;letter-spacing:-1px}.brand p{margin:5px 0 0;color:var(--muted)}
+.source{display:inline-block;background:#eaf2ed;border-radius:999px;padding:5px 10px;font-size:12px;color:#475467;margin-top:8px}.card{background:#fff;border-radius:24px;padding:20px;box-shadow:0 10px 30px rgba(16,24,40,.07);margin-bottom:14px;border:1px solid rgba(16,24,40,.04)}
+label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14px;border:1px solid #d0d5dd;border-radius:14px;font-size:17px;direction:ltr;text-align:center;background:#fff}.btn{width:100%;border:0;border-radius:15px;padding:14px 16px;font-size:17px;font-weight:900;cursor:pointer;background:var(--ink);color:#fff;margin-top:12px}.btn.secondary{background:#eef2f0;color:var(--ink)}.btn:disabled{opacity:.55;cursor:not-allowed}
+.note{font-size:13px;color:var(--muted);line-height:1.8}.msg{margin-top:12px;padding:11px 12px;border-radius:12px;display:none}.msg.ok{display:block;background:var(--green2);color:#027a48}.msg.err{display:block;background:#fef3f2;color:#b42318}.hide{display:none!important}
+.hero{background:linear-gradient(135deg,#101828,#1f2937);color:#fff;border-radius:28px;padding:22px;margin-bottom:14px;position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.07);left:-48px;top:-52px}.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.welcome{font-size:22px;font-weight:900}.account-pill{font-size:12px;background:rgba(255,255,255,.11);padding:7px 10px;border-radius:999px;white-space:nowrap}.balance-label{opacity:.74;font-size:14px;margin-top:22px}.balance{font-size:38px;font-weight:950;line-height:1.15;margin-top:2px}.balance small{font-size:16px;font-weight:700}.hero-foot{font-size:12px;opacity:.72;margin-top:11px}
+.section-title{display:flex;align-items:center;justify-content:space-between;margin:20px 3px 10px}.section-title h2{font-size:20px;margin:0}.section-title span{font-size:12px;color:var(--muted)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:11px}.action{background:#fff;border:1px solid rgba(16,24,40,.05);border-radius:20px;padding:16px;min-height:134px;box-shadow:0 7px 22px rgba(16,24,40,.05);cursor:pointer;text-align:right;position:relative}.action .ico{font-size:30px}.action b{display:block;font-size:17px;margin-top:10px}.action p{font-size:12px;line-height:1.5;color:var(--muted);margin:5px 0 0}.action.primary{background:#effaf4;border-color:#d5f1e1}.action.gold{background:#fff9e9;border-color:#f7e4ac}.soon{position:absolute;left:10px;top:10px;font-size:10px;background:#eef2f0;color:#475467;padding:4px 7px;border-radius:999px}
+.info-row{display:flex;gap:10px}.mini{flex:1;background:var(--soft);padding:14px;border-radius:16px;text-align:center}.mini span{font-size:12px;color:var(--muted)}.mini b{display:block;margin-top:5px;font-size:17px}.code{font-size:28px;letter-spacing:5px;font-weight:900;text-align:center;background:#f7f8fa;padding:14px;border-radius:14px;direction:ltr}
+.link-status{background:var(--green2);color:#027a48;padding:12px;border-radius:14px;font-weight:800;text-align:center}.footer-note{text-align:center;color:#98a2b3;font-size:12px;margin-top:18px}
+@media(max-width:380px){.wrap{padding-left:10px;padding-right:10px}.action{padding:13px;min-height:128px}.balance{font-size:34px}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="brand"><h1>وفر كاش</h1><p>حساب واحد من أي منصة</p><span id="sourceBadge" class="source"></span></div>
+  <div class="brand"><h1>وفر كاش</h1><p>عروض ومكافآت في حساب واحد</p><span id="sourceBadge" class="source"></span></div>
 
   <section id="loginCard" class="card">
     <div id="phoneStep">
       <label>رقم الموبايل</label>
       <input id="phone" class="input" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" />
-      <button id="sendBtn" class="btn" onclick="sendOtp()">إرسال كود التحقق</button>
+      <button id="sendBtn" class="btn" onclick="sendOtp()">إرسال كود التحقق على WhatsApp</button>
       <p class="note">هنبعت لك كود من 6 أرقام على WhatsApp للتأكد إن الرقم بتاعك.</p>
     </div>
     <div id="otpStep" class="hide">
       <label>اكتب كود التحقق</label>
-      <input id="otp" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" />
+      <input id="otp" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
       <button id="verifyBtn" class="btn" onclick="verifyOtp()">دخول</button>
       <button class="btn secondary" onclick="backPhone()">تغيير الرقم</button>
     </div>
     <div id="authMsg" class="msg"></div>
   </section>
 
-  <section id="accountCard" class="hide">
-    <div class="card">
-      <h2 style="margin-top:0">أهلاً بيك 👋</h2>
-      <div class="row">
-        <div class="stat"><span class="muted">رصيدك</span><b id="balance">0</b><span>جنيه</span></div>
-        <div class="stat"><span class="muted">رقم الحساب</span><b id="accountId" style="font-size:19px">—</b><span>وفر كاش</span></div>
-      </div>
-      <p class="note" id="phoneLabel"></p>
-    </div>
+  <main id="accountCard" class="hide">
+    <section class="hero">
+      <div class="hero-top"><div class="welcome">أهلاً بيك 👋</div><div id="accountId" class="account-pill">WAFR-—</div></div>
+      <div class="balance-label">رصيد وفر كاش</div>
+      <div class="balance"><span id="balance">0</span> <small>جنيه</small></div>
+      <div id="phoneLabel" class="hero-foot"></div>
+    </section>
 
-    <div class="card">
-      <h3 style="margin-top:0">ربط Telegram</h3>
-      <div id="linkedBox" class="msg ok hide">✅ حساب Telegram مربوط بالفعل.</div>
-      <div id="linkBox">
-        <p class="note">اضغطي تحت، وبعدها ابعتي الكود للبوت بالأمر الظاهر. الكود صالح 10 دقائق.</p>
-        <button class="btn" onclick="makeLinkCode()">اعمل كود ربط Telegram</button>
-        <div id="linkResult" class="hide" style="margin-top:14px">
-          <div id="linkCode" class="code"></div>
-          <p class="note" style="text-align:center">ابعتي للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
+    <div class="section-title"><h2>تعمل إيه دلوقتي؟</h2><span>وفر كاش</span></div>
+    <section class="actions">
+      <button class="action primary" onclick="coming('offers')"><span class="soon">الخطوة الجاية</span><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
+      <button class="action gold" onclick="coming('wheel')"><span class="soon">الخطوة الجاية</span><span class="ico">🎡</span><b>عجلة العروض الذهبية</b><p>لف العجلة وابدأ جولة المكافآت.</p></button>
+      <button class="action" onclick="coming('redeem')"><span class="soon">قريبًا</span><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
+      <button class="action" onclick="document.getElementById('accountDetails').scrollIntoView({behavior:'smooth'})"><span class="ico">👤</span><b>حسابي</b><p>بيانات حسابك وربط Telegram.</p></button>
+    </section>
+
+    <div class="section-title"><h2>حسابي</h2><span>آمن ومربوط</span></div>
+    <section id="accountDetails" class="card">
+      <div class="info-row">
+        <div class="mini"><span>رقم الحساب</span><b id="accountId2">—</b></div>
+        <div class="mini"><span>طريقة الدخول</span><b>WhatsApp OTP</b></div>
+      </div>
+      <div style="margin-top:14px" id="telegramArea">
+        <div id="linkedBox" class="link-status hide">✅ حساب Telegram مربوط بالفعل.</div>
+        <div id="linkBox">
+          <h3 style="margin:0 0 5px">ربط Telegram</h3>
+          <p class="note">اربط نفس الحساب ببوت Telegram علشان رصيدك ونشاطك يفضلوا موحدين.</p>
+          <button class="btn" onclick="makeLinkCode()">اعمل كود ربط Telegram</button>
+          <div id="linkResult" class="hide" style="margin-top:14px">
+            <div id="linkCode" class="code"></div>
+            <p class="note" style="text-align:center">ابعتي للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h3 style="margin-top:0">منين وصلتي لنا؟</h3>
+    <section class="card">
+      <h3 style="margin:0 0 6px">مصدر الدخول</h3>
       <p class="note" id="sourceText">—</p>
       <button class="btn secondary" onclick="logout()">تسجيل خروج</button>
-    </div>
-  </section>
+    </section>
+    <div class="footer-note">وفر كاش • حساب واحد من أي منصة</div>
+  </main>
 </div>
 <script>
+const sourceNames={direct:'دخول مباشر',tiktok:'TikTok',snapchat:'Snapchat',instagram:'Instagram',facebook:'Facebook',telegram:'Telegram',whatsapp:'WhatsApp'};
 const src=(new URLSearchParams(location.search).get('src')||localStorage.getItem('wafr_src')||'direct').toLowerCase();
-localStorage.setItem('wafr_src',src); document.getElementById('sourceBadge').textContent='المصدر: '+src;
+localStorage.setItem('wafr_src',src); document.getElementById('sourceBadge').textContent='المصدر: '+(sourceNames[src]||src);
 let currentPhone='';
 function msg(text,ok=false){const e=document.getElementById('authMsg');e.textContent=text;e.className='msg '+(ok?'ok':'err')}
-async function api(path,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'}; const r=await fetch(path,opts); let d={}; try{d=await r.json()}catch(e){}; if(!r.ok) throw new Error(d.error||'حصل خطأ'); return d}
+async function api(path,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'};const r=await fetch(path,opts);let d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(d.error||'حصل خطأ');return d}
 async function sendOtp(){const b=document.getElementById('sendBtn');b.disabled=true;try{const phone=document.getElementById('phone').value.trim();await api('/api/auth/send-otp',{method:'POST',body:JSON.stringify({phone,source:src})});currentPhone=phone;document.getElementById('phoneStep').classList.add('hide');document.getElementById('otpStep').classList.remove('hide');msg('الكود اتبعت على WhatsApp. اكتبيه هنا.',true)}catch(e){msg(e.message)}finally{b.disabled=false}}
 async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabled=true;try{const code=document.getElementById('otp').value.trim();await api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone:currentPhone,code,source:src})});await loadMe()}catch(e){msg(e.message)}finally{b.disabled=false}}
 function backPhone(){document.getElementById('otpStep').classList.add('hide');document.getElementById('phoneStep').classList.remove('hide');msg('')}
-async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');document.getElementById('balance').textContent=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');document.getElementById('accountId').textContent='WAFR-'+x.account_id;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;document.getElementById('sourceText').textContent='أول مصدر: '+(x.source_first||'direct')+' — آخر مصدر: '+(x.source_last||'direct');if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide')}}
+async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');const bal=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');const aid='WAFR-'+x.account_id;document.getElementById('balance').textContent=bal;document.getElementById('accountId').textContent=aid;document.getElementById('accountId2').textContent=aid;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;const first=sourceNames[(x.source_first||'direct').toLowerCase()]||x.source_first||'دخول مباشر';const last=sourceNames[(x.source_last||'direct').toLowerCase()]||x.source_last||'دخول مباشر';document.getElementById('sourceText').textContent='أول مرة وصلتي لنا من: '+first+' • آخر دخول من: '+last;if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide')}}
 async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
-async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){} location.reload()}
+function coming(kind){const names={offers:'أحدث عروض أمازون',wheel:'عجلة العروض الذهبية',redeem:'استبدال الرصيد'};alert('هنوصل '+names[kind]+' بالحساب في الخطوة الجاية. تسجيل الدخول وربط الحساب شغالين بالفعل.');}
+async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){}location.reload()}
 loadMe();
 </script>
 </body>
