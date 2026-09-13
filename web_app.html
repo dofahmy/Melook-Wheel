@@ -112,6 +112,14 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
           <h3 style="margin:0 0 5px">ربط Telegram</h3>
           <p class="note">اربط نفس الحساب ببوت Telegram علشان رصيدك ونشاطك يفضلوا موحدين.</p>
           <button class="btn" onclick="makeLinkCode()">اعمل كود ربط Telegram</button>
+<div id="telegramBotLink" style="margin-top:10px">
+  <a href="https://t.me/WafrCashBot" target="_blank" rel="noopener noreferrer"
+     class="btn secondary" style="display:inline-flex;text-decoration:none;align-items:center;justify-content:center">
+    افتح بوت وفر كاش على Telegram
+  </a>
+  <div class="muted" style="margin-top:7px;font-size:13px">بعد ما يظهر لك كود الربط، افتح البوت وابعت: /linkweb الكود</div>
+</div>
+
           <div id="linkResult" class="hide" style="margin-top:14px">
             <div id="linkCode" class="code"></div>
             <p class="note" style="text-align:center">ابعتي للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
@@ -425,7 +433,17 @@ async function copyGiftCode(el){
   catch(e){try{const r=document.createRange();r.selectNodeContents(el);const s=window.getSelection();s.removeAllRanges();s.addRange(r)}catch(_){}}
 }
 function coming(kind){const names={redeem:'استبدال الرصيد'};alert('هنوصل '+(names[kind]||kind)+' بالحساب في الخطوة الجاية.');}
-async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){}location.reload()}
+async function logout(){
+  try{
+    const r=await api('/api/auth/logout',{method:'POST',body:'{}'});
+    if(r&&r.suspended){
+      alert(r.message||'لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.');
+    }
+  }catch(e){
+    if(e&&e.message) alert(e.message);
+  }
+  location.reload();
+}
 loadMe();
 </script>
 </body>

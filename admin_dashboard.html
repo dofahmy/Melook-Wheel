@@ -8,9 +8,17 @@
 <div id="app" class="wrap hidden">
 <div class="top"><div><div class="brand">⚙️ لوحة إدارة وفر كاش المركزية</div><div class="sub">Telegram + Web في مكان واحد</div></div><div><button class="btn" onclick="refreshAll()">↻ تحديث</button> <button id="logoutBtn" class="btn danger" onclick="webLogout()">خروج</button></div></div>
 <div id="notice"></div>
-<div class="tabs"><button class="tab active" data-tab="overview">🏠 نظرة عامة</button><button class="tab" data-tab="redeems">🎁 الاستبدالات</button><button class="tab" data-tab="customers">👥 العملاء</button><button class="tab" data-tab="reports">📊 التقارير</button></div>
+<div class="tabs"><button class="tab active" data-tab="overview">🏠 نظرة عامة</button><button class="tab" data-tab="redeems">🎁 الاستبدالات</button><button class="tab" data-tab="customers">👥 العملاء</button><button class="tab" data-tab="suspended">⛔ الموقوفين</button><button class="tab" data-tab="reports">📊 التقارير</button></div>
 <section id="overview"><div class="filters"><select id="periodOverview" class="select" onchange="loadOverview()"><option value="today">اليوم</option><option value="7d">آخر 7 أيام</option><option value="30d">آخر 30 يوم</option><option value="all" selected>كل الوقت</option></select></div><div id="overviewCards" class="cards"></div><div class="section-title">📈 Funnel العميل</div><div id="funnel" class="funnel"></div><div class="small" style="margin:8px 2px 14px">الـFunnel يبدأ من الحسابات اللي لها نشاط Web مسجل؛ الزيارات المجهولة قبل تسجيل الدخول غير متتبعة حاليًا. ربط Telegram يظهر كمؤشر مستقل لأنه اختياري.</div><div class="section-title">🚨 تنبيهات تحتاج متابعة</div><div id="alertSummary" class="cards"></div><div id="alerts" class="alerts"></div><div class="section-title">مصادر عملاء الويب</div><div id="sources" class="sources"></div></section>
 <section id="redeems" class="hidden"><div id="redeemSummary" class="cards"></div><div id="redeemList" class="grid"></div></section>
+<section id="suspended" class="hidden">
+<div class="section-title">⛔ العملاء الموقوفين مؤقتًا</div>
+<div class="small" style="margin-bottom:10px">الإيقاف يتم تلقائيًا بعد 3 دورات تسجيل دخول + خروج في نفس اليوم. إعادة التفعيل تصفّر عداد اليوم، ثم ترسل OTP للعميل على رقم الموبايل المسجل.</div>
+<div id="suspendedNote"></div>
+<div class="tablewrap"><table class="table"><thead><tr>
+<th>رقم الموبايل</th><th>وقت الإيقاف</th><th>دخول اليوم</th><th>خروج اليوم</th><th>الدورات</th><th>المصدر</th><th>الإجراء</th>
+</tr></thead><tbody id="suspendedBody"></tbody></table></div>
+</section>
 <section id="customers" class="hidden"><div class="filters"><select id="periodCustomers" class="select" onchange="loadCustomers()"><option value="today">اليوم</option><option value="7d">آخر 7 أيام</option><option value="30d">آخر 30 يوم</option><option value="all" selected>كل الوقت</option></select><input id="search" class="search" placeholder="موبايل / Username / Telegram ID"><button class="btn primary" onclick="loadCustomers()">بحث</button><button class="btn" onclick="downloadCSV()">📥 CSV</button></div><div class="tablewrap"><table class="table"><thead><tr><th>العميل</th><th>المنصة</th><th>الموبايل</th><th>المصدر</th><th>Telegram</th><th>لفات</th><th>ضغطات/منتجات</th><th>مدفوع</th><th>معلق</th><th>الرصيد</th></tr></thead><tbody id="customersBody"></tbody></table></div></section>
 <section id="reports" class="hidden"><div class="filters"><select id="periodReports" class="select" onchange="loadReports()"><option value="today">اليوم</option><option value="7d">آخر 7 أيام</option><option value="30d">آخر 30 يوم</option><option value="all" selected>كل الوقت</option></select></div><div id="reportCards" class="cards"></div><div class="notice">العائد المتوقع مبني على EPC/ERP المسجل للمنتجات، وليس إيرادًا مؤكدًا من أمازون.</div></section>
 <section id="detail" class="hidden"><div class="filters"><button class="btn" onclick="backCustomers()">← رجوع</button></div><div id="detailBox" class="grid"></div></section>
@@ -34,7 +42,30 @@ async function loadCustomers(){try{let p=document.getElementById('periodCustomer
 async function openCustomer(id){try{let p=document.getElementById('periodCustomers').value,r=await api('/api/admin/customer?period='+p+'&user_id='+id);document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));document.getElementById('detail').classList.remove('hidden');let wa=r.web_account||{};let products=(r.recent_products||[]).map(x=>`<tr><td>${esc(x.asin)}</td><td>${n(x.epc)}</td><td>${x.was_correct===1?'✅':'❌'}</td><td>${x.was_correct===1?n(x.reward_value):'0'}</td></tr>`).join('');let red=(r.redemptions||[]).map(x=>`<tr><td>#${x.id}</td><td>${n(x.amount)}</td><td>${esc(x.status)}</td><td>${esc(x.gift_code||'—')}</td></tr>`).join('');document.getElementById('detailBox').innerHTML=`<div class="row"><h3>👤 ${r.username?'@'+esc(r.username):r.user_id}</h3><div class="small">${wa.phone_e164?'📱 '+esc(wa.phone_e164)+' • ':''}${wa.source_last?'المصدر: '+esc(wa.source_last)+' • ':''}${wa.telegram_user_id?'Telegram مربوط':'Telegram غير مربوط'}</div><div class="cards">${cards([['🎡 اللفات',r.spin_count],['🛍️ المنتجات',r.products_shown],['🎁 أرباح العميل',n(r.product_rewards)+' ج'],['✅ مدفوع',n(r.paid_total)+' ج'],['⏳ معلق',n(r.pending_total)+' ج'],['💳 الرصيد',n(r.gift_balance)+' ج']])}</div></div><div class="row"><h3>آخر المنتجات/الأسئلة</h3><div class="tablewrap"><table class="table"><thead><tr><th>ASIN</th><th>EPC</th><th>الإجابة</th><th>المكسب</th></tr></thead><tbody>${products}</tbody></table></div></div><div class="row"><h3>الاستبدالات</h3><div class="tablewrap"><table class="table"><thead><tr><th>الطلب</th><th>المبلغ</th><th>الحالة</th><th>الكود</th></tr></thead><tbody>${red}</tbody></table></div></div>`;window.scrollTo(0,0)}catch(e){note(e.message,'err')}}
 function backCustomers(){document.getElementById('detail').classList.add('hidden');document.getElementById('customers').classList.remove('hidden')}
 async function loadReports(){try{let p=document.getElementById('periodReports').value,s=await api('/api/admin/summary?period='+p);document.getElementById('reportCards').innerHTML=cards([['👥 العملاء',n(s.users)],['🎡 عدد اللفات',n(s.spin_count)],['🛍️ المنتجات الظاهرة',n(s.products_shown)],['💵 ERP/EPC متوقع',n(s.expected_revenue)+' ج'],['🎁 مكافآت المنتجات',n(s.product_rewards)+' ج'],['🧾 طلبات الاستبدال',n(s.requested_count)],['✅ المدفوع',n(s.paid_total)+' ج'],['⏳ لم يُدفع',n(s.pending_total)+' ج'],['📈 صافي متوقع',n(s.expected_net)+' ج']])}catch(e){note(e.message,'err')}}
+
+async function loadSuspended(){
+  try{
+    let rows=await api('/api/admin/suspended-customers');
+    document.getElementById('suspendedBody').innerHTML=(rows||[]).length?(rows||[]).map(r=>`<tr>
+      <td><b>${esc(r.phone_e164||'—')}</b></td>
+      <td>${esc(r.suspended_at||'—')}</td>
+      <td>${n(r.today_logins)}</td>
+      <td>${n(r.today_logouts)}</td>
+      <td><span class="badge red">${n(r.today_cycles)}</span></td>
+      <td>${esc(r.source_last||r.source_first||'—')}</td>
+      <td><button class="btn primary" onclick="reactivateCustomer(${r.account_id},'${esc(r.phone_e164||'')}')">إعادة تفعيل</button></td>
+    </tr>`).join(''):'<tr><td colspan="7"><div class="small">مفيش حسابات موقوفة حاليًا ✅</div></td></tr>';
+  }catch(e){note(e.message,'err')}
+}
+async function reactivateCustomer(accountId,phone){
+  if(!confirm('إعادة تفعيل حساب '+phone+' وإرسال OTP له؟')) return;
+  try{
+    let r=await api('/api/admin/reactivate-customer',{method:'POST',body:JSON.stringify({account_id:accountId})});
+    note(r.message||'تم إعادة التفعيل','ok');
+    await loadSuspended();
+  }catch(e){note(e.message,'err')}
+}
 function downloadCSV(){let h=['user_id','username','platform','phone','source','telegram_linked','spins','products','paid','pending','balance'],lines=[h.join(',')];for(let r of customersCache){let pl=r.has_web_account?(r.telegram_user_id?'web+telegram':'web'):'telegram';lines.push([r.user_id,JSON.stringify(r.username||''),pl,JSON.stringify(r.phone_e164||''),JSON.stringify(r.source_last||r.source_first||''),r.telegram_user_id?'yes':'no',r.spin_count,r.products_shown,r.paid_total,r.pending_total,r.gift_balance].join(','))}let b=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wafr-central-customers.csv';a.click();URL.revokeObjectURL(a.href)}
 function refreshAll(){loadOverview();loadRedeems();loadCustomers();loadReports()}
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));document.getElementById(b.dataset.tab).classList.remove('hidden');if(b.dataset.tab==='overview')loadOverview();if(b.dataset.tab==='redeems')loadRedeems();if(b.dataset.tab==='customers')loadCustomers();if(b.dataset.tab==='reports')loadReports()});detectAuth();
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));document.getElementById(b.dataset.tab).classList.remove('hidden');if(b.dataset.tab==='overview')loadOverview();if(b.dataset.tab==='redeems')loadRedeems();if(b.dataset.tab==='customers')loadCustomers();if(b.dataset.tab==='suspended')loadSuspended();if(b.dataset.tab==='reports')loadReports()});detectAuth();
 </script></body></html>

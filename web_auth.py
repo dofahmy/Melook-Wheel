@@ -12,7 +12,7 @@ import database
 
 
 SESSION_COOKIE = "wafr_session"
-SESSION_DAYS = 30
+SESSION_DAYS = 90
 LINK_MINUTES = 10
 DEV_OTP_MINUTES = 5
 
@@ -151,7 +151,16 @@ def create_session(account_id: int) -> str:
 def get_account_from_session(token: str | None):
     if not token:
         return None
-    return database.get_web_account_by_session(_hash(token), _now().isoformat())
+    token_hash = _hash(token)
+    account = database.get_web_account_by_session(token_hash, _now().isoformat())
+    if account:
+        # Sliding session: every successful visit extends the server-side
+        # session without asking the customer for another OTP.
+        database.extend_web_session(
+            token_hash,
+            (_now() + timedelta(days=SESSION_DAYS)).isoformat(),
+        )
+    return account
 
 
 def logout_session(token: str | None):

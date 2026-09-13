@@ -1718,6 +1718,10 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     source_last TEXT DEFAULT 'direct',
     created_at TEXT NOT NULL,
     last_login_at TEXT,
+    is_suspended INTEGER NOT NULL DEFAULT 0,
+    suspended_at TEXT,
+    suspended_reason TEXT,
+    reactivated_at TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 CREATE TABLE IF NOT EXISTS web_sessions (
@@ -1747,9 +1751,18 @@ CREATE TABLE IF NOT EXISTS web_source_events (
     seen_at TEXT NOT NULL,
     FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS web_auth_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    cairo_day TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_account ON web_sessions(account_id);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_web_source_account ON web_source_events(account_id, seen_at);
+CREATE INDEX IF NOT EXISTS idx_web_auth_events_account_day ON web_auth_events(account_id, cairo_day, event_type);
 CREATE INDEX IF NOT EXISTS idx_link_codes_account ON telegram_link_codes(account_id, expires_at);
 """
 
@@ -1757,6 +1770,17 @@ CREATE INDEX IF NOT EXISTS idx_link_codes_account ON telegram_link_codes(account
 def init_web_accounts_schema():
     with get_conn() as conn:
         conn.executescript(WEB_ACCOUNT_SCHEMA)
+        # Safe migrations for existing Railway databases.
+        for stmt in (
+            "ALTER TABLE web_accounts ADD COLUMN is_suspended INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE web_accounts ADD COLUMN suspended_at TEXT",
+            "ALTER TABLE web_accounts ADD COLUMN suspended_reason TEXT",
+            "ALTER TABLE web_accounts ADD COLUMN reactivated_at TEXT",
+        ):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
 
 
 def _safe_source(source: str | None) -> str:
@@ -1829,6 +1853,15 @@ def get_web_account_by_session(token_hash: str, now_iso: str):
             (token_hash, now_iso),
         ).fetchone()
         return dict(row) if row else None
+
+
+def extend_web_session(token_hash: str, expires_at: str):
+    """Extend an already-valid web session (sliding login)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE web_sessions SET expires_at=? WHERE token_hash=?",
+            (expires_at, token_hash),
+        )
 
 
 def delete_web_session(token_hash: str):
@@ -2167,6 +2200,171 @@ def get_web_account_history(user_id: int, limit: int = 20) -> dict:
 
 
 # ---------- لوحة الإدارة المركزية: Telegram + Web ----------
+
+
+def _cairo_day_key() -> str:
+    """Calendar day in Cairo, including DST when zoneinfo is available."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Africa/Cairo")).date().isoformat()
+    except Exception:
+        # Conservative fallback for the Railway runtime.
+        return (datetime.utcnow() + timedelta(hours=3)).date().isoformat()
+
+
+def get_web_account_by_phone(phone_e164: str):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM web_accounts WHERE phone_e164=? LIMIT 1",
+            (phone_e164,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_web_account_by_id(account_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM web_accounts WHERE id=? LIMIT 1",
+            (int(account_id),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def record_web_login(account_id: int) -> dict:
+    """Record a successful OTP login. Returns today's login/logout counters."""
+    now = datetime.utcnow().isoformat()
+    day = _cairo_day_key()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO web_auth_events(account_id,event_type,occurred_at,cairo_day) VALUES(?,?,?,?)",
+            (int(account_id), "login", now, day),
+        )
+        row = conn.execute(
+            """SELECT
+                 SUM(CASE WHEN event_type='login' THEN 1 ELSE 0 END) AS logins,
+                 SUM(CASE WHEN event_type='logout' THEN 1 ELSE 0 END) AS logouts
+               FROM web_auth_events
+               WHERE account_id=? AND cairo_day=?""",
+            (int(account_id), day),
+        ).fetchone()
+        logins = int(row["logins"] or 0)
+        logouts = int(row["logouts"] or 0)
+        return {"logins": logins, "logouts": logouts, "cycles": min(logins, logouts)}
+
+
+def record_web_logout_and_maybe_suspend(account_id: int, threshold: int = 3) -> dict:
+    """Suspend after 3 completed login/logout cycles during the same Cairo day."""
+    now = datetime.utcnow().isoformat()
+    day = _cairo_day_key()
+    reason = "3_login_logout_cycles_same_day"
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        account = conn.execute(
+            "SELECT * FROM web_accounts WHERE id=? LIMIT 1",
+            (int(account_id),),
+        ).fetchone()
+        if not account:
+            return {"suspended": False, "cycles": 0}
+
+        if int(account["is_suspended"] or 0):
+            return {"suspended": True, "cycles": int(threshold)}
+
+        conn.execute(
+            "INSERT INTO web_auth_events(account_id,event_type,occurred_at,cairo_day) VALUES(?,?,?,?)",
+            (int(account_id), "logout", now, day),
+        )
+        row = conn.execute(
+            """SELECT
+                 SUM(CASE WHEN event_type='login' THEN 1 ELSE 0 END) AS logins,
+                 SUM(CASE WHEN event_type='logout' THEN 1 ELSE 0 END) AS logouts
+               FROM web_auth_events
+               WHERE account_id=? AND cairo_day=?""",
+            (int(account_id), day),
+        ).fetchone()
+        logins = int(row["logins"] or 0)
+        logouts = int(row["logouts"] or 0)
+        cycles = min(logins, logouts)
+
+        suspended = cycles >= int(threshold)
+        if suspended:
+            conn.execute(
+                """UPDATE web_accounts
+                   SET is_suspended=1, suspended_at=?, suspended_reason=?
+                   WHERE id=?""",
+                (now, reason, int(account_id)),
+            )
+            # Kill every browser session immediately.
+            conn.execute("DELETE FROM web_sessions WHERE account_id=?", (int(account_id),))
+
+        return {
+            "suspended": bool(suspended),
+            "cycles": cycles,
+            "logins": logins,
+            "logouts": logouts,
+        }
+
+
+def list_suspended_web_accounts(limit: int = 500):
+    limit = max(1, min(int(limit or 500), 1000))
+    day = _cairo_day_key()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT wa.id AS account_id, wa.user_id, wa.phone_e164,
+                      wa.telegram_user_id, wa.source_first, wa.source_last,
+                      wa.suspended_at, wa.suspended_reason,
+                      COALESCE(SUM(CASE WHEN e.cairo_day=? AND e.event_type='login' THEN 1 ELSE 0 END),0) AS today_logins,
+                      COALESCE(SUM(CASE WHEN e.cairo_day=? AND e.event_type='logout' THEN 1 ELSE 0 END),0) AS today_logouts
+               FROM web_accounts wa
+               LEFT JOIN web_auth_events e ON e.account_id=wa.id
+               WHERE wa.is_suspended=1
+               GROUP BY wa.id
+               ORDER BY wa.suspended_at DESC
+               LIMIT ?""",
+            (day, day, limit),
+        ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["today_cycles"] = min(int(item["today_logins"] or 0), int(item["today_logouts"] or 0))
+            result.append(item)
+        return result
+
+
+def reactivate_web_account(account_id: int):
+    """Reactivate and reset today's login/logout counter so they get a fresh start."""
+    now = datetime.utcnow().isoformat()
+    day = _cairo_day_key()
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM web_accounts WHERE id=? LIMIT 1",
+            (int(account_id),),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            """UPDATE web_accounts
+               SET is_suspended=0, suspended_at=NULL, suspended_reason=NULL, reactivated_at=?
+               WHERE id=?""",
+            (now, int(account_id)),
+        )
+        conn.execute(
+            "DELETE FROM web_auth_events WHERE account_id=? AND cairo_day=?",
+            (int(account_id), day),
+        )
+        # Require a fresh login after admin reactivation.
+        conn.execute("DELETE FROM web_sessions WHERE account_id=?", (int(account_id),))
+        fresh = conn.execute(
+            "SELECT * FROM web_accounts WHERE id=? LIMIT 1",
+            (int(account_id),),
+        ).fetchone()
+        return dict(fresh) if fresh else None
+
+
+def count_suspended_web_accounts() -> int:
+    with get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM web_accounts WHERE is_suspended=1").fetchone()
+        return int(row["c"] or 0)
 
 def get_central_admin_summary(period: str = "all") -> dict:
     """ملخص مركزي يجمع نشاط Telegram وحسابات الويب في شاشة واحدة."""

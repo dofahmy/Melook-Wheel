@@ -72,6 +72,7 @@ def _telegram_send_message(chat_id: int, text: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+
 def _inject_tag(url: str, tag: str | None) -> str:
     if not tag:
         return url
@@ -335,7 +336,10 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def _auth_web(self):
-        return web_auth.get_account_from_session(self._session_token())
+        account = web_auth.get_account_from_session(self._session_token())
+        if account and int(account.get("is_suspended") or 0):
+            return None
+        return account
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -360,6 +364,14 @@ class Handler(BaseHTTPRequestHandler):
             if not account:
                 self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
                 return
+            session_token = self._session_token()
+            headers = {}
+            if session_token:
+                headers["Set-Cookie"] = (
+                    f"{web_auth.SESSION_COOKIE}={session_token}; Path=/; "
+                    f"Max-Age={web_auth.SESSION_DAYS*24*3600}; "
+                    "HttpOnly; Secure; SameSite=Lax"
+                )
             self._send_json(200, {"ok": True, "data": {
                 "account_id": account["id"],
                 "phone": account["phone_e164"],
@@ -369,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
                 "source_first": account.get("source_first") or "direct",
                 "source_last": account.get("source_last") or "direct",
                 "telegram_linked": bool(account.get("telegram_user_id")),
-            }})
+            }}, headers)
             return
 
         if parsed.path == "/api/app/deal-image":
@@ -584,6 +596,15 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/central-summary":
             self._send_json(200, {"ok": True, "data": database.get_central_admin_summary(period)})
             return
+        if parsed.path == "/api/admin/suspended-customers":
+            rows = database.list_suspended_web_accounts(500)
+            self._send_json(200, {
+                "ok": True,
+                "data": rows,
+                "count": len(rows),
+            })
+            return
+
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
             rows = [dict(x) for x in database.list_central_customers(period, search)]
@@ -631,6 +652,10 @@ class Handler(BaseHTTPRequestHandler):
             if not phone:
                 self._send_json(400, {"ok": False, "error": "اكتبي رقم موبايل مصري صحيح"})
                 return
+            existing = database.get_web_account_by_phone(phone)
+            if existing and int(existing.get("is_suspended") or 0):
+                self._send_json(423, {"ok": False, "error": 'لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.', "suspended": True})
+                return
             ok, err = web_auth.send_otp(phone)
             if not ok:
                 self._send_json(502, {"ok": False, "error": err})
@@ -650,18 +675,34 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(401, {"ok": False, "error": err})
                 return
             account = database.get_or_create_web_account(phone, source)
+            if int(account.get("is_suspended") or 0):
+                self._send_json(423, {"ok": False, "error": 'لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.', "suspended": True})
+                return
+            database.record_web_login(int(account["id"]))
             token = web_auth.create_session(int(account["id"]))
             cookie = (
-                f"{web_auth.SESSION_COOKIE}={token}; Path=/; Max-Age={30*24*3600}; "
+                f"{web_auth.SESSION_COOKIE}={token}; Path=/; Max-Age={web_auth.SESSION_DAYS*24*3600}; "
                 "HttpOnly; Secure; SameSite=Lax"
             )
             self._send_json(200, {"ok": True, "data": {"account_id": account["id"]}}, {"Set-Cookie": cookie})
             return
 
         if parsed.path == "/api/auth/logout":
-            web_auth.logout_session(self._session_token())
+            token = self._session_token()
+            account = web_auth.get_account_from_session(token)
+            result = {"suspended": False, "cycles": 0}
+            if account:
+                result = database.record_web_logout_and_maybe_suspend(int(account["id"]), 3)
+            web_auth.logout_session(token)
             cookie = f"{web_auth.SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax"
-            self._send_json(200, {"ok": True}, {"Set-Cookie": cookie})
+            if result.get("suspended"):
+                self._send_json(
+                    200,
+                    {"ok": True, "suspended": True, "message": 'لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.', "cycles": result.get("cycles", 3)},
+                    {"Set-Cookie": cookie},
+                )
+            else:
+                self._send_json(200, {"ok": True, "suspended": False, "cycles": result.get("cycles", 0)}, {"Set-Cookie": cookie})
             return
 
         if parsed.path == "/api/app/link-code":
@@ -750,6 +791,39 @@ class Handler(BaseHTTPRequestHandler):
         admin_id = self._auth_admin()
         if not admin_id:
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
+            return
+
+        if parsed.path == "/api/admin/reactivate-customer":
+            try:
+                account_id = int(payload.get("account_id") or 0)
+            except Exception:
+                account_id = 0
+            if not account_id:
+                self._send_json(400, {"ok": False, "error": "رقم الحساب غير صحيح"})
+                return
+
+            account = database.reactivate_web_account(account_id)
+            if not account:
+                self._send_json(404, {"ok": False, "error": "الحساب غير موجود"})
+                return
+
+            phone = str(account.get("phone_e164") or "").strip()
+            otp_ok, otp_err = web_auth.send_otp(phone) if phone else (False, "رقم الموبايل غير موجود")
+
+            self._send_json(200, {
+                "ok": True,
+                "data": {
+                    "account_id": account_id,
+                    "phone": phone,
+                    "otp_sent": bool(otp_ok),
+                    "otp_error": otp_err if not otp_ok else "",
+                },
+                "message": (
+                    "تم إعادة تفعيل الحساب وإرسال OTP للعميل ✅"
+                    if otp_ok else
+                    "تم إعادة تفعيل الحساب ✅ — لكن إرسال OTP فشل: " + (otp_err or "غير معروف")
+                ),
+            })
             return
 
         if parsed.path == "/api/admin/send-gift-code":
