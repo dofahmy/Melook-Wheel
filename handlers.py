@@ -592,15 +592,8 @@ async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("الأمر ده متاح بس لبرنامج مصر.")
         return
 
-    existing = database.get_open_redemption_request(user.id)
-    if existing:
-        await update.message.reply_text(
-            f"⏳ عندك طلب استبدال رقم #{existing['id']} قيد الانتظار بقيمة "
-            f"{_format_egp(existing['amount'])} جنيه.\n"
-            "أول ما يتم الدفع هيوصلك تأكيد هنا."
-        )
-        return
-
+    # وجود طلب استبدال قديم Pending لا يمنع استبدال رصيد جديد.
+    # كل طلب جديد يأخذ كل الجنيهات الصحيحة الموجودة في الرصيد وقت الطلب فقط.
     balance = float(row["gift_balance"] or 0)
     if balance < config.EGYPT_REDEEM_MIN_BALANCE:
         await update.message.reply_text(

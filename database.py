@@ -756,22 +756,15 @@ def get_open_redemption_request(user_id: int):
 
 
 def create_redemption_request(user_id: int):
-    """ينقل الرصيد الحالي إلى طلب مستحقات مستقل ويبدأ رصيدًا جديدًا للعميل.
+    """ينشئ طلب استبدال جديد من كل الجنيهات الصحيحة في الرصيد الحالي.
 
-    يرجّع dict فيه created=True للطلب الجديد، أو created=False لو فيه طلب مفتوح بالفعل.
+    أي طلبات قديمة Pending لا تمنع إنشاء طلب جديد من رصيد جديد اتجمع بعدها.
+    مثال: طلب قديم 1 جنيه + رصيد حالي 2.04 جنيه
+    => يظل الطلب القديم 1 جنيه، ويتعمل طلب جديد 2 جنيه، ويتبقى 0.04 جنيه.
     """
     with get_conn() as conn:
+        # BEGIN IMMEDIATE يمنع طلبين متزامنين من حجز نفس الرصيد.
         conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute(
-            """SELECT * FROM redemption_requests
-               WHERE user_id = ? AND status IN ('pending', 'processing')
-               ORDER BY id DESC LIMIT 1""",
-            (user_id,),
-        ).fetchone()
-        if existing:
-            result = dict(existing)
-            result["created"] = False
-            return result
 
         user = conn.execute(
             "SELECT gift_balance FROM users WHERE user_id = ?", (user_id,)
