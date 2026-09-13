@@ -16,6 +16,8 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:11px}.action{background:#fff;border:1px solid rgba(16,24,40,.05);border-radius:20px;padding:16px;min-height:134px;box-shadow:0 7px 22px rgba(16,24,40,.05);cursor:pointer;text-align:right;position:relative}.action .ico{font-size:30px}.action b{display:block;font-size:17px;margin-top:10px}.action p{font-size:12px;line-height:1.5;color:var(--muted);margin:5px 0 0}.action.primary{background:#effaf4;border-color:#d5f1e1}.action.gold{background:#fff9e9;border-color:#f7e4ac}.soon{position:absolute;left:10px;top:10px;font-size:10px;background:#eef2f0;color:#475467;padding:4px 7px;border-radius:999px}
 .info-row{display:flex;gap:10px}.mini{flex:1;background:var(--soft);padding:14px;border-radius:16px;text-align:center}.mini span{font-size:12px;color:var(--muted)}.mini b{display:block;margin-top:5px;font-size:17px}.code{font-size:28px;letter-spacing:5px;font-weight:900;text-align:center;background:#f7f8fa;padding:14px;border-radius:14px;direction:ltr}
 .link-status{background:var(--green2);color:#027a48;padding:12px;border-radius:14px;font-weight:800;text-align:center}.footer-note{text-align:center;color:#98a2b3;font-size:12px;margin-top:18px}
+
+.offers-panel{margin-top:14px}.offers-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.offers-head h2{margin:0;font-size:21px}.close-link{border:0;background:#eef2f0;border-radius:12px;padding:8px 11px;font-weight:800;cursor:pointer}.offers-list{display:grid;gap:12px}.offer-card{background:#fff;border-radius:20px;overflow:hidden;border:1px solid rgba(16,24,40,.06);box-shadow:0 7px 22px rgba(16,24,40,.05)}.offer-image{width:100%;aspect-ratio:16/9;object-fit:contain;background:#fff;display:block}.offer-body{padding:15px}.offer-title{font-size:16px;font-weight:900;line-height:1.5;margin-bottom:6px}.offer-caption{white-space:pre-wrap;font-size:13px;line-height:1.75;color:#475467;max-height:145px;overflow:hidden}.offer-price{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:9px 0}.price-now{font-size:20px;font-weight:950;color:#067647}.price-old{text-decoration:line-through;color:#98a2b3;font-size:13px}.discount{font-size:12px;background:#ecfdf3;color:#067647;padding:4px 7px;border-radius:999px;font-weight:800}.offer-links{display:grid;gap:8px;margin-top:12px}.buy-btn{display:block;text-align:center;text-decoration:none;background:#111827;color:#fff;border-radius:13px;padding:12px 14px;font-weight:900}.empty-box{background:#fff;border-radius:18px;padding:24px;text-align:center;color:#667085;border:1px solid rgba(16,24,40,.05)}.loading{text-align:center;padding:22px;color:#667085}
 @media(max-width:380px){.wrap{padding-left:10px;padding-right:10px}.action{padding:13px;min-height:128px}.balance{font-size:34px}}
 </style>
 </head>
@@ -49,10 +51,16 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 
     <div class="section-title"><h2>تعمل إيه دلوقتي؟</h2><span>وفر كاش</span></div>
     <section class="actions">
-      <button class="action primary" onclick="coming('offers')"><span class="soon">الخطوة الجاية</span><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
+      <button class="action primary" onclick="showOffers()"><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
       <button class="action gold" onclick="coming('wheel')"><span class="soon">الخطوة الجاية</span><span class="ico">🎡</span><b>عجلة العروض الذهبية</b><p>لف العجلة وابدأ جولة المكافآت.</p></button>
       <button class="action" onclick="coming('redeem')"><span class="soon">قريبًا</span><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
       <button class="action" onclick="document.getElementById('accountDetails').scrollIntoView({behavior:'smooth'})"><span class="ico">👤</span><b>حسابي</b><p>بيانات حسابك وربط Telegram.</p></button>
+    </section>
+
+    <section id="offersPanel" class="offers-panel hide">
+      <div class="offers-head"><h2>🔥 أحدث عروض أمازون</h2><button class="close-link" onclick="hideOffers()">إغلاق</button></div>
+      <div id="offersStatus" class="note"></div>
+      <div id="offersList" class="offers-list"><div class="loading">جاري تحميل العروض…</div></div>
     </section>
 
     <div class="section-title"><h2>حسابي</h2><span>آمن ومربوط</span></div>
@@ -95,7 +103,26 @@ async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabl
 function backPhone(){document.getElementById('otpStep').classList.add('hide');document.getElementById('phoneStep').classList.remove('hide');msg('')}
 async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');const bal=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');const aid='WAFR-'+x.account_id;document.getElementById('balance').textContent=bal;document.getElementById('accountId').textContent=aid;document.getElementById('accountId2').textContent=aid;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;const first=sourceNames[(x.source_first||'direct').toLowerCase()]||x.source_first||'دخول مباشر';const last=sourceNames[(x.source_last||'direct').toLowerCase()]||x.source_last||'دخول مباشر';document.getElementById('sourceText').textContent='أول مرة وصلتي لنا من: '+first+' • آخر دخول من: '+last;if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide')}}
 async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
-function coming(kind){const names={offers:'أحدث عروض أمازون',wheel:'عجلة العروض الذهبية',redeem:'استبدال الرصيد'};alert('هنوصل '+names[kind]+' بالحساب في الخطوة الجاية. تسجيل الدخول وربط الحساب شغالين بالفعل.');}
+function money(v){const n=Number(v||0);return Number.isFinite(n)?n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'):'0'}
+function esc(s){return String(s??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]))}
+async function showOffers(){
+  const panel=document.getElementById('offersPanel'),list=document.getElementById('offersList'),status=document.getElementById('offersStatus');
+  panel.classList.remove('hide'); list.innerHTML='<div class="loading">جاري تحميل العروض…</div>'; status.textContent=''; panel.scrollIntoView({behavior:'smooth',block:'start'});
+  try{
+    const d=await api('/api/app/offers'); const items=d.data||[]; status.textContent=d.message||'';
+    if(!items.length){list.innerHTML='<div class="empty-box">مفيش عروض متاحة دلوقتي. ارجعي تاني بعد شوية 🔥</div>';return}
+    list.innerHTML=items.map(x=>{
+      const p=x.product||{}; const title=p.title||x.caption?.split('\
+')[0]||'عرض أمازون';
+      const img=p.image_url?`<img class="offer-image" src="${esc(p.image_url)}" alt="">`:'';
+      let price=''; if(Number(p.price)>0){price=`<div class="offer-price"><span class="price-now">${money(p.price)} جنيه</span>${Number(p.old_price)>Number(p.price)?`<span class="price-old">${money(p.old_price)} جنيه</span>`:''}${Number(p.discount_percent)>0?`<span class="discount">خصم ${money(p.discount_percent)}%</span>`:''}</div>`}
+      const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 اشتري من هنا'}</a>`).join('');
+      return `<article class="offer-card">${img}<div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}<div class="offer-caption">${esc(x.caption||'')}</div><div class="offer-links">${links}</div></div></article>`
+    }).join('');
+  }catch(e){list.innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
+}
+function hideOffers(){document.getElementById('offersPanel').classList.add('hide')}
+function coming(kind){const names={wheel:'عجلة العروض الذهبية',redeem:'استبدال الرصيد'};alert('هنوصل '+names[kind]+' بالحساب في الخطوة الجاية.');}
 async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){}location.reload()}
 loadMe();
 </script>

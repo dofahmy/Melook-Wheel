@@ -7,13 +7,18 @@ import threading
 import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit, parse_qsl, urlencode
 
 import requests
 
 import config
 import database
 import web_auth
+
+try:
+    import product_catalog
+except Exception:
+    product_catalog = None
 
 DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "admin_dashboard.html")
 WEB_APP_PATH = os.path.join(os.path.dirname(__file__), "web_app.html")
@@ -65,6 +70,60 @@ def _telegram_send_message(chat_id: int, text: str) -> tuple[bool, str]:
         return False, data.get("description") or f"HTTP {r.status_code}"
     except Exception as exc:
         return False, str(exc)
+
+
+def _inject_tag(url: str, tag: str | None) -> str:
+    if not tag:
+        return url
+    try:
+        parts = urlsplit(url)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        query["tag"] = tag
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    except Exception:
+        return url
+
+
+def _asin_from_url(url: str) -> str | None:
+    import re
+    m = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})(?:[/?]|$)", str(url or ""), re.I)
+    return m.group(1).upper() if m else None
+
+
+def _caption_without_urls(text: str) -> str:
+    import re
+    cleaned = re.sub(r"https?://\\S+", "", str(text or ""))
+    cleaned = re.sub(r"[ \\t]+\
+", "\
+", cleaned)
+    cleaned = re.sub(r"\
+{3,}", "\
+\
+", cleaned)
+    return cleaned.strip()
+
+
+def _product_meta_for_links(links: list[str]) -> dict:
+    if not product_catalog:
+        return {}
+    for link in links:
+        asin = _asin_from_url(link)
+        if not asin:
+            continue
+        try:
+            p = product_catalog.get_product(asin)
+        except Exception:
+            p = None
+        if p:
+            return {
+                "asin": p.asin,
+                "title": p.title,
+                "price": p.price,
+                "old_price": p.old_price,
+                "discount_percent": p.discount_percent,
+                "image_url": p.image_url,
+            }
+    return {}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -179,6 +238,62 @@ class Handler(BaseHTTPRequestHandler):
                 "source_last": account.get("source_last") or "direct",
                 "telegram_linked": bool(account.get("telegram_user_id")),
             }})
+            return
+
+        if parsed.path == "/api/app/offers":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            user_id = int(account["user_id"])
+            rows, mode, seen_up_to = database.list_web_offers_for_user(user_id, 20)
+            data = []
+            for row in rows:
+                deal = dict(row)
+                links = database.get_deal_links(deal.get("base_link"))
+                meta = _product_meta_for_links(links)
+                item = {
+                    "id": int(deal["id"]),
+                    "caption": _caption_without_urls(deal.get("caption") or ""),
+                    "posted_at": deal.get("posted_at"),
+                    "links_count": len(links),
+                    "product": meta,
+                }
+                data.append(item)
+            database.mark_web_offers_seen(user_id, mode, seen_up_to)
+            message = "عروض جديدة" if mode in ("new", "pending") else "أحدث العروض المتاحة"
+            self._send_json(200, {"ok": True, "data": data, "mode": mode, "message": message})
+            return
+
+        if parsed.path == "/go":
+            account = self._auth_web()
+            if not account:
+                self.send_response(302)
+                self.send_header("Location", "/app")
+                self.end_headers()
+                return
+            qs = parse_qs(parsed.query)
+            try:
+                deal_id = int(qs.get("deal", ["0"])[0])
+                link_index = int(qs.get("i", ["0"])[0])
+            except Exception:
+                deal_id, link_index = 0, -1
+            deal = database.get_deal_by_id(deal_id) if deal_id else None
+            links = database.get_deal_links(deal.get("base_link")) if deal else []
+            if link_index < 0 or link_index >= len(links):
+                self._send_json(404, {"ok": False, "error": "العرض غير موجود"})
+                return
+            url = links[link_index]
+            tag = database.get_user_tag_keyword(int(account["user_id"]))
+            url = _inject_tag(url, tag)
+            database.record_web_offer_click(
+                int(account["id"]), int(account["user_id"]), deal_id, link_index, account.get("source_last") or "direct"
+            )
+            self.send_response(302)
+            self._security_headers()
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Location", url)
+            self.end_headers()
             return
 
         # Everything below is admin-only.

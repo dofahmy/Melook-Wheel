@@ -289,6 +289,7 @@ def init_db():
 
     # جداول حساب وفر كاش المستقل (Web App / TikTok / Snapchat / إلخ)
     init_web_accounts_schema()
+    init_web_offers_schema()
 
 
 # ---------- المستخدمين ----------
@@ -1896,3 +1897,104 @@ def consume_telegram_link_code(token_hash: str, telegram_user_id: int, now_iso: 
             )
         conn.execute("UPDATE telegram_link_codes SET used_at=? WHERE token_hash=?", (now_iso, token_hash))
         return True, "تم ربط Telegram بحساب وفر كاش بنجاح"
+
+
+# ---------- عروض الويب / تتبع الضغطات ----------
+
+WEB_OFFERS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS web_offer_clicks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    deal_id INTEGER NOT NULL,
+    link_index INTEGER NOT NULL DEFAULT 0,
+    clicked_at TEXT NOT NULL,
+    source TEXT DEFAULT 'direct',
+    FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_web_offer_clicks_account ON web_offer_clicks(account_id, clicked_at);
+CREATE INDEX IF NOT EXISTS idx_web_offer_clicks_deal ON web_offer_clicks(deal_id, clicked_at);
+"""
+
+
+def init_web_offers_schema():
+    with get_conn() as conn:
+        conn.executescript(WEB_OFFERS_SCHEMA)
+
+
+def list_web_offers_for_user(user_id: int, limit: int = 20):
+    """
+    ترجع عروض الويب بنفس منطق دفعة Telegram قدر الإمكان.
+    - لو فيه دفعة pending ثابتة: ترجع منها بحد أقصى limit.
+    - غير كده: ترجع أول عروض غير مشاهدة بحد أقصى limit.
+    - لو مفيش جديد: ترجع آخر عروض موجودة كـ fallback من غير ما تغيّر last_seen.
+    النتيجة: (rows, mode, seen_up_to_id)
+    """
+    limit = max(1, min(int(limit or 20), 50))
+    with get_conn() as conn:
+        pending = conn.execute(
+            "SELECT pending_offer_from_id, pending_offer_to_id FROM users WHERE user_id=?",
+            (int(user_id),),
+        ).fetchone()
+        if pending and pending["pending_offer_from_id"] is not None and pending["pending_offer_to_id"] is not None:
+            rows = conn.execute(
+                """SELECT * FROM deals_cache
+                   WHERE id BETWEEN ? AND ?
+                   ORDER BY id ASC LIMIT ?""",
+                (int(pending["pending_offer_from_id"]), int(pending["pending_offer_to_id"]), limit),
+            ).fetchall()
+            seen_up_to = int(rows[-1]["id"]) if rows else None
+            return rows, "pending", seen_up_to
+
+        user = conn.execute("SELECT last_seen_deal_id FROM users WHERE user_id=?", (int(user_id),)).fetchone()
+        last_seen = int((user["last_seen_deal_id"] if user else 0) or 0)
+        rows = conn.execute(
+            "SELECT * FROM deals_cache WHERE id>? ORDER BY id ASC LIMIT ?",
+            (last_seen, limit),
+        ).fetchall()
+        if rows:
+            return rows, "new", int(rows[-1]["id"])
+
+        rows = conn.execute(
+            "SELECT * FROM deals_cache ORDER BY id DESC LIMIT ?",
+            (min(limit, 10),),
+        ).fetchall()
+        rows = list(reversed(rows))
+        return rows, "recent", None
+
+
+def mark_web_offers_seen(user_id: int, mode: str, seen_up_to_id: int | None):
+    if not seen_up_to_id:
+        return
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE users
+               SET last_seen_deal_id = CASE
+                   WHEN COALESCE(last_seen_deal_id,0) < ? THEN ? ELSE last_seen_deal_id END
+               WHERE user_id=?""",
+            (int(seen_up_to_id), int(seen_up_to_id), int(user_id)),
+        )
+        if mode == "pending":
+            row = conn.execute(
+                "SELECT pending_offer_to_id FROM users WHERE user_id=?", (int(user_id),)
+            ).fetchone()
+            if row and row["pending_offer_to_id"] is not None and int(seen_up_to_id) >= int(row["pending_offer_to_id"]):
+                conn.execute(
+                    "UPDATE users SET pending_offer_from_id=NULL, pending_offer_to_id=NULL WHERE user_id=?",
+                    (int(user_id),),
+                )
+
+
+def record_web_offer_click(account_id: int, user_id: int, deal_id: int, link_index: int, source: str = "direct"):
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO web_offer_clicks(account_id,user_id,deal_id,link_index,clicked_at,source)
+               VALUES(?,?,?,?,?,?)""",
+            (int(account_id), int(user_id), int(deal_id), int(link_index), datetime.utcnow().isoformat(), _safe_source(source)),
+        )
+
+
+def get_deal_by_id(deal_id: int):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM deals_cache WHERE id=?", (int(deal_id),)).fetchone()
+        return dict(row) if row else None
