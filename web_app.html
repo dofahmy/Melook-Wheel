@@ -27,6 +27,18 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 @media(max-width:900px){.offers-list{grid-template-columns:repeat(2,minmax(0,1fr))}.offer-media{height:220px}}
 @media(max-width:600px){.offers-panel{padding:12px;border-radius:22px}.offers-head h2{font-size:22px}.offers-list{grid-template-columns:1fr}.offer-media{height:280px}}
 @media(max-width:380px){.wrap{padding-left:10px;padding-right:10px}.action{padding:13px;min-height:128px}.balance{font-size:34px}}
+
+/* ===== Telegram wheel exact component (copied from wheel1.html) ===== */
+.tg-wheel-stage{display:flex;flex-direction:column;align-items:center;text-align:center;background:radial-gradient(circle at 50% 28%,rgba(20,126,76,.34),transparent 38%),radial-gradient(circle at 50% 0%,#075438 0%,#003624 48%,#001f17 100%);border-radius:24px;padding:18px 14px 28px;color:#f4f8fc;overflow:hidden;position:relative}
+.tg-wheel-stage:before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.75;background:radial-gradient(circle at 8% 18%,#ffe679 0 2px,transparent 3px),radial-gradient(circle at 90% 24%,#ffe679 0 2px,transparent 3px),radial-gradient(circle at 13% 57%,#ffe679 0 1px,transparent 3px),radial-gradient(circle at 86% 65%,#ffe679 0 2px,transparent 4px),radial-gradient(circle at 22% 85%,#ffe679 0 1px,transparent 3px)}
+.tg-wheel-stage>*{position:relative;z-index:1}.tg-wheel-brand{background:linear-gradient(180deg,#fff0a4 0%,#efc553 42%,#bd7f08 100%);color:#06452f;font-weight:900;font-size:23px;padding:8px 28px;border:2px solid #ffe99a;border-radius:24px;box-shadow:0 5px 0 #754600,0 8px 22px rgba(216,163,36,.48),inset 0 2px 5px #fff8d3;margin-bottom:12px}
+.tg-wheel-title{font-size:clamp(27px,7vw,35px);font-weight:900;margin:8px 0 5px;color:#f7ce62;text-shadow:0 3px 10px rgba(0,0,0,.52),0 0 20px rgba(247,206,98,.2)}.tg-wheel-sub{font-size:15px;font-weight:700;color:#f6e6b2;text-align:center;margin-bottom:24px}
+.tg-wheel-wrap{position:relative;width:min(94vw,390px);max-width:390px;aspect-ratio:1/1;margin:2px 0 24px}.tg-wheel-pin{position:absolute;top:-22px;left:50%;transform:translateX(-50%);width:44px;height:54px;z-index:6;filter:drop-shadow(0 4px 5px rgba(0,0,0,.55))}
+.tg-wheel-lights{position:absolute;inset:0;border-radius:50%;background:linear-gradient(145deg,#ffe89a,#a96500 40%,#ffd866 72%,#734000);box-shadow:0 18px 45px rgba(0,0,0,.68),0 0 24px rgba(255,204,72,.28),inset 0 0 0 3px #fff0ad}.tg-wheel-stage.gift-mode .tg-wheel-lights{display:none}.tg-wheel-bulb{position:absolute;width:5.6%;aspect-ratio:1/1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fffbe6,#ffd873 55%,#b8860b 100%);box-shadow:0 0 6px 2px rgba(255,216,115,.75);transform:translate(-50%,-50%)}
+.tg-wheel-rim{position:absolute;inset:7.5%;border-radius:50%;background:linear-gradient(145deg,#fff5c9,#c1840f 42%,#ffe88f 72%,#925900);padding:3.2%;box-shadow:inset 0 0 0 2px #fff2b1,0 0 0 2px #8e5900}.tg-wheel-stage.gift-mode .tg-wheel-rim{box-shadow:inset 0 0 0 2px #fff2b1,0 0 0 2px #8e5900,0 16px 30px rgba(0,0,0,.45)}
+.tg-wheel-canvas{width:100%;height:100%;border-radius:50%;display:block;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25);transition:transform 5.5s cubic-bezier(.12,.72,.14,1)}.tg-wheel-labels{position:absolute;inset:12.5%;border-radius:50%;pointer-events:none}.tg-wheel-label{position:absolute;display:flex;flex-direction:column;align-items:center;text-align:center;direction:rtl;white-space:nowrap}.tg-wheel-label .amt{font-size:clamp(27px,7vw,34px);font-weight:800;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.6)}.tg-wheel-label .subtext{font-size:clamp(13px,3.5vw,17px);font-weight:900;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.6);margin-top:1px}.tg-wheel-hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17%;aspect-ratio:1/1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff9e0,#ffd873 45%,#b8860b 85%,#8a6206 100%);box-shadow:0 6px 14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.5);z-index:4}
+.tg-spin-btn{background:linear-gradient(135deg,#ffe27a,#d8a324);color:#3a2604;border:none;width:min(78vw,320px);font-size:23px;font-weight:900;padding:16px 36px;border-radius:30px;border:2px solid #fff0a5;box-shadow:0 6px 0 #754600,0 12px 28px rgba(216,163,36,.46),inset 0 2px 6px #fffbd9;cursor:pointer}.tg-spin-btn:disabled{opacity:.55;box-shadow:none;cursor:default}.tg-wheel-hint{font-size:12px;color:#86a396;margin-top:20px;text-align:center;max-width:300px;line-height:1.6}
+
 </style>
 </head>
 <body>
@@ -184,38 +196,63 @@ document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && panel && !panel.classList.contains('hide')) loadOffers({silent:true});
 });
 function goldenWheelHtml(title='لف واختار عرضك',giftMode=false){
-  const labels=giftMode
-    ? [['🎁','مفاجأة'],['✨','مبروك'],['💰','كاش'],['⭐','هدية'],['🏆','فوز'],['💫','حظك']]
-    : [['🎁','عرض'],['🏆','عرض'],['⭐','عرض'],['🔥','عرض'],['🎯','عرض'],['💫','عرض']];
-  const labelHtml=labels.map((x,i)=>`<div class="wheel-label l${i}"><span>${x[0]}</span><small>${x[1]}</small></div>`).join('');
+  const heading=giftMode?'عجلة بطاقات الهدايا 🎁':'عجلة بطاقات الهدايا 🎁';
+  const sub=giftMode?'لف عجلة الهدايا وبعد ما تقف افتح صندوقك':'دوس ولف واكتشف عرض النهاردة 🎁';
   return `<div class="gold-progress" id="goldProgress">${esc(title)}</div>
-  <div class="wheel-shell" id="wheelShell"><div class="wheel-pointer"></div><div class="wheel-face">${labelHtml}</div><div class="wheel-emoji">${giftMode?'🎁':'🏆'}</div></div>
-  <div class="spin-action"><button id="goldSpinBtn" class="btn" onclick="spinGolden(${giftMode?'true':'false'})">${giftMode?'🎁 لف عجلة الهدايا':'🎡 لف واختار عرض'}</button></div>`;
+  <div class="tg-wheel-stage ${giftMode?'gift-mode':''}" id="tgWheelStage">
+    <div class="tg-wheel-brand">وفر كاش</div><div class="tg-wheel-title">${heading}</div><div class="tg-wheel-sub">${sub}</div>
+    <div class="tg-wheel-wrap">
+      <svg class="tg-wheel-pin" viewBox="0 0 44 54"><path d="M22 54 C10 38 3 27 3 17 A19 19 0 0 1 41 17 C41 27 34 38 22 54 Z" fill="url(#webPinGrad)" stroke="#8a6206" stroke-width="1"/><circle cx="22" cy="17" r="8" fill="#fff9e0"/><defs><linearGradient id="webPinGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fff3c4"/><stop offset="100%" stop-color="#c8931e"/></linearGradient></defs></svg>
+      <div class="tg-wheel-lights" id="tgWheelLights"></div>
+      <div class="tg-wheel-rim"><canvas class="tg-wheel-canvas" id="tgWheelCanvas" width="600" height="600"></canvas><div class="tg-wheel-labels" id="tgWheelLabels"></div></div>
+      <div class="tg-wheel-hub"></div>
+    </div>
+    <button id="goldSpinBtn" class="tg-spin-btn" onclick="spinGolden(${giftMode?'true':'false'})">${giftMode?'🎡 لف عجلة الهدايا وافتح صندوقك':'🎡 لف واختار عرض'}</button>
+    <div class="tg-wheel-hint">${giftMode?'قيمة الجائزة محسوبة من إجاباتك الصحيحة في الجولة.':'بعد ما العجلة تقف، هيوصلك تفاصيل العرض والسؤال.'}</div>
+  </div>`;
+}
+const TG_SELECT_PRIZES=[
+ {label:'🎁',sub:'عرض',color1:'#2E3A6B',color2:'#161B33'}, {label:'🏆',sub:'عرض',color1:'#D8A324',color2:'#8A6206'}, {label:'⭐',sub:'عرض',color1:'#2FBF9F',color2:'#177A64'}, {label:'🔥',sub:'عرض',color1:'#FF9A3D',color2:'#D9600C'}, {label:'🎯',sub:'عرض',color1:'#C7C7C7',color2:'#8A8A8A'}, {label:'💫',sub:'عرض',color1:'#B5651D',color2:'#7A3E10'}
+];
+const TG_GIFT_PRIZES=[
+ {label:'🎁',sub:'مفاجأة',color1:'#7B4FB5',color2:'#4B2876'}, {label:'✨',sub:'مبروك',color1:'#C7C7C7',color2:'#8A8A8A'}, {label:'💰',sub:'كاش',color1:'#2FBF9F',color2:'#177A64'}, {label:'⭐',sub:'هدية',color1:'#FF9A3D',color2:'#D9600C'}, {label:'🏆',sub:'فوز',color1:'#3A3A3A',color2:'#141414'}, {label:'💫',sub:'حظك',color1:'#D8A324',color2:'#8A6206'}
+];
+let tgWheelState=null;
+function initTelegramWheel(giftMode=false){
+  const canvas=document.getElementById('tgWheelCanvas'),labels=document.getElementById('tgWheelLabels'),lights=document.getElementById('tgWheelLights');
+  if(!canvas||!labels)return;
+  const active=giftMode?TG_GIFT_PRIZES:TG_SELECT_PRIZES,N=active.length,seg=2*Math.PI/N,R=canvas.width/2,ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let i=0;i<N;i++){
+    const start=i*seg-Math.PI/2,end=start+seg,mid=start+seg/2;
+    ctx.beginPath();ctx.moveTo(R,R);ctx.arc(R,R,R,start,end);ctx.closePath();
+    const x1=R+Math.cos(mid)*R*.15,y1=R+Math.sin(mid)*R*.15,x2=R+Math.cos(mid)*R,y2=R+Math.sin(mid)*R;
+    const grad=ctx.createLinearGradient(x1,y1,x2,y2);grad.addColorStop(0,active[i].color1);grad.addColorStop(1,active[i].color2);ctx.fillStyle=grad;ctx.fill();
+    const shine=ctx.createRadialGradient(R,R,R*.1,R,R,R);shine.addColorStop(0,'rgba(255,255,255,.28)');shine.addColorStop(.4,'rgba(255,255,255,.05)');shine.addColorStop(1,'rgba(0,0,0,.12)');ctx.fillStyle=shine;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=2;ctx.stroke();
+  }
+  labels.innerHTML='';const radius=58;
+  active.forEach((pr,i)=>{const mid=i*seg+seg/2-Math.PI/2,x=50+radius*Math.cos(mid),y=50+radius*Math.sin(mid),el=document.createElement('div');el.className='tg-wheel-label';el.dataset.index=i;el.style.left=x+'%';el.style.top=y+'%';el.style.transform='translate(-50%,-50%) rotate(0deg)';el.innerHTML=`<span class="amt">${pr.label}</span><span class="subtext">${pr.sub}</span>`;labels.appendChild(el)});
+  if(lights){lights.innerHTML='';for(let i=0;i<16;i++){const a=i/16*2*Math.PI-Math.PI/2,x=50+46.5*Math.cos(a),y=50+46.5*Math.sin(a),b=document.createElement('div');b.className='tg-wheel-bulb';b.style.left=x+'%';b.style.top=y+'%';lights.appendChild(b)}}
+  tgWheelState={canvas,labels,seg,N,radius,currentRotation:0};
+}
+function updateTgLabels(rotationDeg){
+  if(!tgWheelState)return;const {labels,seg,radius}=tgWheelState;
+  labels.querySelectorAll('.tg-wheel-label').forEach((el,i)=>{const base=i*seg+seg/2-Math.PI/2,rot=base+rotationDeg*Math.PI/180;el.style.left=(50+radius*Math.cos(rot))+'%';el.style.top=(50+radius*Math.sin(rot))+'%';el.style.transform='translate(-50%,-50%) rotate(0deg)'});
+}
+function animateTgLabels(fromDeg,toDeg,duration=5500){const start=performance.now();function frame(now){const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3),deg=fromDeg+(toDeg-fromDeg)*e;updateTgLabels(deg);if(p<1)requestAnimationFrame(frame)}requestAnimationFrame(frame)}
+function spinTelegramWheel(){
+ return new Promise(resolve=>{if(!tgWheelState){resolve();return}const s=tgWheelState,winnerIndex=Math.floor(Math.random()*s.N),winnerMidAngleDeg=(winnerIndex*s.seg+s.seg/2)*180/Math.PI,target=6*360+(360-winnerMidAngleDeg),previous=s.currentRotation;s.currentRotation+=target;s.canvas.style.transform=`rotate(${s.currentRotation}deg)`;animateTgLabels(previous,s.currentRotation,5500);setTimeout(()=>resolve(winnerIndex),5600)});
 }
 let goldenSpinData=null;
 let goldenBusy=false;
 async function showGolden(){
-  hideOffers();
-  const panel=document.getElementById('goldenPanel');panel.classList.remove('hide');panel.scrollIntoView({behavior:'smooth',block:'start'});
-  document.getElementById('goldenContent').innerHTML='<div class="loading">جاري تجهيز العجلة…</div>';
-  try{
-    const d=await api('/api/app/golden-status'); const x=d.data||{};
-    if(x.stage==='prize'){goldenSpinData=x;renderPrizeWheel(x);return}
-    if(x.stage==='question'){await loadGoldenQuestion();return}
-    const p=x.progress||{};
-    document.getElementById('goldenContent').innerHTML=goldenWheelHtml(`تقدم الجولة: ${p.answered||0}/${p.target||5} • الصح: ${p.correct||0}`,false);
-  }catch(e){document.getElementById('goldenContent').innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
+  hideOffers();const panel=document.getElementById('goldenPanel');panel.classList.remove('hide');panel.scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('goldenContent').innerHTML='<div class="loading">جاري تجهيز العجلة…</div>';
+  try{const d=await api('/api/app/golden-status');const x=d.data||{};if(x.stage==='prize'){goldenSpinData=x;renderPrizeWheel(x);return}if(x.stage==='question'){await loadGoldenQuestion();return}const p=x.progress||{};document.getElementById('goldenContent').innerHTML=goldenWheelHtml(`تقدم الجولة: ${p.answered||0}/${p.target||5} • الصح: ${p.correct||0}`,false);initTelegramWheel(false)}catch(e){document.getElementById('goldenContent').innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
 }
 function hideGolden(){document.getElementById('goldenPanel').classList.add('hide')}
 async function spinGolden(giftMode){
-  if(goldenBusy)return; goldenBusy=true;
-  const shell=document.getElementById('wheelShell'),btn=document.getElementById('goldSpinBtn');
-  if(btn){btn.disabled=true;btn.textContent='بتلف...'} if(shell)shell.classList.add('wheel-spinning');
-  setTimeout(async()=>{
-    goldenBusy=false;
-    if(giftMode){renderGiftBox(goldenSpinData);return}
-    await loadGoldenQuestion();
-  },5300);
+  if(goldenBusy)return;goldenBusy=true;const btn=document.getElementById('goldSpinBtn');if(btn){btn.disabled=true;btn.textContent='بتلف...'}
+  await spinTelegramWheel();goldenBusy=false;if(giftMode){renderGiftBox(goldenSpinData);return}await loadGoldenQuestion();
 }
 async function loadGoldenQuestion(){
   const c=document.getElementById('goldenContent');c.innerHTML='<div class="loading">جاري تجهيز السؤال…</div>';
@@ -247,7 +284,7 @@ async function answerGolden(questionId,chosenIndex,el){
 }
 function renderPrizeWheel(x){
   goldenSpinData=x;
-  document.getElementById('goldenContent').innerHTML=goldenWheelHtml('🎉 خلصت الجولة! لف عجلة الهدايا وافتح صندوقك',true);
+  document.getElementById('goldenContent').innerHTML=goldenWheelHtml('🎉 خلصت الجولة! لف عجلة الهدايا وافتح صندوقك',true);initTelegramWheel(true);
 }
 function renderGiftBox(x){
   const c=document.getElementById('goldenContent');
