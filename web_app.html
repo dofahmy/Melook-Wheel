@@ -193,24 +193,27 @@ async function loadOffers({silent=false}={}){
       // تنظيف التكرار:
       // 1) لو العنوان ظهر مرة ثانية داخل النص نشيله.
       // 2) أي سطر نص مكرر نشيله.
-      // 3) لو عندنا Badge أحمر، نشيل سطر "خصم XX%" المنفصل فقط،
-      //    لكن نسيب سطر الخصم التفصيلي اللي فيه السعر القديم/بدلاً من.
+      // 3) أي سطر فيه "خصم" أو نسبة مئوية يتشال نهائيًا؛ الخصم يظهر فقط في الـ Badge الأحمر.
+      // 4) لو السعر من بيانات المنتج موجود، نشيل سطور السعر من الكابشن عشان السعر مايتكررش.
       const lineKey=v=>norm(String(v||'')
         .replace(/[🎉💥🔥👑💰📉🎁🛍️✨⭐🎯💫🛒]/gu,'')
         .replace(/[،,:؛\-–—()]/g,' ')
         .replace(/\s+/g,' '));
       const seenLineKeys=new Set();
       const titleKey=lineKey(title);
+      const hasStructuredPrice=Number(p.price)>0;
       visibleLines=visibleLines.filter(line=>{
         const raw=String(line||'').trim();
         if(!raw) return true;
         const key=lineKey(raw);
+
         if(titleKey && key && (key===titleKey || key.includes(titleKey) || titleKey.includes(key))) return false;
 
-        const standaloneDiscount=isDiscountLine(raw)
-          && !/(?:السعر|سعر|بدلًا|بدلا|بدلاً|من\s+\d|جنيه|ريال|egp|sar)/i.test(raw)
-          && raw.replace(/[🎉💥🔥👑💰📉🎁🛍️✨⭐🎯💫\s]/gu,'').length < 28;
-        if(detectedDiscount>0 && standaloneDiscount) return false;
+        // الخصم يظهر مرة واحدة فقط فوق الصورة داخل المستطيل الأحمر.
+        if(isDiscountLine(raw)) return false;
+
+        // لو السعر ظاهر بالفعل بشكل منسق، ما نكرروش مرة تانية داخل نص البوست.
+        if(hasStructuredPrice && isPriceLine(raw)) return false;
 
         if(key && seenLineKeys.has(key)) return false;
         if(key) seenLineKeys.add(key);
@@ -228,7 +231,7 @@ async function loadOffers({silent=false}={}){
       const firstVisible=visibleLines.findIndex(line=>line.trim());
       const captionHtml=visibleLines.map((line,idx)=>{
         if(!line.trim()) return '<div class="offer-caption-line blank"></div>';
-        const emph=(idx===firstVisible)?isDiscountLine(line):(isDiscountLine(line)||isPriceLine(line));
+        const emph=isPriceLine(line);
         return `<div class="offer-caption-line${emph?' emphasis':''}">${esc(line)}</div>`;
       }).join('');
       const imageSrc=x.image_url||p.image_url||'';
