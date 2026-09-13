@@ -2210,3 +2210,140 @@ def get_central_admin_summary(period: str = "all") -> dict:
 def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0):
     """نفس تقرير العملاء لكن مع هوية المنصة والموبايل ومصدر العميل."""
     return list_customer_reports(period, search, limit, offset)
+
+
+
+def get_admin_funnel(period: str = "all") -> dict:
+    """مسار العميل النشط على الويب خلال الفترة المختارة.
+
+    ملاحظة: النظام الحالي لا يسجل الزائر المجهول قبل إنشاء الحساب، لذلك أول خطوة هنا
+    هي الحسابات التي ظهر لها نشاط Web مسجل بالفعل خلال الفترة.
+    """
+    event_where, _ = _period_where("e.seen_at", period)
+    click_where, _ = _period_where("c.clicked_at", period)
+    spin_where, _ = _period_where("ls.created_at", period)
+    redeem_where, _ = _period_where("r.requested_at", period)
+    paid_where, _ = _period_where("r.paid_at", period)
+    with get_conn() as conn:
+        active = conn.execute(f"""
+            SELECT COUNT(DISTINCT e.account_id) AS c
+            FROM web_source_events e
+            WHERE {event_where}
+        """).fetchone()["c"] or 0
+        linked = conn.execute(f"""
+            SELECT COUNT(DISTINCT e.account_id) AS c
+            FROM web_source_events e
+            JOIN web_accounts wa ON wa.id=e.account_id
+            WHERE {event_where} AND wa.telegram_user_id IS NOT NULL
+        """).fetchone()["c"] or 0
+        clickers = conn.execute(f"""
+            SELECT COUNT(DISTINCT c.account_id) AS c
+            FROM web_offer_clicks c
+            WHERE {click_where}
+        """).fetchone()["c"] or 0
+        players = conn.execute(f"""
+            SELECT COUNT(DISTINCT wa.id) AS c
+            FROM lucky_spins ls
+            JOIN web_accounts wa ON wa.user_id=ls.user_id
+            WHERE {spin_where}
+        """).fetchone()["c"] or 0
+        winners = conn.execute(f"""
+            SELECT COUNT(DISTINCT wa.id) AS c
+            FROM lucky_spins ls
+            JOIN web_accounts wa ON wa.user_id=ls.user_id
+            WHERE {spin_where} AND ls.status='claimed'
+        """).fetchone()["c"] or 0
+        requested = conn.execute(f"""
+            SELECT COUNT(DISTINCT wa.id) AS c
+            FROM redemption_requests r
+            JOIN web_accounts wa ON wa.user_id=r.user_id
+            WHERE {redeem_where}
+        """).fetchone()["c"] or 0
+        paid = conn.execute(f"""
+            SELECT COUNT(DISTINCT wa.id) AS c
+            FROM redemption_requests r
+            JOIN web_accounts wa ON wa.user_id=r.user_id
+            WHERE r.status='paid' AND {paid_where}
+        """).fetchone()["c"] or 0
+
+        return {
+            "active_web_accounts": int(active),
+            "telegram_linked_active": int(linked),
+            "offer_clickers": int(clickers),
+            "players": int(players),
+            "winners": int(winners),
+            "redeem_requesters": int(requested),
+            "paid_redeemers": int(paid),
+        }
+
+
+def get_admin_alerts(limit: int = 30) -> dict:
+    """تنبيهات عملية تحتاج متابعة من الإدارة، بدون تعديل أي بيانات."""
+    limit = max(5, min(int(limit or 30), 100))
+    with get_conn() as conn:
+        overdue = conn.execute("""
+            SELECT r.id AS request_id, r.user_id, r.amount, r.status, r.requested_at,
+                   u.username,
+                   CAST((julianday('now') - julianday(r.requested_at)) * 24 AS INTEGER) AS age_hours
+            FROM redemption_requests r
+            JOIN users u ON u.user_id=r.user_id
+            WHERE r.status IN ('pending','processing')
+              AND datetime(r.requested_at) <= datetime('now','-24 hours')
+            ORDER BY r.requested_at ASC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        paid_missing_code = conn.execute("""
+            SELECT r.id AS request_id, r.user_id, r.amount, r.paid_at, u.username
+            FROM redemption_requests r
+            JOIN users u ON u.user_id=r.user_id
+            WHERE r.status='paid' AND (r.gift_code IS NULL OR trim(r.gift_code)='')
+            ORDER BY COALESCE(r.paid_at,r.requested_at) ASC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        ready = conn.execute("""
+            SELECT u.user_id, u.username, u.gift_balance,
+                   wa.phone_e164, wa.source_last
+            FROM users u
+            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            WHERE u.program='egypt'
+              AND COALESCE(u.gift_balance,0) >= 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM redemption_requests r
+                  WHERE r.user_id=u.user_id AND r.status IN ('pending','processing')
+              )
+            ORDER BY u.gift_balance DESC, u.user_id DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        clicked_no_spin = conn.execute("""
+            SELECT wa.user_id, u.username, wa.phone_e164, wa.source_last,
+                   COUNT(c.id) AS clicks,
+                   MAX(c.clicked_at) AS last_click
+            FROM web_accounts wa
+            JOIN users u ON u.user_id=wa.user_id
+            JOIN web_offer_clicks c ON c.account_id=wa.id
+            WHERE datetime(c.clicked_at) >= datetime('now','-7 days')
+              AND NOT EXISTS (
+                  SELECT 1 FROM lucky_spins ls
+                  WHERE ls.user_id=wa.user_id
+                    AND datetime(ls.created_at) >= datetime('now','-7 days')
+              )
+            GROUP BY wa.id, wa.user_id, u.username, wa.phone_e164, wa.source_last
+            ORDER BY clicks DESC, last_click DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        return {
+            "counts": {
+                "overdue_redemptions": len(overdue),
+                "paid_missing_code": len(paid_missing_code),
+                "ready_to_redeem": len(ready),
+                "clicked_no_spin": len(clicked_no_spin),
+            },
+            "overdue_redemptions": [dict(x) for x in overdue],
+            "paid_missing_code": [dict(x) for x in paid_missing_code],
+            "ready_to_redeem": [dict(x) for x in ready],
+            "clicked_no_spin": [dict(x) for x in clicked_no_spin],
+        }

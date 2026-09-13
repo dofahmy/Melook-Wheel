@@ -589,6 +589,12 @@ class Handler(BaseHTTPRequestHandler):
             rows = [dict(x) for x in database.list_central_customers(period, search)]
             self._send_json(200, {"ok": True, "data": rows})
             return
+        if parsed.path == "/api/admin/funnel":
+            self._send_json(200, {"ok": True, "data": database.get_admin_funnel(period)})
+            return
+        if parsed.path == "/api/admin/alerts":
+            self._send_json(200, {"ok": True, "data": database.get_admin_alerts(30)})
+            return
         if parsed.path == "/api/admin/session":
             self._send_json(200, {"ok": True, "data": {"authenticated": True}})
             return
