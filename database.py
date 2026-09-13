@@ -107,6 +107,9 @@ CREATE TABLE IF NOT EXISTS golden_questions (
     correct_index INTEGER NOT NULL,
     epc REAL NOT NULL,
     reward_value REAL NOT NULL,
+    prompt TEXT,
+    options_json TEXT,
+    product_link TEXT,
     answered INTEGER DEFAULT 0,
     was_correct INTEGER,
     created_at TEXT NOT NULL,
@@ -168,6 +171,9 @@ _MIGRATIONS = [
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
     "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
+    "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
+    "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
+    "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
 ]
 @contextmanager
 def get_conn():
@@ -1149,13 +1155,21 @@ def create_golden_question(
     correct_index: int,
     epc: float,
     reward_value: float,
+    prompt: str | None = None,
+    options: list[str] | None = None,
+    product_link: str | None = None,
 ) -> int:
-    """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل."""
+    """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل.
+
+    الحقول الإضافية اختيارية عشان نسخة الويب تقدر تسترجع نفس السؤال بعد
+    Refresh، وفي نفس الوقت تفضل استدعاءات Telegram القديمة شغالة كما هي.
+    """
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO golden_questions
-               (user_id, asin, question_type, correct_index, epc, reward_value, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (user_id, asin, question_type, correct_index, epc, reward_value,
+                prompt, options_json, product_link, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 asin,
@@ -1163,11 +1177,33 @@ def create_golden_question(
                 correct_index,
                 float(epc),
                 float(reward_value),
+                prompt,
+                json.dumps(options, ensure_ascii=False) if options is not None else None,
+                product_link,
                 datetime.utcnow().isoformat(),
             ),
         )
         return cur.lastrowid
 
+
+def get_pending_web_golden_question(user_id: int):
+    """يرجع آخر سؤال ويب غير مُجاب عليه مع نصه واختياراته، إن وجد."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT * FROM golden_questions
+               WHERE user_id = ? AND answered = 0
+                 AND prompt IS NOT NULL AND options_json IS NOT NULL
+               ORDER BY id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["options"] = json.loads(result.get("options_json") or "[]")
+        except Exception:
+            result["options"] = []
+        return result
 
 def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
     """يسجّل الإجابة مرة واحدة ويرجع تقدم الجولة والاستحقاق الشخصي."""

@@ -126,6 +126,92 @@ def _product_meta_for_links(links: list[str]) -> dict:
     return {}
 
 
+def _golden_question_payload(user_id: int, existing=None):
+    """Create or restore one web golden question using the same rewards logic as Telegram."""
+    if not product_catalog:
+        raise RuntimeError("ملف منتجات العجلة غير متاح")
+
+    row = database.get_user(user_id)
+    if not row:
+        raise RuntimeError("الحساب غير موجود")
+
+    # لو الجولة خلصت، جهّز نفس لفة الجائزة الشخصية بدل سؤال جديد.
+    if int(row["golden_answered_count"] or 0) >= int(row["golden_target"] or 0):
+        pending = database.get_pending_lucky_spin(user_id)
+        if pending:
+            return {
+                "stage": "prize",
+                "spin_id": int(pending["id"]),
+                "prize": float(pending["prize"] or 0),
+            }
+        spin_id, prize, _ = database.create_lucky_spin(
+            user_id, float(row["golden_round_earnings"] or 0)
+        )
+        return {"stage": "prize", "spin_id": spin_id, "prize": float(prize)}
+
+    qrow = existing or database.get_pending_web_golden_question(user_id)
+    if qrow:
+        product = product_catalog.get_product(str(qrow.get("asin") or ""))
+        return {
+            "stage": "question",
+            "question_id": int(qrow["id"]),
+            "prompt": qrow.get("prompt") or "جاوبي السؤال",
+            "options": qrow.get("options") or [],
+            "product_link": qrow.get("product_link") or product_catalog.build_affiliate_link(qrow["asin"]),
+            "progress": {
+                "answered": int(row["golden_answered_count"] or 0),
+                "correct": int(row["golden_opened_count"] or 0),
+                "target": int(row["golden_target"] or 0),
+            },
+            "product": {
+                "asin": getattr(product, "asin", qrow.get("asin")) if product else qrow.get("asin"),
+                "title": getattr(product, "title", "") if product else "",
+                "image_url": getattr(product, "image_url", "") if product else "",
+                "price": getattr(product, "price", 0) if product else 0,
+            },
+        }
+
+    asked_asins = database.list_todays_quizzed_asins(user_id)
+    answered_count = int(row["golden_answered_count"] or 0)
+    product = product_catalog.choose_product(
+        asked_asins, question_index=answered_count, user_id=user_id
+    )
+    question = product_catalog.question_for(product)
+    reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
+    product_link = product_catalog.build_affiliate_link(product.asin)
+    question_id = database.create_golden_question(
+        user_id=user_id,
+        asin=product.asin,
+        question_type=question["type"],
+        correct_index=question["correct_index"],
+        epc=product.expected_revenue_per_click,
+        reward_value=reward_value,
+        prompt=question["prompt"],
+        options=question["options"],
+        product_link=product_link,
+    )
+    database.log_quiz_asked(user_id, product.asin)
+    return {
+        "stage": "question",
+        "question_id": int(question_id),
+        "prompt": question["prompt"],
+        "options": question["options"],
+        "product_link": product_link,
+        "progress": {
+            "answered": answered_count,
+            "correct": int(row["golden_opened_count"] or 0),
+            "target": int(row["golden_target"] or 0),
+        },
+        "product": {
+            "asin": product.asin,
+            "title": product.title,
+            "image_url": product.image_url,
+            "price": product.price,
+        },
+    }
+
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "Wafr/2.0"
 
@@ -355,6 +441,50 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+
+        if parsed.path == "/api/app/golden-status":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            user_id = int(account["user_id"])
+            pending = database.get_pending_lucky_spin(user_id)
+            row = database.get_user(user_id)
+            if not row:
+                self._send_json(404, {"ok": False, "error": "الحساب غير موجود"})
+                return
+            if pending:
+                data = {"stage": "prize", "spin_id": int(pending["id"]), "prize": float(pending["prize"] or 0)}
+            elif int(row["golden_answered_count"] or 0) >= int(row["golden_target"] or 0):
+                spin_id, prize, _ = database.create_lucky_spin(user_id, float(row["golden_round_earnings"] or 0))
+                data = {"stage": "prize", "spin_id": spin_id, "prize": float(prize)}
+            elif database.get_pending_web_golden_question(user_id):
+                data = {"stage": "question"}
+            else:
+                data = {
+                    "stage": "select",
+                    "progress": {
+                        "answered": int(row["golden_answered_count"] or 0),
+                        "correct": int(row["golden_opened_count"] or 0),
+                        "target": int(row["golden_target"] or 0),
+                    },
+                }
+            self._send_json(200, {"ok": True, "data": data})
+            return
+
+        if parsed.path == "/api/app/golden-question":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            try:
+                data = _golden_question_payload(int(account["user_id"]))
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"تعذر تجهيز سؤال العجلة: {exc}"})
+                return
+            self._send_json(200, {"ok": True, "data": data})
+            return
+
         # Everything below is admin-only.
         admin_id = self._auth_admin()
         if not admin_id:
@@ -441,6 +571,61 @@ class Handler(BaseHTTPRequestHandler):
                 return
             code = web_auth.create_link_code(int(account["id"]))
             self._send_json(200, {"ok": True, "data": {"code": code, "expires_minutes": 10}})
+            return
+
+
+        if parsed.path == "/api/app/golden-answer":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            try:
+                question_id = int(payload.get("question_id") or 0)
+                chosen_index = int(payload.get("chosen_index"))
+            except Exception:
+                question_id, chosen_index = 0, -1
+            if not question_id or chosen_index < 0:
+                self._send_json(400, {"ok": False, "error": "الإجابة غير صالحة"})
+                return
+            user_id = int(account["user_id"])
+            result = database.answer_golden_question(user_id, question_id, chosen_index)
+            if not result:
+                self._send_json(409, {"ok": False, "error": "الإجابة دي اتسجلت قبل كده"})
+                return
+            data = dict(result)
+            data["ready_for_prize"] = False
+            if int(result["answered_count"]) >= int(result["target"]):
+                pending = database.get_pending_lucky_spin(user_id)
+                if pending:
+                    spin_id, prize = int(pending["id"]), float(pending["prize"] or 0)
+                else:
+                    spin_id, prize, _ = database.create_lucky_spin(user_id, float(result["round_earnings"] or 0))
+                data.update({"ready_for_prize": True, "spin_id": spin_id, "prize": float(prize)})
+            self._send_json(200, {"ok": True, "data": data})
+            return
+
+        if parsed.path == "/api/app/golden-claim":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            try:
+                spin_id = int(payload.get("spin_id") or 0)
+            except Exception:
+                spin_id = 0
+            if not spin_id:
+                self._send_json(400, {"ok": False, "error": "لفة غير صالحة"})
+                return
+            user_id = int(account["user_id"])
+            prize = database.claim_lucky_spin(spin_id, user_id)
+            if prize is None:
+                self._send_json(409, {"ok": False, "error": "الجائزة اتستلمت بالفعل أو اللفة غير صالحة"})
+                return
+            new_balance = database.add_gift_balance(user_id, float(prize))
+            self._send_json(200, {"ok": True, "data": {
+                "prize": float(prize),
+                "gift_balance": float(new_balance or 0),
+            }})
             return
 
         # -------- Admin endpoints --------
