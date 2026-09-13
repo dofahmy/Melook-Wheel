@@ -2068,3 +2068,91 @@ def get_deal_by_id(deal_id: int):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM deals_cache WHERE id=?", (int(deal_id),)).fetchone()
         return dict(row) if row else None
+
+
+# ---------- واجهة العميل: الاستبدال وحسابي ----------
+
+def get_web_account_for_user(user_id: int):
+    """بيانات حساب الويب المرتبط بالـ user_id، لو موجود."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM web_accounts WHERE user_id=? LIMIT 1", (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_web_redemption_status(user_id: int) -> dict:
+    """ملخص آمن للعميل: المتاح للاستبدال والطلبات المفتوحة."""
+    with get_conn() as conn:
+        user = conn.execute(
+            "SELECT gift_balance FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        balance = float(user["gift_balance"] or 0) if user else 0.0
+        redeemable = int(balance + 1e-9)
+        remainder = round(balance - redeemable, 6)
+        open_rows = conn.execute(
+            """SELECT id, amount, status, requested_at
+               FROM redemption_requests
+               WHERE user_id=? AND status IN ('pending','processing')
+               ORDER BY id DESC LIMIT 20""",
+            (user_id,),
+        ).fetchall()
+        return {
+            "balance": balance,
+            "redeemable": redeemable,
+            "remainder": remainder,
+            "open_requests": [dict(x) for x in open_rows],
+        }
+
+
+def get_web_account_history(user_id: int, limit: int = 20) -> dict:
+    """ملخص النشاط الذي يجوز عرضه للعميل داخل صفحة حسابي."""
+    limit = max(1, min(int(limit), 50))
+    with get_conn() as conn:
+        u = conn.execute(
+            """SELECT user_id, gift_balance, points_balance, spins_balance,
+                      golden_answered_count, golden_opened_count
+               FROM users WHERE user_id=?""",
+            (user_id,),
+        ).fetchone()
+        if not u:
+            return {}
+        spin = conn.execute(
+            """SELECT COUNT(*) AS c,
+                      COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS total
+               FROM lucky_spins WHERE user_id=?""",
+            (user_id,),
+        ).fetchone()
+        red = conn.execute(
+            """SELECT COUNT(*) AS c,
+                      COALESCE(SUM(CASE WHEN status='paid' THEN amount ELSE 0 END),0) AS paid_total,
+                      COALESCE(SUM(CASE WHEN status IN ('pending','processing') THEN amount ELSE 0 END),0) AS pending_total
+               FROM redemption_requests WHERE user_id=?""",
+            (user_id,),
+        ).fetchone()
+        redeems = conn.execute(
+            """SELECT id, amount, status, requested_at, paid_at, gift_code
+               FROM redemption_requests WHERE user_id=?
+               ORDER BY id DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        prizes = conn.execute(
+            """SELECT id, prize, status, created_at, claimed_at
+               FROM lucky_spins WHERE user_id=?
+               ORDER BY id DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        return {
+            "gift_balance": float(u["gift_balance"] or 0),
+            "points_balance": int(u["points_balance"] or 0),
+            "spins_balance": int(u["spins_balance"] or 0),
+            "questions_answered": int(u["golden_answered_count"] or 0),
+            "correct_answers": int(u["golden_opened_count"] or 0),
+            "prize_count": int(spin["c"] or 0),
+            "claimed_prizes": float(spin["total"] or 0),
+            "redemption_count": int(red["c"] or 0),
+            "paid_total": float(red["paid_total"] or 0),
+            "pending_total": float(red["pending_total"] or 0),
+            "redemptions": [dict(x) for x in redeems],
+            "prizes": [dict(x) for x in prizes],
+        }

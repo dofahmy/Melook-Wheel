@@ -485,6 +485,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "data": data})
             return
 
+
+        if parsed.path == "/api/app/redemption-status":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            data = database.get_web_redemption_status(int(account["user_id"]))
+            self._send_json(200, {"ok": True, "data": data})
+            return
+
+        if parsed.path == "/api/app/account-history":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            data = database.get_web_account_history(int(account["user_id"]), 20)
+            self._send_json(200, {"ok": True, "data": data})
+            return
+
         # Everything below is admin-only.
         admin_id = self._auth_admin()
         if not admin_id:
@@ -628,6 +647,21 @@ class Handler(BaseHTTPRequestHandler):
             }})
             return
 
+
+        if parsed.path == "/api/app/redeem":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            user_id = int(account["user_id"])
+            request = database.create_redemption_request(user_id)
+            if not request:
+                status = database.get_web_redemption_status(user_id)
+                self._send_json(409, {"ok": False, "error": "رصيدك الحالي مفيهوش جنيه كامل قابل للاستبدال", "data": status})
+                return
+            self._send_json(200, {"ok": True, "data": request})
+            return
+
         # -------- Admin endpoints --------
         admin_id = self._auth_admin()
         if not admin_id:
@@ -658,21 +692,28 @@ class Handler(BaseHTTPRequestHandler):
             amount_text = f"{amount:g}"
             safe_code = html.escape(code)
             redeem_url = "https://link.amazon/B02oNEoYz"
-            ok, err = _telegram_send_message(
-                r["user_id"],
-                f"🎁 تم استبدال <b>{amount_text} جنيه</b> من رصيدك بنجاح.\n\n"
-                f"كود بطاقة الهدية:\n<code>{safe_code}</code>\n\n"
-                "📋 اضغط على الكود لنسخه.\n\n"
-                "يمكنك استرداد قيمة البطاقة باستخدام الكود أعلاه من خلال الرابط التالي:\n"
-                f'<a href="{redeem_url}">استرداد قيمة بطاقة الهدية</a>\n\n'
-                "شكرًا لاستخدام وفر كاش ❤️",
-            )
-            if not ok:
-                database.release_redemption_send(request_id)
-                self._send_json(502, {"ok": False, "error": f"فشل إرسال الكود للعميل: {err}"})
-                return
+            web_account = database.get_web_account_for_user(int(r["user_id"]))
+            telegram_id = int((web_account or {}).get("telegram_user_id") or 0)
+            delivery = "web"
+            if telegram_id:
+                ok, err = _telegram_send_message(
+                    telegram_id,
+                    f"🎁 تم استبدال <b>{amount_text} جنيه</b> من رصيدك بنجاح.\n\n"
+                    f"كود بطاقة الهدية:\n<code>{safe_code}</code>\n\n"
+                    "📋 اضغط على الكود لنسخه.\n\n"
+                    "يمكنك استرداد قيمة البطاقة باستخدام الكود أعلاه من خلال الرابط التالي:\n"
+                    f'<a href="{redeem_url}">استرداد قيمة بطاقة الهدية</a>\n\n'
+                    "شكرًا لاستخدام وفر كاش ❤️",
+                )
+                if not ok:
+                    database.release_redemption_send(request_id)
+                    self._send_json(502, {"ok": False, "error": f"فشل إرسال الكود للعميل: {err}"})
+                    return
+                delivery = "telegram+web"
             paid = database.mark_redemption_paid(request_id, admin_id, code)
-            self._send_json(200, {"ok": True, "data": paid})
+            result = dict(paid or {})
+            result["delivery"] = delivery
+            self._send_json(200, {"ok": True, "data": result})
             return
         self._send_json(404, {"ok": False, "error": "Not found"})
 

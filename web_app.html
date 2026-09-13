@@ -39,6 +39,8 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 .tg-wheel-canvas{width:100%;height:100%;border-radius:50%;display:block;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25);transition:transform 5.5s cubic-bezier(.12,.72,.14,1)}.tg-wheel-labels{position:absolute;inset:12.5%;border-radius:50%;pointer-events:none}.tg-wheel-label{position:absolute;display:flex;flex-direction:column;align-items:center;text-align:center;direction:rtl;white-space:nowrap}.tg-wheel-label .amt{font-size:clamp(27px,7vw,34px);font-weight:800;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.6)}.tg-wheel-label .subtext{font-size:clamp(13px,3.5vw,17px);font-weight:900;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.6);margin-top:1px}.tg-wheel-hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17%;aspect-ratio:1/1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff9e0,#ffd873 45%,#b8860b 85%,#8a6206 100%);box-shadow:0 6px 14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.5);z-index:4}
 .tg-spin-btn{background:linear-gradient(135deg,#ffe27a,#d8a324);color:#3a2604;border:none;width:min(78vw,320px);font-size:23px;font-weight:900;padding:16px 36px;border-radius:30px;border:2px solid #fff0a5;box-shadow:0 6px 0 #754600,0 12px 28px rgba(216,163,36,.46),inset 0 2px 6px #fffbd9;cursor:pointer}.tg-spin-btn:disabled{opacity:.55;box-shadow:none;cursor:default}.tg-wheel-hint{font-size:12px;color:#86a396;margin-top:20px;text-align:center;max-width:300px;line-height:1.6}
 
+
+.redeem-box{max-width:650px;margin:0 auto;text-align:right}.redeem-balance{background:linear-gradient(135deg,#101828,#1d2939);color:#fff;border-radius:20px;padding:22px;margin:10px 0 16px}.redeem-balance .muted{color:#cbd5e1;font-size:14px}.redeem-amount{font-size:38px;font-weight:900;margin:5px 0}.redeem-amount small{font-size:16px}.redeem-note{background:#fffaeb;border:1px solid #fedf89;color:#7a2e0e;border-radius:14px;padding:12px;line-height:1.7;margin:12px 0}.redeem-request{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.status-pill{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.status-pending{background:#fff4e5;color:#b54708}.status-processing{background:#eef4ff;color:#3538cd}.status-paid{background:#ecfdf3;color:#027a48}.stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.stat-box{background:#fff;border:1px solid #e9ecef;border-radius:16px;padding:14px}.stat-box span{display:block;color:#667085;font-size:12px}.stat-box b{display:block;font-size:22px;margin-top:4px}.history-card{background:#fff;border:1px solid #e9ecef;border-radius:18px;padding:14px;margin:12px 0;text-align:right}.history-card h3{margin:0 0 8px}.history-row{padding:11px 0;border-bottom:1px solid #f0f0f0}.history-row:last-child{border-bottom:0}.gift-code-view{background:#f4f3ff;border:1px dashed #7f56d9;border-radius:10px;padding:10px;margin-top:8px;font-family:monospace;font-weight:900;direction:ltr;text-align:center;user-select:all}.empty-history{color:#667085;padding:14px;text-align:center}@media(max-width:520px){.stats-grid{grid-template-columns:1fr 1fr}.redeem-amount{font-size:32px}}
 </style>
 </head>
 <body>
@@ -73,8 +75,8 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
     <section class="actions">
       <button class="action primary" onclick="showOffers()"><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
       <button class="action gold" onclick="showGolden()"><span class="ico">🎡</span><b>عجلة العروض الذهبية</b><p>لف العجلة وابدأ جولة المكافآت.</p></button>
-      <button class="action" onclick="coming('redeem')"><span class="soon">قريبًا</span><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
-      <button class="action" onclick="document.getElementById('accountDetails').scrollIntoView({behavior:'smooth'})"><span class="ico">👤</span><b>حسابي</b><p>بيانات حسابك وربط Telegram.</p></button>
+      <button class="action" onclick="showRedeem()"><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
+      <button class="action" onclick="showAccount()"><span class="ico">👤</span><b>حسابي</b><p>رصيدك، مكاسبك وطلبات الاستبدال.</p></button>
     </section>
 
     <section id="offersPanel" class="offers-panel hide">
@@ -86,6 +88,16 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
     <section id="goldenPanel" class="golden-panel hide">
       <div class="golden-head"><h2>🎡 عجلة العروض الذهبية</h2><button class="close-link" onclick="hideGolden()">إغلاق</button></div>
       <div id="goldenContent" class="golden-stage"><div class="loading">جاري تجهيز العجلة…</div></div>
+    </section>
+
+    <section id="redeemPanel" class="golden-panel hide">
+      <div class="golden-head"><h2>🎁 استبدال الرصيد</h2><button class="close-link" onclick="hideRedeem()">إغلاق</button></div>
+      <div id="redeemContent" class="redeem-box"><div class="loading">جاري حساب الرصيد المتاح…</div></div>
+    </section>
+
+    <section id="accountPanel" class="golden-panel hide">
+      <div class="golden-head"><h2>👤 حسابي</h2><button class="close-link" onclick="hideAccount()">إغلاق</button></div>
+      <div id="accountContent"><div class="loading">جاري تحميل حسابك…</div></div>
     </section>
 
     <div class="section-title"><h2>حسابي</h2><span>آمن ومربوط</span></div>
@@ -310,6 +322,42 @@ async function claimGoldenPrize(){
     document.getElementById('balance').textContent=money(x.gift_balance);box.innerHTML='<span style="font-size:82px">🎊</span>';const hint=document.getElementById('openHint');if(hint)hint.style.display='none';goldenSpinData=null;
   }catch(e){area.innerHTML=`<div class="answer-result bad">${esc(e.message)}</div>`;box.classList.remove('disabled')}
   finally{goldenBusy=false}
+}
+
+function statusAr(v){return ({pending:'قيد الانتظار',processing:'جاري التجهيز',paid:'تم الاستبدال'})[v]||v||'—'}
+function statusClass(v){return 'status-'+(v||'pending')}
+function fmtDate(v){if(!v)return '—';try{return new Date(v+'Z').toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'})}catch(e){return v}}
+function closeMainPanels(except){['offersPanel','goldenPanel','redeemPanel','accountPanel'].forEach(id=>{if(id!==except){const e=document.getElementById(id);if(e)e.classList.add('hide')}})}
+async function showRedeem(){
+  closeMainPanels('redeemPanel'); const panel=document.getElementById('redeemPanel'); panel.classList.remove('hide'); panel.scrollIntoView({behavior:'smooth',block:'start'}); await loadRedeem();
+}
+function hideRedeem(){document.getElementById('redeemPanel').classList.add('hide')}
+async function loadRedeem(){
+  const box=document.getElementById('redeemContent'); box.innerHTML='<div class="loading">جاري حساب الرصيد المتاح…</div>';
+  try{
+    const d=await api('/api/app/redemption-status'),x=d.data||{},open=x.open_requests||[];
+    box.innerHTML=`<div class="redeem-balance"><div class="muted">رصيدك الحالي</div><div class="redeem-amount">${money(x.balance)} <small>جنيه</small></div><div class="muted">المتاح للاستبدال الآن: <b>${money(x.redeemable)} جنيه</b></div></div>
+      <div class="redeem-note">بنستبدل الجنيهات الصحيحة فقط. لو رصيدك ${money(x.balance)} جنيه، هيتعمل طلب بـ ${money(x.redeemable)} جنيه ويتبقى ${money(x.remainder)} جنيه في حسابك.</div>
+      <button class="btn" id="redeemNowBtn" ${Number(x.redeemable)<=0?'disabled':''} onclick="redeemNow()">استبدل ${money(x.redeemable)} جنيه</button>
+      <div class="history-card"><h3>طلبات قيد التنفيذ</h3>${open.length?open.map(r=>`<div class="redeem-request"><div><b>${money(r.amount)} جنيه</b><div class="note">${fmtDate(r.requested_at)}</div></div><span class="status-pill ${statusClass(r.status)}">${statusAr(r.status)}</span></div>`).join(''):'<div class="empty-history">مفيش طلبات مفتوحة حاليًا.</div>'}</div>`;
+  }catch(e){box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}
+}
+async function redeemNow(){
+  const b=document.getElementById('redeemNowBtn'); if(b)b.disabled=true;
+  try{const d=await api('/api/app/redeem',{method:'POST',body:'{}'});const x=d.data||{};alert('✅ تم إنشاء طلب استبدال بقيمة '+money(x.amount)+' جنيه. المتبقي في رصيدك '+money(x.remainder)+' جنيه.');await loadMe();await loadRedeem();}
+  catch(e){alert(e.message);await loadRedeem()}
+}
+async function showAccount(){
+  closeMainPanels('accountPanel'); const panel=document.getElementById('accountPanel'); panel.classList.remove('hide'); panel.scrollIntoView({behavior:'smooth',block:'start'}); await loadAccountHistory();
+}
+function hideAccount(){document.getElementById('accountPanel').classList.add('hide')}
+async function loadAccountHistory(){
+  const box=document.getElementById('accountContent');box.innerHTML='<div class="loading">جاري تحميل حسابك…</div>';
+  try{const d=await api('/api/app/account-history'),x=d.data||{},reds=x.redemptions||[],prizes=x.prizes||[];
+    box.innerHTML=`<div class="stats-grid"><div class="stat-box"><span>رصيدك الحالي</span><b>${money(x.gift_balance)} جنيه</b></div><div class="stat-box"><span>إجمالي الجوائز المستلمة</span><b>${money(x.claimed_prizes)} جنيه</b></div><div class="stat-box"><span>تم استبداله</span><b>${money(x.paid_total)} جنيه</b></div><div class="stat-box"><span>قيد الاستبدال</span><b>${money(x.pending_total)} جنيه</b></div></div>
+      <div class="history-card"><h3>🎁 سجل الاستبدال</h3>${reds.length?reds.map(r=>`<div class="history-row"><div style="display:flex;justify-content:space-between;gap:10px"><b>${money(r.amount)} جنيه</b><span class="status-pill ${statusClass(r.status)}">${statusAr(r.status)}</span></div><div class="note">${fmtDate(r.requested_at)}</div>${r.status==='paid'&&r.gift_code?`<div class="gift-code-view">${esc(r.gift_code)}</div><div class="note" style="text-align:center">اضغطي على الكود لنسخه.</div>`:''}</div>`).join(''):'<div class="empty-history">لسه مفيش طلبات استبدال.</div>'}</div>
+      <div class="history-card"><h3>🏆 آخر الجوائز</h3>${prizes.length?prizes.map(r=>`<div class="history-row"><div style="display:flex;justify-content:space-between;gap:10px"><b>${money(r.prize)} جنيه</b><span>${r.status==='claimed'?'✅ تم الاستلام':'⏳ جاهزة للاستلام'}</span></div><div class="note">${fmtDate(r.claimed_at||r.created_at)}</div></div>`).join(''):'<div class="empty-history">لسه مفيش جوائز مسجلة.</div>'}</div>`;
+  }catch(e){box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}
 }
 function coming(kind){const names={redeem:'استبدال الرصيد'};alert('هنوصل '+(names[kind]||kind)+' بالحساب في الخطوة الجاية.');}
 async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){}location.reload()}
