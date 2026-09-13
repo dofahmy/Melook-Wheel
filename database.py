@@ -1922,46 +1922,80 @@ def init_web_offers_schema():
         conn.executescript(WEB_OFFERS_SCHEMA)
 
 
-def list_web_offers_for_user(user_id: int, limit: int = 20):
+def list_web_offers_for_user(user_id: int, limit: int = 20, min_display: int = 8):
     """
-    ترجع عروض الويب بنفس منطق دفعة Telegram قدر الإمكان.
-    - لو فيه دفعة pending ثابتة: ترجع منها بحد أقصى limit.
-    - غير كده: ترجع أول عروض غير مشاهدة بحد أقصى limit.
-    - لو مفيش جديد: ترجع آخر عروض موجودة كـ fallback من غير ما تغيّر last_seen.
+    ترجع عروض الويب مع نافذة ثابتة لا تقل عن 8 عروض قدر الإمكان.
+
+    الفكرة:
+    - العروض الجديدة لا تمسح القديمة من الشاشة فورًا.
+    - لو فيه عرض جديد واحد فقط، نضيف له أحدث 7 عروض أقدم ليظل الإجمالي 8.
+    - لو فيه 8 عروض جديدة أو أكثر، نعرض الجديدة (بحد أقصى limit).
+    - لو مفيش جديد، نعرض أحدث 8 عروض موجودة.
+    - دفعة Telegram الـ pending تظل محترمة، ولو أقل من 8 نكمّلها بعروض أقدم.
+
     النتيجة: (rows, mode, seen_up_to_id)
     """
-    limit = max(1, min(int(limit or 20), 50))
+    limit = max(8, min(int(limit or 20), 50))
+    min_display = max(1, min(int(min_display or 8), limit))
+
+    def _fill_recent(conn, rows, needed):
+        if needed <= 0:
+            return list(rows)
+        existing_ids = {int(r["id"]) for r in rows}
+        # نجيب أحدث عروض إضافية، ثم نرتب الكل تصاعديًا لعرضها زمنيًا.
+        extra = conn.execute(
+            "SELECT * FROM deals_cache ORDER BY id DESC LIMIT ?",
+            (max(needed + len(existing_ids) + 10, min_display * 2),),
+        ).fetchall()
+        out = list(rows)
+        for r in extra:
+            rid = int(r["id"])
+            if rid in existing_ids:
+                continue
+            out.append(r)
+            existing_ids.add(rid)
+            if len(out) >= min_display:
+                break
+        out.sort(key=lambda r: int(r["id"]))
+        return out[:limit]
+
     with get_conn() as conn:
         pending = conn.execute(
             "SELECT pending_offer_from_id, pending_offer_to_id FROM users WHERE user_id=?",
             (int(user_id),),
         ).fetchone()
+
         if pending and pending["pending_offer_from_id"] is not None and pending["pending_offer_to_id"] is not None:
-            rows = conn.execute(
+            primary = conn.execute(
                 """SELECT * FROM deals_cache
                    WHERE id BETWEEN ? AND ?
                    ORDER BY id ASC LIMIT ?""",
                 (int(pending["pending_offer_from_id"]), int(pending["pending_offer_to_id"]), limit),
             ).fetchall()
-            seen_up_to = int(rows[-1]["id"]) if rows else None
+            seen_up_to = int(primary[-1]["id"]) if primary else None
+            rows = _fill_recent(conn, primary, min_display - len(primary))
             return rows, "pending", seen_up_to
 
-        user = conn.execute("SELECT last_seen_deal_id FROM users WHERE user_id=?", (int(user_id),)).fetchone()
+        user = conn.execute(
+            "SELECT last_seen_deal_id FROM users WHERE user_id=?", (int(user_id),)
+        ).fetchone()
         last_seen = int((user["last_seen_deal_id"] if user else 0) or 0)
-        rows = conn.execute(
+        new_rows = conn.execute(
             "SELECT * FROM deals_cache WHERE id>? ORDER BY id ASC LIMIT ?",
             (last_seen, limit),
         ).fetchall()
-        if rows:
-            return rows, "new", int(rows[-1]["id"])
 
-        rows = conn.execute(
+        if new_rows:
+            seen_up_to = int(new_rows[-1]["id"])
+            rows = _fill_recent(conn, new_rows, min_display - len(new_rows))
+            return rows, "new", seen_up_to
+
+        recent = conn.execute(
             "SELECT * FROM deals_cache ORDER BY id DESC LIMIT ?",
-            (min(limit, 10),),
+            (min_display,),
         ).fetchall()
-        rows = list(reversed(rows))
+        rows = list(reversed(recent))
         return rows, "recent", None
-
 
 def mark_web_offers_seen(user_id: int, mode: str, seen_up_to_id: int | None):
     if not seen_up_to_id:
