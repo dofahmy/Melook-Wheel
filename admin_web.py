@@ -212,6 +212,41 @@ def _golden_question_payload(user_id: int, existing=None):
 
 
 
+ADMIN_WEB_COOKIE = "wafr_admin_session"
+ADMIN_WEB_MAX_AGE = 30 * 24 * 3600
+
+
+def _admin_web_password():
+    return (os.getenv("ADMIN_WEB_PASSWORD") or "").strip()
+
+
+def _admin_cookie_secret():
+    # BOT_TOKEN + password makes a stable signing secret without exposing either value.
+    raw = (str(getattr(config, "BOT_TOKEN", "") or "") + "|" + _admin_web_password()).encode("utf-8")
+    return hashlib.sha256(raw).digest()
+
+
+def _make_admin_cookie() -> str:
+    expires = int(time.time()) + ADMIN_WEB_MAX_AGE
+    payload = str(expires)
+    sig = hmac.new(_admin_cookie_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _valid_admin_cookie(value: str | None) -> bool:
+    if not value or not _admin_web_password():
+        return False
+    try:
+        expires_s, sig = value.split(".", 1)
+        expires = int(expires_s)
+        if expires < int(time.time()):
+            return False
+        expected = hmac.new(_admin_cookie_secret(), expires_s.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "Wafr/2.0"
 
@@ -267,14 +302,25 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def _auth_admin(self):
+        # 1) Telegram Mini App admin auth (existing path).
         init_data = self.headers.get("X-Telegram-Init-Data", "")
         user = _validate_init_data(init_data)
-        if not user:
-            return None
-        uid = int(user.get("id") or 0)
-        if not uid or not database.is_admin(uid):
-            return None
-        return uid
+        if user:
+            uid = int(user.get("id") or 0)
+            if uid and database.is_admin(uid):
+                return uid
+
+        # 2) Normal browser admin auth through a signed HttpOnly cookie.
+        raw = self.headers.get("Cookie", "")
+        try:
+            cookie = SimpleCookie(); cookie.load(raw)
+            morsel = cookie.get(ADMIN_WEB_COOKIE)
+            if morsel and _valid_admin_cookie(morsel.value):
+                ids = list(getattr(config, "ADMIN_IDS", []) or [])
+                return int(ids[0]) if ids else 1
+        except Exception:
+            pass
+        return None
 
     def _session_token(self):
         raw = self.headers.get("Cookie", "")
@@ -535,11 +581,43 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send_json(200, {"ok": True, "data": data})
             return
+        if parsed.path == "/api/admin/central-summary":
+            self._send_json(200, {"ok": True, "data": database.get_central_admin_summary(period)})
+            return
+        if parsed.path == "/api/admin/central-customers":
+            search = qs.get("search", [""])[0]
+            rows = [dict(x) for x in database.list_central_customers(period, search)]
+            self._send_json(200, {"ok": True, "data": rows})
+            return
+        if parsed.path == "/api/admin/session":
+            self._send_json(200, {"ok": True, "data": {"authenticated": True}})
+            return
         self._send_json(404, {"ok": False, "error": "Not found"})
 
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = self._read_json()
+
+        # -------- Browser admin login --------
+        if parsed.path == "/api/admin/web-login":
+            configured = _admin_web_password()
+            if not configured:
+                self._send_json(503, {"ok": False, "error": "ADMIN_WEB_PASSWORD مش متضاف في Railway Variables"})
+                return
+            password = str(payload.get("password") or "")
+            if not hmac.compare_digest(password, configured):
+                time.sleep(0.35)
+                self._send_json(401, {"ok": False, "error": "كلمة السر غير صحيحة"})
+                return
+            token = _make_admin_cookie()
+            cookie = f"{ADMIN_WEB_COOKIE}={token}; Path=/; Max-Age={ADMIN_WEB_MAX_AGE}; HttpOnly; Secure; SameSite=Strict"
+            self._send_json(200, {"ok": True, "data": {"authenticated": True}}, {"Set-Cookie": cookie})
+            return
+
+        if parsed.path == "/api/admin/web-logout":
+            cookie = f"{ADMIN_WEB_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict"
+            self._send_json(200, {"ok": True}, {"Set-Cookie": cookie})
+            return
 
         # -------- Public account / OTP endpoints --------
         if parsed.path == "/api/auth/send-otp":

@@ -1566,6 +1566,10 @@ def get_admin_report_summary(period: str = "all") -> dict:
             FROM users WHERE program='egypt'
         """).fetchone()
 
+        wa = conn.execute(
+            "SELECT id, phone_e164, telegram_user_id, source_first, source_last, created_at, last_login_at FROM web_accounts WHERE user_id=? LIMIT 1",
+            (user_id,),
+        ).fetchone()
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
         return {
@@ -1596,6 +1600,8 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
     with get_conn() as conn:
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance,
+                   wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id,
+                   CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
                    COALESCE(q.products_shown,0) AS products_shown,
                    COALESCE(q.expected_revenue,0) AS expected_revenue,
                    COALESCE(q.product_rewards,0) AS product_rewards,
@@ -1605,6 +1611,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
                    COALESCE(r.pending_total,0) AS pending_total,
                    COALESCE(r.redemption_count,0) AS redemption_count
             FROM users u
+            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             LEFT JOIN (
                 SELECT g.user_id, COUNT(*) AS products_shown,
                        SUM(g.epc) AS expected_revenue,
@@ -1624,10 +1631,10 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
                 FROM redemption_requests GROUP BY user_id
             ) r ON r.user_id=u.user_id
             WHERE u.program='egypt'
-              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ?)
+              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ?)
             ORDER BY expected_revenue DESC, u.user_id DESC
             LIMIT ? OFFSET ?
-        """, (search, like, like, int(limit), int(offset))).fetchall()
+        """, (search, like, like, like, int(limit), int(offset))).fetchall()
 
 
 def get_customer_report(user_id: int, period: str = "all") -> dict | None:
@@ -1665,11 +1672,16 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
             SELECT id, amount, status, requested_at, paid_at, gift_code
             FROM redemption_requests WHERE user_id=? ORDER BY id DESC LIMIT 50
         """, (user_id,)).fetchall()
+        wa = conn.execute(
+            "SELECT id, phone_e164, telegram_user_id, source_first, source_last, created_at, last_login_at FROM web_accounts WHERE user_id=? LIMIT 1",
+            (user_id,),
+        ).fetchone()
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
         return {
             "user_id": int(u["user_id"]), "username": u["username"],
             "is_active": int(u["is_active"] or 0),
+            "web_account": dict(wa) if wa else None,
             "gift_balance": float(u["gift_balance"] or 0),
             "products_shown": int(q["products_shown"] or 0),
             "correct_answers": int(q["correct_answers"] or 0),
@@ -2156,3 +2168,49 @@ def get_web_account_history(user_id: int, limit: int = 20) -> dict:
             "redemptions": [dict(x) for x in redeems],
             "prizes": [dict(x) for x in prizes],
         }
+
+
+# ---------- لوحة الإدارة المركزية: Telegram + Web ----------
+
+def get_central_admin_summary(period: str = "all") -> dict:
+    """ملخص مركزي يجمع نشاط Telegram وحسابات الويب في شاشة واحدة."""
+    web_where, _ = _period_where("created_at", period)
+    login_where, _ = _period_where("seen_at", period)
+    click_where, _ = _period_where("clicked_at", period)
+    spin_where, _ = _period_where("created_at", period)
+    redeem_where, _ = _period_where("requested_at", period)
+    with get_conn() as conn:
+        total = conn.execute("SELECT COUNT(*) c FROM users WHERE program='egypt'").fetchone()["c"] or 0
+        web = conn.execute(f"SELECT COUNT(*) c FROM web_accounts WHERE {web_where}").fetchone()["c"] or 0
+        web_all = conn.execute("SELECT COUNT(*) c FROM web_accounts").fetchone()["c"] or 0
+        linked = conn.execute("SELECT COUNT(*) c FROM web_accounts WHERE telegram_user_id IS NOT NULL").fetchone()["c"] or 0
+        web_only = conn.execute("SELECT COUNT(*) c FROM web_accounts WHERE telegram_user_id IS NULL").fetchone()["c"] or 0
+        tg_only = conn.execute("""SELECT COUNT(*) c FROM users u
+            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            WHERE u.program='egypt' AND wa.id IS NULL AND u.user_id>0""").fetchone()["c"] or 0
+        logins = conn.execute(f"SELECT COUNT(*) c FROM web_source_events WHERE {login_where}").fetchone()["c"] or 0
+        clicks = conn.execute(f"SELECT COUNT(*) c FROM web_offer_clicks WHERE {click_where}").fetchone()["c"] or 0
+        unique_clickers = conn.execute(f"SELECT COUNT(DISTINCT account_id) c FROM web_offer_clicks WHERE {click_where}").fetchone()["c"] or 0
+        spins = conn.execute(f"SELECT COUNT(*) c FROM lucky_spins WHERE {spin_where}").fetchone()["c"] or 0
+        claims = conn.execute(f"SELECT COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) s FROM lucky_spins WHERE {spin_where}").fetchone()["s"] or 0
+        redeems = conn.execute(f"SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE {redeem_where}").fetchone()
+        pending = conn.execute("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE status IN ('pending','processing')").fetchone()
+        paid = conn.execute("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE status='paid'").fetchone()
+        sources = conn.execute(f"""SELECT source, COUNT(*) events, COUNT(DISTINCT account_id) accounts
+            FROM web_source_events WHERE {login_where}
+            GROUP BY source ORDER BY accounts DESC, events DESC LIMIT 20""").fetchall()
+        return {
+            "users_total": int(total), "web_accounts_period": int(web), "web_accounts_total": int(web_all),
+            "telegram_linked": int(linked), "web_only": int(web_only), "telegram_only": int(tg_only),
+            "web_visits": int(logins), "offer_clicks": int(clicks), "unique_clickers": int(unique_clickers),
+            "spin_count": int(spins), "claimed_prizes": float(claims),
+            "redemption_count": int(redeems["c"] or 0), "redemption_total": float(redeems["s"] or 0),
+            "pending_count": int(pending["c"] or 0), "pending_total": float(pending["s"] or 0),
+            "paid_count": int(paid["c"] or 0), "paid_total": float(paid["s"] or 0),
+            "sources": [dict(x) for x in sources],
+        }
+
+
+def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0):
+    """نفس تقرير العملاء لكن مع هوية المنصة والموبايل ومصدر العميل."""
+    return list_customer_reports(period, search, limit, offset)
