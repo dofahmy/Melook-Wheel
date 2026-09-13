@@ -118,15 +118,25 @@ async function showOffers(){
     if(!items.length){list.innerHTML='<div class="empty-box">مفيش عروض متاحة دلوقتي. ارجعي تاني بعد شوية 🔥</div>';return}
     list.innerHTML=items.map(x=>{
       const p=x.product||{};
-      const firstLine=(x.caption||'').split(/\r?\n/).find(Boolean)||'عرض أمازون';
+      const rawCaption=x.caption||'';
+      const captionLines=rawCaption.split(/\r?\n/);
+      const firstIndex=captionLines.findIndex(line=>line.trim());
+      const firstLine=firstIndex>=0?captionLines[firstIndex].trim():'عرض أمازون';
       const title=p.title||firstLine;
+      // امنع تكرار عنوان المنتج: لو أول سطر هو نفس العنوان المعروض نشيله من الوصف.
+      const norm=v=>String(v||'').replace(/[\s\u200e\u200f]+/g,' ').trim().toLowerCase();
+      if(firstIndex>=0){
+        const a=norm(captionLines[firstIndex]), b=norm(title);
+        if(a===b || a.includes(b) || b.includes(a)) captionLines.splice(firstIndex,1);
+      }
+      const cleanCaption=captionLines.join('\n').replace(/^\s+|\s+$/g,'');
       const imageSrc=x.image_url||p.image_url||'';
       const badge=Number(p.discount_percent)>0?`<span class="discount-badge">خصم ${money(p.discount_percent)}%</span>`:'';
       const img=imageSrc?`<img class="offer-image" src="${esc(imageSrc)}" alt="${esc(title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'<span></span>';
       const placeholder=`<div class="img-placeholder" style="${imageSrc?'display:none':''}">🛍️</div>`;
       let price=''; if(Number(p.price)>0){price=`<div class="offer-price"><span class="price-now">${money(p.price)} جنيه</span>${Number(p.old_price)>Number(p.price)?`<span class="price-old">${money(p.old_price)} جنيه</span>`:''}</div>`}
       const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 اشتري من هنا'}</a>`).join('');
-      return `<article class="offer-card"><div class="offer-media">${badge}${img}${placeholder}</div><div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}<div class="offer-caption">${esc(x.caption||'')}</div><div class="offer-links">${links}</div></div></article>`
+      return `<article class="offer-card"><div class="offer-media">${badge}${img}${placeholder}</div><div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}${cleanCaption?`<div class="offer-caption">${esc(cleanCaption)}</div>`:''}<div class="offer-links">${links}</div></div></article>`
     }).join('');
   }catch(e){list.innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
 }
