@@ -160,12 +160,22 @@ async function loadOffers({silent=false}={}){
       const captionLines=rawCaption.split(/\r?\n/);
       const firstIndex=captionLines.findIndex(line=>line.trim());
       const firstLine=firstIndex>=0?captionLines[firstIndex].trim():'عرض أمازون';
-      const title=p.title||firstLine;
-      // امنع تكرار عنوان المنتج: لو أول سطر هو نفس العنوان المعروض نشيله من الوصف.
+      const discountLike=line=>/(?:خصم|discount|\d+\s*%|%\s*\d+)/i.test(String(line||''));
+      // لو أول سطر/عنوان المنتج هو مجرد الخصم، ما نستخدموش كعنوان.
+      // نختار أول سطر وصفي حقيقي بدلًا منه، لأن الخصم مكانه الوحيد هو الـ Badge الأحمر.
+      const descriptiveLine=captionLines.find(line=>{
+        const s=String(line||'').trim();
+        return s && !discountLike(s) && !/(?:https?:\/\/|www\.|amazon\.(?:eg|sa)|amzn\.|link\.amazon)/i.test(s);
+      });
+      const productTitle=String(p.title||'').trim();
+      const title=(productTitle && !discountLike(productTitle))
+        ? productTitle
+        : (descriptiveLine?String(descriptiveLine).trim():'عرض أمازون');
+      // امنع تكرار عنوان المنتج: شيل أي سطر في الكابشن يساوي العنوان المعروض، مش أول سطر فقط.
       const norm=v=>String(v||'').replace(/[\s\u200e\u200f]+/g,' ').trim().toLowerCase();
-      if(firstIndex>=0){
-        const a=norm(captionLines[firstIndex]), b=norm(title);
-        if(a===b || a.includes(b) || b.includes(a)) captionLines.splice(firstIndex,1);
+      for(let i=captionLines.length-1;i>=0;i--){
+        const a=norm(captionLines[i]), b=norm(title);
+        if(a && b && (a===b || a.includes(b) || b.includes(a))) captionLines.splice(i,1);
       }
       // شيل أي لينك ظاهر من نص العرض؛ اللينك يفضل فقط داخل زر "شوف تفاصيل العرض من هنا".
       const cleanCaption=captionLines
@@ -177,7 +187,7 @@ async function loadOffers({silent=false}={}){
       // تنسيق نص العرض: العنوان عادي، وأول سطر عادي إلا لو هو سطر خصم.
       // سطور السعر/الخصم التالية فقط تظهر Bold.
       let visibleLines=cleanCaption?cleanCaption.split(/\r?\n/):[];
-      const isDiscountLine=line=>/(?:خصم|discount|\d+\s*%|%\s*\d+)/i.test(String(line||''));
+      const isDiscountLine=discountLike;
       const isPriceLine=line=>/(?:السعر|سعر العرض|بدلًا|بدلا|بدلاً|جنيه|ريال|egp|sar|\bprice\b)/i.test(String(line||''));
 
       // استخرج نسبة الخصم أولاً عشان نعرضها مرة واحدة فقط في الـ Badge الأحمر.
