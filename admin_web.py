@@ -240,6 +240,63 @@ class Handler(BaseHTTPRequestHandler):
             }})
             return
 
+        if parsed.path == "/api/app/deal-image":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            qs = parse_qs(parsed.query)
+            try:
+                deal_id = int(qs.get("deal", ["0"])[0])
+            except Exception:
+                deal_id = 0
+            deal = database.get_deal_by_id(deal_id) if deal_id else None
+            if not deal:
+                self.send_response(404); self.end_headers(); return
+
+            photo_file_id = str(deal.get("photo_file_id") or "").strip()
+            if photo_file_id and config.BOT_TOKEN:
+                try:
+                    info = requests.get(
+                        f"https://api.telegram.org/bot{config.BOT_TOKEN}/getFile",
+                        params={"file_id": photo_file_id},
+                        timeout=15,
+                    )
+                    payload = info.json() if info.content else {}
+                    file_path = ((payload.get("result") or {}).get("file_path") or "") if isinstance(payload, dict) else ""
+                    if info.ok and file_path:
+                        image = requests.get(
+                            f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{file_path}",
+                            timeout=25,
+                        )
+                        if image.ok and image.content:
+                            body = image.content
+                            self.send_response(200)
+                            self._security_headers()
+                            self.send_header("Content-Type", image.headers.get("Content-Type", "image/jpeg"))
+                            self.send_header("Cache-Control", "private, max-age=1800")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                except Exception:
+                    pass
+
+            # Fallback to the SPCC/catalog image when the Telegram photo is unavailable.
+            links = database.get_deal_links(deal.get("base_link"))
+            meta = _product_meta_for_links(links)
+            fallback = str(meta.get("image_url") or "").strip()
+            if fallback:
+                self.send_response(302)
+                self._security_headers()
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Location", fallback)
+                self.end_headers()
+                return
+            self.send_response(404)
+            self.end_headers()
+            return
+
         if parsed.path == "/api/app/offers":
             account = self._auth_web()
             if not account:
@@ -257,6 +314,8 @@ class Handler(BaseHTTPRequestHandler):
                     "caption": _caption_without_urls(deal.get("caption") or ""),
                     "posted_at": deal.get("posted_at"),
                     "links_count": len(links),
+                    "has_photo": bool(deal.get("photo_file_id")),
+                    "image_url": f"/api/app/deal-image?deal={int(deal['id'])}",
                     "product": meta,
                 }
                 data.append(item)
