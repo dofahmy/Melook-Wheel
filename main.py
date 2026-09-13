@@ -35,6 +35,7 @@ def _build_customer_commands() -> list[BotCommand]:
         BotCommand("offers", "🛍️ آخر عروض أمازون"),
         BotCommand("goldenwheel", "🏆 عجلة العروض الذهبية"),
         BotCommand("myaccount", "📊 حسابي"),
+        BotCommand("linkweb", "ربط حساب الموقع بتيليجرام"),
         BotCommand("redeem", "استبدل رصيد الهدايا"),
         BotCommand("start", "إعادة تفعيل الحساب"),
         BotCommand("stop", "إلغاء الاشتراك"),
@@ -151,6 +152,7 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handlers.handle_webapp_data))
     app.add_handler(MessageHandler(filters.Regex("^📊 حسابي$"), handlers.account_button))
     app.add_handler(CommandHandler("myaccount", handlers.account_button))
+    app.add_handler(CommandHandler("linkweb", handlers.linkweb))
     app.add_handler(MessageHandler(filters.Regex("^🏆 عجلة العروض الذهبية$"), handlers.golden_wheel_entry))
     if config.EGYPT_DEALS_CHANNEL:
         app.add_handler(

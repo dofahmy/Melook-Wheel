@@ -1,18 +1,22 @@
 import hashlib
 import hmac
+import html
 import json
 import os
 import threading
 import time
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse, unquote
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
 import config
 import database
+import web_auth
 
 DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "admin_dashboard.html")
+WEB_APP_PATH = os.path.join(os.path.dirname(__file__), "web_app.html")
 
 
 def _json_bytes(data):
@@ -64,7 +68,7 @@ def _telegram_send_message(chat_id: int, text: str) -> tuple[bool, str]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WafrAdmin/1.0"
+    server_version = "Wafr/2.0"
 
     def log_message(self, fmt, *args):
         return
@@ -74,14 +78,48 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Telegram-Init-Data")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
-    def _send_json(self, code, data):
+    def _security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+
+    def _send_json(self, code, data, extra_headers=None):
         body = _json_bytes(data)
         self.send_response(code)
         self._cors()
+        self._security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_html(self, path):
+        try:
+            body = open(path, "rb").read()
+        except FileNotFoundError:
+            body = b"File missing"
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(200)
+        self._security_headers()
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        try:
+            return json.loads(self.rfile.read(length) or b"{}")
+        except Exception:
+            return {}
 
     def _auth_admin(self):
         init_data = self.headers.get("X-Telegram-Init-Data", "")
@@ -93,6 +131,21 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return uid
 
+    def _session_token(self):
+        raw = self.headers.get("Cookie", "")
+        if not raw:
+            return None
+        try:
+            cookie = SimpleCookie()
+            cookie.load(raw)
+            morsel = cookie.get(web_auth.SESSION_COOKIE)
+            return morsel.value if morsel else None
+        except Exception:
+            return None
+
+    def _auth_web(self):
+        return web_auth.get_account_from_session(self._session_token())
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
@@ -101,22 +154,34 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/admin"):
-            try:
-                body = open(DASHBOARD_PATH, "rb").read()
-            except FileNotFoundError:
-                body = b"Admin dashboard file missing"
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(body)
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._serve_html(DASHBOARD_PATH)
+            return
+        if parsed.path in ("/app", "/wafr"):
+            self._serve_html(WEB_APP_PATH)
+            return
+        if parsed.path == "/health":
+            self._send_json(200, {"ok": True, "service": "wafr"})
             return
 
+        # Public web-account API authenticated by session cookie.
+        if parsed.path == "/api/app/me":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            self._send_json(200, {"ok": True, "data": {
+                "account_id": account["id"],
+                "phone": account["phone_e164"],
+                "gift_balance": account.get("gift_balance", 0),
+                "points_balance": account.get("points_balance", 0),
+                "spins_balance": account.get("spins_balance", 0),
+                "source_first": account.get("source_first") or "direct",
+                "source_last": account.get("source_last") or "direct",
+                "telegram_linked": bool(account.get("telegram_user_id")),
+            }})
+            return
+
+        # Everything below is admin-only.
         admin_id = self._auth_admin()
         if not admin_id:
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
@@ -150,16 +215,65 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"ok": False, "error": "Not found"})
 
     def do_POST(self):
+        parsed = urlparse(self.path)
+        payload = self._read_json()
+
+        # -------- Public account / OTP endpoints --------
+        if parsed.path == "/api/auth/send-otp":
+            phone = web_auth.normalize_egypt_phone(str(payload.get("phone") or ""))
+            if not phone:
+                self._send_json(400, {"ok": False, "error": "اكتبي رقم موبايل مصري صحيح"})
+                return
+            ok, err = web_auth.send_otp(phone)
+            if not ok:
+                self._send_json(502, {"ok": False, "error": err})
+                return
+            self._send_json(200, {"ok": True})
+            return
+
+        if parsed.path == "/api/auth/verify-otp":
+            phone = web_auth.normalize_egypt_phone(str(payload.get("phone") or ""))
+            code = str(payload.get("code") or "").strip()
+            source = str(payload.get("source") or "direct")
+            if not phone:
+                self._send_json(400, {"ok": False, "error": "رقم الموبايل غير صحيح"})
+                return
+            ok, err = web_auth.verify_otp(phone, code)
+            if not ok:
+                self._send_json(401, {"ok": False, "error": err})
+                return
+            account = database.get_or_create_web_account(phone, source)
+            token = web_auth.create_session(int(account["id"]))
+            cookie = (
+                f"{web_auth.SESSION_COOKIE}={token}; Path=/; Max-Age={30*24*3600}; "
+                "HttpOnly; Secure; SameSite=Lax"
+            )
+            self._send_json(200, {"ok": True, "data": {"account_id": account["id"]}}, {"Set-Cookie": cookie})
+            return
+
+        if parsed.path == "/api/auth/logout":
+            web_auth.logout_session(self._session_token())
+            cookie = f"{web_auth.SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax"
+            self._send_json(200, {"ok": True}, {"Set-Cookie": cookie})
+            return
+
+        if parsed.path == "/api/app/link-code":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                return
+            if account.get("telegram_user_id"):
+                self._send_json(409, {"ok": False, "error": "Telegram مربوط بالفعل بالحساب"})
+                return
+            code = web_auth.create_link_code(int(account["id"]))
+            self._send_json(200, {"ok": True, "data": {"code": code, "expires_minutes": 10}})
+            return
+
+        # -------- Admin endpoints --------
         admin_id = self._auth_admin()
         if not admin_id:
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
             return
-        parsed = urlparse(self.path)
-        length = int(self.headers.get("Content-Length", "0") or 0)
-        try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
-        except Exception:
-            payload = {}
 
         if parsed.path == "/api/admin/send-gift-code":
             try:
@@ -183,7 +297,6 @@ class Handler(BaseHTTPRequestHandler):
                 return
             amount = float(r["amount"] or 0)
             amount_text = f"{amount:g}"
-            import html
             safe_code = html.escape(code)
             redeem_url = "https://link.amazon/B02oNEoYz"
             ok, err = _telegram_send_message(
@@ -208,6 +321,6 @@ class Handler(BaseHTTPRequestHandler):
 def start_admin_server():
     port = int(os.getenv("PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True, name="admin-web")
+    thread = threading.Thread(target=server.serve_forever, daemon=True, name="wafr-web")
     thread.start()
     return server

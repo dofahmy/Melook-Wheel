@@ -287,6 +287,9 @@ def init_db():
         """)
         conn.execute("PRAGMA optimize")
 
+    # جداول حساب وفر كاش المستقل (Web App / TikTok / Snapchat / إلخ)
+    init_web_accounts_schema()
+
 
 # ---------- المستخدمين ----------
 
@@ -1657,3 +1660,239 @@ def list_pending_redemptions_for_web(limit: int = 500):
             ORDER BY r.requested_at ASC, r.id ASC
             LIMIT ?
         """, (int(limit),)).fetchall()
+
+# ---------- حساب وفر كاش المستقل (Web App / multi-platform) ----------
+
+WEB_ACCOUNT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS web_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone_e164 TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL UNIQUE,
+    telegram_user_id INTEGER UNIQUE,
+    source_first TEXT DEFAULT 'direct',
+    source_last TEXT DEFAULT 'direct',
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+CREATE TABLE IF NOT EXISTS web_sessions (
+    token_hash TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS web_dev_otps (
+    phone_e164 TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS telegram_link_codes (
+    token_hash TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS web_source_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES web_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_web_sessions_account ON web_sessions(account_id);
+CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_web_source_account ON web_source_events(account_id, seen_at);
+CREATE INDEX IF NOT EXISTS idx_link_codes_account ON telegram_link_codes(account_id, expires_at);
+"""
+
+
+def init_web_accounts_schema():
+    with get_conn() as conn:
+        conn.executescript(WEB_ACCOUNT_SCHEMA)
+
+
+def _safe_source(source: str | None) -> str:
+    raw = (source or "direct").strip().lower()[:40]
+    allowed = "abcdefghijklmnopqrstuvwxyz0123456789_-"
+    cleaned = "".join(ch for ch in raw if ch in allowed)
+    return cleaned or "direct"
+
+
+def get_or_create_web_account(phone_e164: str, source: str = "direct") -> dict:
+    """Creates a Wafr account with a synthetic negative user_id so old bot tables keep working."""
+    source = _safe_source(source)
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM web_accounts WHERE phone_e164=?", (phone_e164,)).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE web_accounts SET source_last=?, last_login_at=? WHERE id=?",
+                (source, now, row["id"]),
+            )
+            conn.execute(
+                "INSERT INTO web_source_events(account_id, source, seen_at) VALUES(?,?,?)",
+                (row["id"], source, now),
+            )
+            fresh = conn.execute("SELECT * FROM web_accounts WHERE id=?", (row["id"],)).fetchone()
+            return dict(fresh)
+
+        # Generate a collision-safe negative ID reserved for web-only customers.
+        seed = conn.execute("SELECT COALESCE(MAX(id),0)+1 AS n FROM web_accounts").fetchone()["n"]
+        synthetic = -(10_000_000_000 + int(seed))
+        while conn.execute("SELECT 1 FROM users WHERE user_id=?", (synthetic,)).fetchone():
+            synthetic -= 1
+        conn.execute(
+            """INSERT INTO users(user_id, username, joined_at, is_active, program, golden_target)
+               VALUES(?, NULL, ?, 1, 'egypt', ?)""",
+            (synthetic, now, GOLDEN_TARGET_COUNT),
+        )
+        cur = conn.execute(
+            """INSERT INTO web_accounts(phone_e164,user_id,source_first,source_last,created_at,last_login_at)
+               VALUES(?,?,?,?,?,?)""",
+            (phone_e164, synthetic, source, source, now, now),
+        )
+        account_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO web_source_events(account_id, source, seen_at) VALUES(?,?,?)",
+            (account_id, source, now),
+        )
+        row = conn.execute("SELECT * FROM web_accounts WHERE id=?", (account_id,)).fetchone()
+        return dict(row)
+
+
+def create_web_session(token_hash: str, account_id: int, expires_at: str):
+    with get_conn() as conn:
+        now = datetime.utcnow().isoformat()
+        conn.execute("DELETE FROM web_sessions WHERE expires_at < ?", (now,))
+        conn.execute(
+            "INSERT OR REPLACE INTO web_sessions(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)",
+            (token_hash, account_id, now, expires_at),
+        )
+
+
+def get_web_account_by_session(token_hash: str, now_iso: str):
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT a.*, u.gift_balance, u.points_balance, u.spins_balance
+               FROM web_sessions s
+               JOIN web_accounts a ON a.id=s.account_id
+               JOIN users u ON u.user_id=a.user_id
+               WHERE s.token_hash=? AND s.expires_at>=?""",
+            (token_hash, now_iso),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_web_session(token_hash: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM web_sessions WHERE token_hash=?", (token_hash,))
+
+
+def save_dev_otp(phone_e164: str, code_hash: str, expires_at: str):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO web_dev_otps(phone_e164,code_hash,expires_at) VALUES(?,?,?)",
+            (phone_e164, code_hash, expires_at),
+        )
+
+
+def get_dev_otp(phone_e164: str):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM web_dev_otps WHERE phone_e164=?", (phone_e164,)).fetchone()
+        return dict(row) if row else None
+
+
+def delete_dev_otp(phone_e164: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM web_dev_otps WHERE phone_e164=?", (phone_e164,))
+
+
+def create_telegram_link_code(account_id: int, token_hash: str, expires_at: str):
+    with get_conn() as conn:
+        now = datetime.utcnow().isoformat()
+        conn.execute("DELETE FROM telegram_link_codes WHERE account_id=? OR expires_at<?", (account_id, now))
+        conn.execute(
+            "INSERT INTO telegram_link_codes(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)",
+            (token_hash, account_id, now, expires_at),
+        )
+
+
+def consume_telegram_link_code(token_hash: str, telegram_user_id: int, now_iso: str) -> tuple[bool, str]:
+    """Link a web account to Telegram and make Telegram ID the canonical user ID."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        code = conn.execute(
+            """SELECT * FROM telegram_link_codes
+               WHERE token_hash=? AND used_at IS NULL AND expires_at>=?""",
+            (token_hash, now_iso),
+        ).fetchone()
+        if not code:
+            return False, "الكود غير صحيح أو انتهت صلاحيته"
+        account = conn.execute("SELECT * FROM web_accounts WHERE id=?", (code["account_id"],)).fetchone()
+        if not account:
+            return False, "حساب وفر كاش غير موجود"
+        other = conn.execute(
+            "SELECT id FROM web_accounts WHERE telegram_user_id=? AND id<>?",
+            (telegram_user_id, account["id"]),
+        ).fetchone()
+        if other:
+            return False, "حساب Telegram ده مربوط بالفعل بحساب وفر كاش تاني"
+
+        target = conn.execute("SELECT * FROM users WHERE user_id=?", (telegram_user_id,)).fetchone()
+        if not target:
+            conn.execute(
+                """INSERT INTO users(user_id,username,joined_at,is_active,program,golden_target)
+                   VALUES(?,NULL,?,1,'egypt',?)""",
+                (telegram_user_id, now_iso, GOLDEN_TARGET_COUNT),
+            )
+            target = conn.execute("SELECT * FROM users WHERE user_id=?", (telegram_user_id,)).fetchone()
+
+        source_uid = int(account["user_id"])
+        if source_uid != telegram_user_id:
+            src = conn.execute("SELECT * FROM users WHERE user_id=?", (source_uid,)).fetchone()
+            if src:
+                # Preserve monetary/reward balances accumulated on the standalone web account.
+                conn.execute(
+                    """UPDATE users SET
+                       gift_balance = COALESCE(gift_balance,0) + ?,
+                       points_balance = COALESCE(points_balance,0) + ?,
+                       spins_balance = COALESCE(spins_balance,0) + ?,
+                       golden_opened_count = COALESCE(golden_opened_count,0) + ?,
+                       golden_answered_count = COALESCE(golden_answered_count,0) + ?,
+                       golden_round_earnings = COALESCE(golden_round_earnings,0) + ?,
+                       is_active = 1, program='egypt'
+                       WHERE user_id=?""",
+                    (
+                        float(src["gift_balance"] or 0), int(src["points_balance"] or 0),
+                        int(src["spins_balance"] or 0), int(src["golden_opened_count"] or 0),
+                        int(src["golden_answered_count"] or 0), float(src["golden_round_earnings"] or 0),
+                        telegram_user_id,
+                    ),
+                )
+                # Tables with no uniqueness conflict.
+                for table in ("wheel_spins", "sent_offer_messages", "golden_questions", "lucky_spins", "redemption_requests"):
+                    conn.execute(f"UPDATE {table} SET user_id=? WHERE user_id=?", (telegram_user_id, source_uid))
+                # Composite primary key can conflict; copy safely then remove old rows.
+                conn.execute(
+                    """INSERT OR IGNORE INTO golden_quiz_log(user_id,asin,quiz_date)
+                       SELECT ?,asin,quiz_date FROM golden_quiz_log WHERE user_id=?""",
+                    (telegram_user_id, source_uid),
+                )
+                conn.execute("DELETE FROM golden_quiz_log WHERE user_id=?", (source_uid,))
+                # Move the web-account foreign key before deleting the synthetic user.
+                conn.execute(
+                    "UPDATE web_accounts SET user_id=?, telegram_user_id=? WHERE id=?",
+                    (telegram_user_id, telegram_user_id, account["id"]),
+                )
+                conn.execute("DELETE FROM users WHERE user_id=?", (source_uid,))
+
+        if source_uid == telegram_user_id:
+            conn.execute(
+                "UPDATE web_accounts SET user_id=?, telegram_user_id=? WHERE id=?",
+                (telegram_user_id, telegram_user_id, account["id"]),
+            )
+        conn.execute("UPDATE telegram_link_codes SET used_at=? WHERE token_hash=?", (now_iso, token_hash))
+        return True, "تم ربط Telegram بحساب وفر كاش بنجاح"

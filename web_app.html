@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>وفر كاش</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;color:#17202a;background:#f5f7f6}
+*{box-sizing:border-box} body{margin:0;min-height:100vh}.wrap{max-width:520px;margin:auto;padding:24px 16px 40px}
+.brand{text-align:center;margin:18px 0 24px}.brand h1{margin:0;font-size:34px}.brand p{margin:8px 0 0;color:#667085}
+.card{background:#fff;border-radius:22px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);margin-bottom:16px}
+label{display:block;font-weight:700;margin:0 0 8px}.input{width:100%;padding:14px;border:1px solid #d0d5dd;border-radius:14px;font-size:17px;direction:ltr;text-align:center}
+.btn{width:100%;border:0;border-radius:14px;padding:14px 16px;font-size:17px;font-weight:800;cursor:pointer;background:#111827;color:#fff;margin-top:12px}.btn.secondary{background:#eef2f0;color:#111827}.btn:disabled{opacity:.55;cursor:not-allowed}
+.note{font-size:13px;color:#667085;line-height:1.7}.msg{margin-top:12px;padding:11px 12px;border-radius:12px;display:none}.msg.ok{display:block;background:#ecfdf3;color:#027a48}.msg.err{display:block;background:#fef3f2;color:#b42318}
+.row{display:flex;gap:10px}.row>*{flex:1}.stat{background:#f7f8fa;border-radius:16px;padding:15px;text-align:center}.stat b{font-size:24px;display:block}.muted{color:#667085}.code{font-size:28px;letter-spacing:5px;font-weight:900;text-align:center;background:#f7f8fa;padding:14px;border-radius:14px;direction:ltr}.hide{display:none!important}
+.source{display:inline-block;background:#eef2f0;border-radius:999px;padding:5px 10px;font-size:12px;color:#475467;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><h1>وفر كاش</h1><p>حساب واحد من أي منصة</p><span id="sourceBadge" class="source"></span></div>
+
+  <section id="loginCard" class="card">
+    <div id="phoneStep">
+      <label>رقم الموبايل</label>
+      <input id="phone" class="input" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" />
+      <button id="sendBtn" class="btn" onclick="sendOtp()">إرسال كود التحقق</button>
+      <p class="note">هنبعت كود لمرة واحدة للتأكد إن الرقم بتاعك.</p>
+    </div>
+    <div id="otpStep" class="hide">
+      <label>اكتب كود التحقق</label>
+      <input id="otp" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" />
+      <button id="verifyBtn" class="btn" onclick="verifyOtp()">دخول</button>
+      <button class="btn secondary" onclick="backPhone()">تغيير الرقم</button>
+    </div>
+    <div id="authMsg" class="msg"></div>
+  </section>
+
+  <section id="accountCard" class="hide">
+    <div class="card">
+      <h2 style="margin-top:0">أهلاً بيك 👋</h2>
+      <div class="row">
+        <div class="stat"><span class="muted">رصيدك</span><b id="balance">0</b><span>جنيه</span></div>
+        <div class="stat"><span class="muted">رقم الحساب</span><b id="accountId" style="font-size:19px">—</b><span>وفر كاش</span></div>
+      </div>
+      <p class="note" id="phoneLabel"></p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">ربط Telegram</h3>
+      <div id="linkedBox" class="msg ok hide">✅ حساب Telegram مربوط بالفعل.</div>
+      <div id="linkBox">
+        <p class="note">اضغطي تحت، وبعدها ابعتي الكود للبوت بالأمر الظاهر. الكود صالح 10 دقائق.</p>
+        <button class="btn" onclick="makeLinkCode()">اعمل كود ربط Telegram</button>
+        <div id="linkResult" class="hide" style="margin-top:14px">
+          <div id="linkCode" class="code"></div>
+          <p class="note" style="text-align:center">ابعتي للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">منين وصلتي لنا؟</h3>
+      <p class="note" id="sourceText">—</p>
+      <button class="btn secondary" onclick="logout()">تسجيل خروج</button>
+    </div>
+  </section>
+</div>
+<script>
+const src=(new URLSearchParams(location.search).get('src')||localStorage.getItem('wafr_src')||'direct').toLowerCase();
+localStorage.setItem('wafr_src',src); document.getElementById('sourceBadge').textContent='المصدر: '+src;
+let currentPhone='';
+function msg(text,ok=false){const e=document.getElementById('authMsg');e.textContent=text;e.className='msg '+(ok?'ok':'err')}
+async function api(path,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'}; const r=await fetch(path,opts); let d={}; try{d=await r.json()}catch(e){}; if(!r.ok) throw new Error(d.error||'حصل خطأ'); return d}
+async function sendOtp(){const b=document.getElementById('sendBtn');b.disabled=true;try{const phone=document.getElementById('phone').value.trim();await api('/api/auth/send-otp',{method:'POST',body:JSON.stringify({phone,source:src})});currentPhone=phone;document.getElementById('phoneStep').classList.add('hide');document.getElementById('otpStep').classList.remove('hide');msg('الكود اتبعت. اكتبيه هنا.',true)}catch(e){msg(e.message)}finally{b.disabled=false}}
+async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabled=true;try{const code=document.getElementById('otp').value.trim();await api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone:currentPhone,code,source:src})});await loadMe()}catch(e){msg(e.message)}finally{b.disabled=false}}
+function backPhone(){document.getElementById('otpStep').classList.add('hide');document.getElementById('phoneStep').classList.remove('hide');msg('')}
+async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');document.getElementById('balance').textContent=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');document.getElementById('accountId').textContent='WAFR-'+x.account_id;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;document.getElementById('sourceText').textContent='أول مصدر: '+(x.source_first||'direct')+' — آخر مصدر: '+(x.source_last||'direct');if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide')}}
+async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
+async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'})}catch(e){} location.reload()}
+loadMe();
+</script>
+</body>
+</html>
