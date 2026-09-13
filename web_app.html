@@ -167,7 +167,7 @@ async function loadOffers({silent=false}={}){
         const a=norm(captionLines[firstIndex]), b=norm(title);
         if(a===b || a.includes(b) || b.includes(a)) captionLines.splice(firstIndex,1);
       }
-      // شيل أي لينك ظاهر من نص العرض؛ اللينك يفضل فقط داخل زر "اشتري من هنا".
+      // شيل أي لينك ظاهر من نص العرض؛ اللينك يفضل فقط داخل زر "شوف تفاصيل العرض من هنا".
       const cleanCaption=captionLines
         .filter(line=>!/(?:https?:\/\/|www\.|amazon\.(?:eg|sa)|amzn\.|link\.amazon)/i.test(line))
         .join('\n')
@@ -176,21 +176,67 @@ async function loadOffers({silent=false}={}){
         .replace(/^\s+|\s+$/g,'');
       // تنسيق نص العرض: العنوان عادي، وأول سطر عادي إلا لو هو سطر خصم.
       // سطور السعر/الخصم التالية فقط تظهر Bold.
-      const visibleLines=cleanCaption?cleanCaption.split(/\r?\n/):[];
-      const firstVisible=visibleLines.findIndex(line=>line.trim());
-      const isDiscountLine=line=>/(?:خصم|discount|\d+\s*%)/i.test(String(line||''));
+      let visibleLines=cleanCaption?cleanCaption.split(/\r?\n/):[];
+      const isDiscountLine=line=>/(?:خصم|discount|\d+\s*%|%\s*\d+)/i.test(String(line||''));
       const isPriceLine=line=>/(?:السعر|سعر العرض|بدلًا|بدلا|بدلاً|جنيه|ريال|egp|sar|\bprice\b)/i.test(String(line||''));
+
+      // استخرج نسبة الخصم أولاً عشان نعرضها مرة واحدة فقط في الـ Badge الأحمر.
+      let detectedDiscount=Number(p.discount_percent)||0;
+      if(!(detectedDiscount>0)){
+        for(const line of visibleLines){
+          if(!isDiscountLine(line)) continue;
+          const m=String(line).match(/(?:خصم|discount)?\s*[^0-9]{0,8}(\d{1,3}(?:[.,]\d+)?)\s*%|%\s*(\d{1,3}(?:[.,]\d+)?)/i);
+          if(m){detectedDiscount=Number(String(m[1]||m[2]).replace(',','.'))||0; if(detectedDiscount>0) break;}
+        }
+      }
+
+      // تنظيف التكرار:
+      // 1) لو العنوان ظهر مرة ثانية داخل النص نشيله.
+      // 2) أي سطر نص مكرر نشيله.
+      // 3) لو عندنا Badge أحمر، نشيل سطر "خصم XX%" المنفصل فقط،
+      //    لكن نسيب سطر الخصم التفصيلي اللي فيه السعر القديم/بدلاً من.
+      const lineKey=v=>norm(String(v||'')
+        .replace(/[🎉💥🔥👑💰📉🎁🛍️✨⭐🎯💫🛒]/gu,'')
+        .replace(/[،,:؛\-–—()]/g,' ')
+        .replace(/\s+/g,' '));
+      const seenLineKeys=new Set();
+      const titleKey=lineKey(title);
+      visibleLines=visibleLines.filter(line=>{
+        const raw=String(line||'').trim();
+        if(!raw) return true;
+        const key=lineKey(raw);
+        if(titleKey && key && (key===titleKey || key.includes(titleKey) || titleKey.includes(key))) return false;
+
+        const standaloneDiscount=isDiscountLine(raw)
+          && !/(?:السعر|سعر|بدلًا|بدلا|بدلاً|من\s+\d|جنيه|ريال|egp|sar)/i.test(raw)
+          && raw.replace(/[🎉💥🔥👑💰📉🎁🛍️✨⭐🎯💫\s]/gu,'').length < 28;
+        if(detectedDiscount>0 && standaloneDiscount) return false;
+
+        if(key && seenLineKeys.has(key)) return false;
+        if(key) seenLineKeys.add(key);
+        return true;
+      });
+
+      // شيل الفراغات المكررة بعد التنظيف.
+      visibleLines=visibleLines.filter((line,idx,arr)=>{
+        if(String(line||'').trim()) return true;
+        return idx>0 && idx<arr.length-1
+          && String(arr[idx-1]||'').trim()
+          && String(arr[idx+1]||'').trim();
+      });
+
+      const firstVisible=visibleLines.findIndex(line=>line.trim());
       const captionHtml=visibleLines.map((line,idx)=>{
         if(!line.trim()) return '<div class="offer-caption-line blank"></div>';
         const emph=(idx===firstVisible)?isDiscountLine(line):(isDiscountLine(line)||isPriceLine(line));
         return `<div class="offer-caption-line${emph?' emphasis':''}">${esc(line)}</div>`;
       }).join('');
       const imageSrc=x.image_url||p.image_url||'';
-      const badge=Number(p.discount_percent)>0?`<span class="discount-badge">خصم ${money(p.discount_percent)}%</span>`:'';
+      const badge=detectedDiscount>0?`<span class="discount-badge">خصم ${money(detectedDiscount)}%</span>`:'';
       const img=imageSrc?`<img class="offer-image" src="${esc(imageSrc)}" alt="${esc(title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'<span></span>';
       const placeholder=`<div class="img-placeholder" style="${imageSrc?'display:none':''}">🛍️</div>`;
       let price=''; if(Number(p.price)>0){price=`<div class="offer-price"><span class="price-now">${money(p.price)} جنيه</span>${Number(p.old_price)>Number(p.price)?`<span class="price-old">${money(p.old_price)} جنيه</span>`:''}</div>`}
-      const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 اشتري من هنا'}</a>`).join('');
+      const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 شوف تفاصيل العرض من هنا'}</a>`).join('');
       return `<article class="offer-card"><div class="offer-media">${badge}${img}${placeholder}</div><div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}${captionHtml?`<div class="offer-caption">${captionHtml}</div>`:''}<div class="offer-links">${links}</div></div></article>`
     }).join('');
   }catch(e){
