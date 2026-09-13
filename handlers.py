@@ -388,7 +388,6 @@ async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if pending else ""
     )
 
-    # نفس سجل الاستبدالات اللي بيظهر في الويب.
     report = database.get_customer_report(user.id, "all") or {}
     redemptions = report.get("redemptions") or []
 
@@ -416,6 +415,7 @@ async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }.get(status, status or "—")
             amount = _format_egp(float(r.get("amount") or 0))
             lines.append(f"\nطلب #{r.get('id')} • {amount} جنيه • {status_text}")
+
             code = str(r.get("gift_code") or "").strip()
             if status == "paid" and code:
                 lines.append(f"كود بطاقة الهدية: {code}")
@@ -1854,3 +1854,23 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ اترسلت الرسالة.")
     except Exception as exc:
         await update.message.reply_text(f"❌ مقدرتش أبعت الرسالة: {exc}")
+
+# ---------------- ربط حساب Web App بحساب Telegram ----------------
+async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not context.args:
+        await update.message.reply_text(
+            "افتحي حساب وفر كاش من الموقع، اضغطي «اعمل كود ربط Telegram»، "
+            "وبعدين ابعتي هنا:\n/linkweb الكود"
+        )
+        return
+    code = context.args[0].strip()
+    # Ensure Telegram user exists before the merge/link operation.
+    database.upsert_user(user.id, user.username)
+    database.set_user_program(user.id, "egypt")
+    import web_auth
+    ok, message = web_auth.consume_link_code(code, user.id)
+    if ok:
+        await update.message.reply_text("✅ " + message + "\nرصيدك ونشاطك بقوا على حساب واحد.")
+    else:
+        await update.message.reply_text("❌ " + message)
