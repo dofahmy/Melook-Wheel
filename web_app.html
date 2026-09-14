@@ -320,7 +320,7 @@ async function loadOffers({silent=false}={}){
       const img=imageSrc?`<img class="offer-image" src="${esc(imageSrc)}" alt="${esc(title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'<span></span>';
       const placeholder=`<div class="img-placeholder" style="${imageSrc?'display:none':''}">🛍️</div>`;
       let price=''; if(Number(p.price)>0){price=`<div class="offer-price"><span class="price-now">${money(p.price)} جنيه</span>${Number(p.old_price)>Number(p.price)?`<span class="price-old">${money(p.old_price)} جنيه</span>`:''}</div>`}
-      const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}" target="_blank" rel="noopener">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 شوف تفاصيل العرض من هنا'}</a>`).join('');
+      const links=Array.from({length:Number(x.links_count||0)},(_,i)=>`<a class="buy-btn" href="/go?deal=${encodeURIComponent(x.id)}&i=${i}">${x.links_count>1?'🛒 المنتج '+(i+1):'🛒 شوف تفاصيل العرض من هنا'}</a>`).join('');
       return `<article class="offer-card"><div class="offer-media">${badge}${img}${placeholder}</div><div class="offer-body"><div class="offer-title">${esc(title)}</div>${price}${captionHtml?`<div class="offer-caption">${captionHtml}</div>`:''}<div class="offer-links">${links}</div></div></article>`
     }).join('');
   }catch(e){
