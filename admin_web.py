@@ -360,6 +360,13 @@ class Handler(BaseHTTPRequestHandler):
         account = web_auth.get_account_from_session(self._session_token())
         if account and int(account.get("is_suspended") or 0):
             return None
+        # Any authenticated Web App request counts as current activity, exactly like
+        # a Telegram interaction. This keeps the admin Online indicator unified.
+        if account:
+            try:
+                database.set_user_activity_now(int(account["user_id"]))
+            except Exception:
+                pass
         return account
 
     def do_OPTIONS(self):
