@@ -61,6 +61,7 @@ async function loadCustomers(){try{
       <td>${esc(r.phone_e164||'—')}</td>
       <td>${esc(r.source_last||r.source_first||'—')}</td>
       <td>${r.telegram_user_id?'<span class="badge green">مربوط</span>':'—'}</td>
+      <td>${onlineStatus(r)}</td>
       <td>${n(r.spin_count)}</td>
       <td>${n(r.products_shown)}</td>
       <td>${n(r.paid_total)} ج</td>
