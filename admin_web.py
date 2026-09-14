@@ -22,6 +22,12 @@ except Exception:
 
 DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "admin_dashboard.html")
 WEB_APP_PATH = os.path.join(os.path.dirname(__file__), "web_app.html")
+MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "manifest.webmanifest")
+SERVICE_WORKER_PATH = os.path.join(os.path.dirname(__file__), "service-worker.js")
+APP_ICON_180_PATH = os.path.join(os.path.dirname(__file__), "app-icon-180.png")
+APP_ICON_192_PATH = os.path.join(os.path.dirname(__file__), "app-icon-192.png")
+APP_ICON_512_PATH = os.path.join(os.path.dirname(__file__), "app-icon-512.png")
+
 
 
 def _json_bytes(data):
@@ -295,6 +301,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self, path, content_type, cache_control="public, max-age=86400"):
+        try:
+            body = open(path, "rb").read()
+        except FileNotFoundError:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self._security_headers()
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", cache_control)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _read_json(self):
         length = int(self.headers.get("Content-Length", "0") or 0)
         try:
@@ -353,6 +374,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path in ("/app", "/wafr"):
             self._serve_html(WEB_APP_PATH)
+            return
+        if parsed.path == "/manifest.webmanifest":
+            self._serve_static(MANIFEST_PATH, "application/manifest+json; charset=utf-8", "no-cache")
+            return
+        if parsed.path == "/service-worker.js":
+            self._serve_static(SERVICE_WORKER_PATH, "application/javascript; charset=utf-8", "no-cache")
+            return
+        if parsed.path == "/app-icon-180.png":
+            self._serve_static(APP_ICON_180_PATH, "image/png", "public, max-age=604800")
+            return
+        if parsed.path == "/app-icon-192.png":
+            self._serve_static(APP_ICON_192_PATH, "image/png", "public, max-age=604800")
+            return
+        if parsed.path == "/app-icon-512.png":
+            self._serve_static(APP_ICON_512_PATH, "image/png", "public, max-age=604800")
             return
         if parsed.path == "/health":
             self._send_json(200, {"ok": True, "service": "wafr"})

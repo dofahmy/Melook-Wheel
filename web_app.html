@@ -7,6 +7,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>وفر كاش</title>
+
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/app-icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="وفر كاش">
+<meta name="theme-color" content="#f7faf8">
+
 <style>
 :root{font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;color:#101828;background:#f4f7f5;--ink:#111827;--muted:#667085;--soft:#f7f9f8;--green:#14804a;--green2:#ecfdf3;--gold:#f0b429}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fbf9 0,#f3f6f4 100%)}
@@ -65,13 +75,6 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
  .wrap.offers-mode{max-width:none}
  #loginCard{margin-top:8vh}
 }
-
-/* Center the single prize-result action button */
-@media(max-width:600px){
-  .lucky-actions{justify-content:center!important;grid-template-columns:1fr!important}
-  .lucky-actions .btn{width:min(320px,100%);margin-left:auto!important;margin-right:auto!important}
-}
-
 </style>
 </head>
 <body>
@@ -445,7 +448,7 @@ async function claimGoldenPrize(){
   const area=document.getElementById('prizeArea');
   try{
     const d=await api('/api/app/golden-claim',{method:'POST',body:JSON.stringify({spin_id:goldenSpinData.spin_id})});const x=d.data||{};
-    area.innerHTML=`<div class="prize-reveal">🎊 كسبت ${money(x.prize)} جنيه</div><div class="answer-result good">اتضافت الجائزة لرصيد وفر كاش. رصيدك دلوقتي ${money(x.gift_balance)} جنيه.</div><div class="gold-actions"><button class="btn" onclick="showGolden()">ابدأ جولة جديدة</button></div>`;
+    area.innerHTML=`<div class="prize-reveal">🎊 كسبت ${money(x.prize)} جنيه</div><div class="answer-result good">اتضافت الجائزة لرصيد وفر كاش. رصيدك دلوقتي ${money(x.gift_balance)} جنيه.</div><div class="gold-actions"><button class="btn" onclick="showGolden()">ابدأ جولة جديدة</button><button class="btn secondary" onclick="hideGolden()">رجوع للحساب</button></div>`;
     document.getElementById('balance').textContent=money(x.gift_balance);box.innerHTML='<span style="font-size:82px">🎊</span>';const hint=document.getElementById('openHint');if(hint)hint.style.display='none';goldenSpinData=null;
   }catch(e){area.innerHTML=`<div class="answer-result bad">${esc(e.message)}</div>`;box.classList.remove('disabled')}
   finally{goldenBusy=false}
@@ -505,6 +508,14 @@ async function logout(){
   location.reload();
 }
 loadMe();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/service-worker.js',{scope:'/'})
+      .catch(()=>{});
+  });
+}
+
 </script>
 </body>
 </html>

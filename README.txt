@@ -1,22 +1,21 @@
-Wafr Security Suspend v1
+Wafr Cash iOS/PWA package
 
-Implemented:
-- After 3 completed login+logout cycles in the same Cairo calendar day, the Web account is suspended automatically.
-- All active web sessions for that account are deleted immediately.
-- Suspended users cannot request OTP, login, or use an old browser session.
-- Customer message:
-  لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.
-- Admin has a new "⛔ الموقوفين" page with phone, suspend time, today's login/logout counters, and a Reactivate button.
-- Reactivation clears the suspension, resets today's counter, and requires a fresh login.
-- Reactivation sends a fresh OTP using the existing Authevo OTP flow.
+Upload these files to the GitHub repo root:
+- web_app.html
+- admin_web.py
+- manifest.webmanifest
+- service-worker.js
+- app-icon-180.png
+- app-icon-192.png
+- app-icon-512.png
 
-No extra WhatsApp Business setup is needed. Reactivation uses the same existing OTP provider.
+app-icon-1024.png is included as the master icon for future App Store / native-container work.
 
-Upload these 5 files:
-database.py
-admin_web.py
-web_auth.py
-admin_dashboard.html
-web_app.html
+After Railway deploy:
+1. Open https://melook-wheel-production.up.railway.app/app in Safari on iPhone.
+2. Tap Share.
+3. Tap Add to Home Screen.
+4. The Wafr Cash icon appears on the iPhone.
+5. Opening it uses standalone mode, without the normal Safari address bar.
 
-Telegram linking UI now includes: https://t.me/WafrCashBot and tells the customer to send /linkweb CODE.
+Existing APIs, OTP, suspend logic, Telegram linking, offers, wheel, redemption, and account logic are unchanged.
