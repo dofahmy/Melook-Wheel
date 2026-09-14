@@ -63,7 +63,10 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
         title = str(item.get("displayTitle") or item.get("dedupeString") or "").strip()
         price_block = item.get("buyingPrice") or {}
         price = _number(price_block.get("amount"))
-        epc = _number(item.get("expectedRevenuePerClick"))
+        raw_epc = item.get("expectedRevenuePerClick")
+        if raw_epc is None:
+            continue
+        epc = _number(raw_epc, default=-1.0)
         if len(asin) != 10 or not title or epc < 0:
             continue
 
@@ -108,24 +111,25 @@ def choose_product(
     products = load_products()
     excluded = excluded_asins or set()
 
-    # كل جولة من 5: 2 Low + 2 Medium + 1 High.
-    # بنعمل rotation حسب user_id عشان ترتيب الفئات مايبقاش متوقع،
-    # لكن يفضل العدد نفسه بالضبط داخل كل جولة.
-    mix = ("low", "medium", "low", "medium", "high")
+    # كل جولة من 5 أسئلة = منتج واحد من كل شريحة EPC:
+    # < 0.25 | 0.25–<0.75 | 0.75–<2 | 2–4 | >4
+    # نعمل rotation حسب user_id حتى لا يكون ترتيب الشرائح متوقعًا،
+    # مع الحفاظ على منتج واحد بالضبط من كل شريحة في كل جولة.
+    mix = ("very_low", "low", "medium", "high", "premium")
     offset = abs(int(user_id or 0)) % len(mix)
     tier = mix[(int(question_index) + offset) % len(mix)]
 
-    low_min = config.EGYPT_GOLDEN_LOW_MIN_EPC
-    low_max = config.EGYPT_GOLDEN_LOW_MAX_EPC
-    medium_max = config.EGYPT_GOLDEN_MEDIUM_MAX_EPC
-
     def in_tier(product: CatalogProduct) -> bool:
         epc = product.expected_revenue_per_click
+        if tier == "very_low":
+            return epc < 0.25
         if tier == "low":
-            return low_min <= epc < low_max
+            return 0.25 <= epc < 0.75
         if tier == "medium":
-            return low_max <= epc < medium_max
-        return epc >= medium_max
+            return 0.75 <= epc < 2.0
+        if tier == "high":
+            return 2.0 <= epc <= 4.0
+        return epc > 4.0
 
     eligible = [p for p in products if in_tier(p)]
     candidates = [p for p in eligible if p.asin not in excluded]
@@ -133,14 +137,10 @@ def choose_product(
     if candidates:
         return random.choice(candidates)
     if eligible:
-        # لو العميل شاف كل منتجات الفئة خلال اليوم، نسمح بإعادة الاستخدام
-        # داخل نفس الفئة بدل ما نقفز لفئة أغلى.
         return random.choice(eligible)
 
-    # Fallback لو حدود ENV اتضبطت بشكل خلّى فئة فاضية.
     remaining = [p for p in products if p.asin not in excluded] or products
     return random.choice(remaining)
-
 
 def _unique_timestamp_ms() -> int:
     global _last_link_timestamp
