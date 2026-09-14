@@ -151,6 +151,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بداية البوت الحالية: مصر فقط — ترحيب ثم عجلة العروض الذهبية مباشرة."""
     user = update.effective_user
     database.upsert_user(user.id, user.username)
+    database.set_user_activity_now(user.id)
     database.set_user_program(user.id, "egypt")
 
     # لو قناة مصر متضبطة، نتأكد من الاشتراك الأول.
@@ -299,6 +300,10 @@ async def _send_offers_welcome_message(context, chat_id: int):
 
 
 async def buyer_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     query = update.callback_query
     await query.answer()
     buyer_type = query.data.split(":")[1]
@@ -356,6 +361,7 @@ async def _assign_new_tag(context, chat_id: int, user_id: int, program: str):
 async def account_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شاشة حساب عميل مصر: الرصيد، حالة الجولة، وسجل الاستبدالات بالأكواد."""
     user = update.effective_user
+    database.set_user_activity_now(user.id)
     row = database.get_user(user.id)
 
     if not row:
@@ -482,6 +488,10 @@ async def mytag(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def wheel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """عجلة الحظ - برنامج السعودية بس (لفة واحدة بعد التفعيل). عملاء مصر
     بقى عندهم عجلة بطاقات الهدايا بدل النظام القديم ده."""
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or not row["program"]:
@@ -510,6 +520,10 @@ async def wheel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بيستقبل بيانات من أي صفحة Web App (نتيجة العجلة، أو تأكيد فتح عرض ذهبي)."""
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     raw = update.effective_message.web_app_data.data
     try:
@@ -613,6 +627,10 @@ async def join_egypt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """العميل يطلب استبدال الرصيد؛ الرصيد ينتقل لطلب مالي مستقل بدل تصفيره وقت الدفع."""
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or row["program"] != "egypt":
@@ -1278,12 +1296,20 @@ async def handle_new_deal_post(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def offers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بيوري للعميل العروض اللي لسه ما شافهاش."""
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     await _send_offers_flow(context, user.id, user.username)
 
 
 async def show_offers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لما العميل يدوس زرار "اعرض آخر عروض أمازون" جوه رسالة الترحيب."""
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -1298,6 +1324,10 @@ async def start_shopping_callback(update: Update, context: ContextTypes.DEFAULT_
     2) بيتفتحله صفحة عروض أمازون على طول بتاجه (أو بتاج عام احتياطي لو
        لسه في الطابور)
     """
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
@@ -1427,6 +1457,10 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     database.release_tag_by_user(user.id)
     database.deactivate_user(user.id)
@@ -1857,6 +1891,10 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------------- ربط حساب Web App بحساب Telegram ----------------
 async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        database.set_user_activity_now(update.effective_user.id)
+    except Exception:
+        pass
     user = update.effective_user
     if not context.args:
         await update.message.reply_text(

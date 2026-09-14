@@ -1595,7 +1595,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
     like = f"%{search.lstrip('@')}%"
     with get_conn() as conn:
         return conn.execute(f"""
-            SELECT u.user_id, u.username, u.is_active, u.gift_balance,
+            SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at,
                    wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id,
                    COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
