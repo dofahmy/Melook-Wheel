@@ -10,7 +10,8 @@
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import config
 
@@ -1512,24 +1513,59 @@ def pop_sent_offer_messages(user_id: int) -> list[int]:
 
 # ---------- تقارير الـ Back Office ----------
 
-def _period_where(column: str, period: str) -> tuple[str, list[str]]:
-    """SQL fragment + params لفلاتر اليوم / 7 أيام / 30 يوم / كل الوقت."""
+CAIRO_TZ = ZoneInfo("Africa/Cairo")
+
+
+def _cairo_date_range_utc(date_from: str, date_to: str) -> tuple[str, str]:
+    """حوّل تاريخين بالتوقيت المصري إلى حدود UTC: البداية شاملة والنهاية غير شاملة."""
+    start_day = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=CAIRO_TZ)
+    end_day = (datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CAIRO_TZ)
+    return (
+        start_day.astimezone(timezone.utc).replace(tzinfo=None).isoformat(),
+        end_day.astimezone(timezone.utc).replace(tzinfo=None).isoformat(),
+    )
+
+
+def _period_where(column: str, period: str, date_from: str | None = None, date_to: str | None = None) -> tuple[str, list[str]]:
+    """SQL fragment + params لفلاتر اليوم / أمس / 7 أيام / 30 يوم / فترة مخصصة / كل الوقت، بتوقيت القاهرة."""
     p = (period or "all").lower()
+    cairo_now = datetime.now(CAIRO_TZ)
+
     if p == "today":
-        return f"date({column}) = date('now')", []
+        d = cairo_now.strftime("%Y-%m-%d")
+        start, end = _cairo_date_range_utc(d, d)
+        return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
+    if p == "yesterday":
+        d = (cairo_now - timedelta(days=1)).strftime("%Y-%m-%d")
+        start, end = _cairo_date_range_utc(d, d)
+        return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
+    if p == "custom" and date_from and date_to:
+        try:
+            if date_from > date_to:
+                date_from, date_to = date_to, date_from
+            start, end = _cairo_date_range_utc(date_from, date_to)
+            return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
+        except (TypeError, ValueError):
+            return "1=0", []
     if p == "7d":
-        return f"datetime({column}) >= datetime('now', '-7 days')", []
+        d1 = (cairo_now - timedelta(days=6)).strftime("%Y-%m-%d")
+        d2 = cairo_now.strftime("%Y-%m-%d")
+        start, end = _cairo_date_range_utc(d1, d2)
+        return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
     if p == "30d":
-        return f"datetime({column}) >= datetime('now', '-30 days')", []
+        d1 = (cairo_now - timedelta(days=29)).strftime("%Y-%m-%d")
+        d2 = cairo_now.strftime("%Y-%m-%d")
+        start, end = _cairo_date_range_utc(d1, d2)
+        return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
     return "1=1", []
 
 
-def get_admin_report_summary(period: str = "all") -> dict:
-    """ملخص مالي وتشغيلي للنظام كله."""
-    q_where, _ = _period_where("created_at", period)
-    s_where, _ = _period_where("created_at", period)
-    r_req_where, _ = _period_where("requested_at", period)
-    r_paid_where, _ = _period_where("paid_at", period)
+def get_admin_report_summary(period: str = "all", date_from: str | None = None, date_to: str | None = None) -> dict:
+    """ملخص مالي وتشغيلي للنظام كله، مع دعم فترة تاريخ مخصصة."""
+    q_where, q_params = _period_where("created_at", period, date_from, date_to)
+    s_where, s_params = _period_where("created_at", period, date_from, date_to)
+    r_req_where, req_params = _period_where("requested_at", period, date_from, date_to)
+    r_paid_where, paid_params = _period_where("paid_at", period, date_from, date_to)
     with get_conn() as conn:
         users = conn.execute(
             "SELECT COUNT(*) AS c FROM users WHERE program='egypt'"
@@ -1543,20 +1579,20 @@ def get_admin_report_summary(period: str = "all") -> dict:
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
             FROM golden_questions WHERE {q_where}
-        """).fetchone()
+        """, q_params).fetchone()
         spins = conn.execute(f"""
             SELECT COUNT(*) AS spin_count,
                    COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
             FROM lucky_spins WHERE {s_where}
-        """).fetchone()
+        """, s_params).fetchone()
         requested = conn.execute(f"""
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE {r_req_where}
-        """).fetchone()
+        """, req_params).fetchone()
         paid = conn.execute(f"""
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE status='paid' AND {r_paid_where}
-        """).fetchone()
+        """, paid_params).fetchone()
         pending = conn.execute("""
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE status IN ('pending','processing')

@@ -613,8 +613,10 @@ class Handler(BaseHTTPRequestHandler):
 
         qs = parse_qs(parsed.query)
         period = (qs.get("period", ["all"])[0] or "all")
+        date_from = (qs.get("from", [""])[0] or "").strip()
+        date_to = (qs.get("to", [""])[0] or "").strip()
         if parsed.path == "/api/admin/summary":
-            self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period)})
+            self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period, date_from, date_to)})
             return
         if parsed.path == "/api/admin/redemptions":
             rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
