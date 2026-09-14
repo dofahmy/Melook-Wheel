@@ -448,7 +448,7 @@ async function claimGoldenPrize(){
   const area=document.getElementById('prizeArea');
   try{
     const d=await api('/api/app/golden-claim',{method:'POST',body:JSON.stringify({spin_id:goldenSpinData.spin_id})});const x=d.data||{};
-    area.innerHTML=`<div class="prize-reveal">🎊 كسبت ${money(x.prize)} جنيه</div><div class="answer-result good">اتضافت الجائزة لرصيد وفر كاش. رصيدك دلوقتي ${money(x.gift_balance)} جنيه.</div><div class="gold-actions"><button class="btn" onclick="showGolden()">ابدأ جولة جديدة</button><button class="btn secondary" onclick="hideGolden()">رجوع للحساب</button></div>`;
+    area.innerHTML=`<div class="prize-reveal">🎊 كسبت ${money(x.prize)} جنيه</div><div class="answer-result good">اتضافت الجائزة لرصيد وفر كاش. رصيدك دلوقتي ${money(x.gift_balance)} جنيه.</div><div class="gold-actions"><button class="btn" onclick="showGolden()">ابدأ جولة جديدة</button></div>`;
     document.getElementById('balance').textContent=money(x.gift_balance);box.innerHTML='<span style="font-size:82px">🎊</span>';const hint=document.getElementById('openHint');if(hint)hint.style.display='none';goldenSpinData=null;
   }catch(e){area.innerHTML=`<div class="answer-result bad">${esc(e.message)}</div>`;box.classList.remove('disabled')}
   finally{goldenBusy=false}
