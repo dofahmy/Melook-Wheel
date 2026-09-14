@@ -947,7 +947,7 @@ MAX_CACHED_GOLDEN_DEALS = 50
 GOLDEN_TARGET_COUNT = config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
 
 # ---------- عجلة الحظ (Lucky Wheel) - اختيار الجايزة من الـ backend ----------
-# القيم والاحتمالات دي متفق عليها معاكِ: EV = 1.28 جنيه لكل لفة (RTP = 32%
+# القيم والاحتمالات دي متفق عليها معاك: EV = 1.28 جنيه لكل لفة (RTP = 32%
 # من قيمة 4 جنيه لكل لفة = 5 أسئلة × 0.80 جنيه للسؤال)
 LUCKY_WHEEL_PRIZES = [0.50, 1, 2, 3, 5, 10]
 LUCKY_WHEEL_WEIGHTS = [46, 27, 16, 7, 3, 1]

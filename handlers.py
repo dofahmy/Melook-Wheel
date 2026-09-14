@@ -111,7 +111,7 @@ def _egypt_customer_keyboard(user_id: int | None = None):
 
 def _prime_keyboard(keyword: str):
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("✅ اضغطي هنا وسجّلي في برايم", url=_prime_link(keyword))]]
+        [[InlineKeyboardButton("✅ اضغط هنا وسجّل في برايم", url=_prime_link(keyword))]]
     )
 
 
@@ -193,7 +193,7 @@ async def _continue_start_from_query(update, context, user_id, program):
     if not subscribed:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"لازم الأول تكوني مشتركة في قناة {channel} عشان تفعّلي البوت.\nبعد الاشتراك ابعتي /start تاني.",
+            text=f"لازم الأول تكون مشترك في قناة {channel} عشان تفعّل البوت.\nبعد الاشتراك ابعت /start تاني.",
         )
         return
     await _proceed_program_flow(context, user_id, chat_id, program)
@@ -204,7 +204,7 @@ async def _continue_start(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     subscribed = await _is_subscribed(context, user_id, channel)
     if not subscribed:
         await update.message.reply_text(
-            f"لازم الأول تكوني مشتركة في قناة {channel} عشان تفعّلي البوت.\nبعد الاشتراك ابعتي /start تاني."
+            f"لازم الأول تكون مشترك في قناة {channel} عشان تفعّل البوت.\nبعد الاشتراك ابعت /start تاني."
         )
         return
     await _proceed_program_flow(context, user_id, update.effective_chat.id, program)
@@ -217,7 +217,7 @@ async def _proceed_program_flow(context, user_id: int, chat_id: int, program: st
         if existing["verified"]:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="حسابك مفعّل بالفعل ✅ اشتراكك في برايم اتأكد، وهتدخلي السحب على الهدايا.",
+                text="حسابك مفعّل بالفعل ✅ اشتراكك في برايم اتأكد، وهتدخل السحب على الهدايا.",
             )
             return
         if existing["tag_id"]:
@@ -344,7 +344,7 @@ async def _assign_new_tag(context, chat_id: int, user_id: int, program: str):
             text=(
                 "أهلاً بيك! 🎉\n"
                 "دوس على الزرار تحت وسجّل اشتراكك في أمازون برايم.\n"
-                "بعد ما تخلّصي، هنراجع اشتراكك ونفعّل حسابك، وتبقي داخلة في سحوبات الهدايا 🎁\n\n"
+                "بعد ما تخلّص، هنراجع اشتراكك ونفعّل حسابك، وتبقى داخل في سحوبات الهدايا 🎁\n\n"
                 "⚠️ الزرار ده مخصص لك وحدك — لو اتفوّت لحد تاني واستخدمه هو، انت اللي هتخسر الفرصة."
             ),
             reply_markup=_prime_keyboard(tag["keyword"]),
@@ -443,12 +443,12 @@ async def mytag(update: Update, context: ContextTypes.DEFAULT_TYPE):
     database.set_user_activity_now(user.id)
     row = database.get_user(user.id)
     if not row or not row["program"]:
-        await update.message.reply_text("لسه ما فعّلتيش حسابك. ابعتي /start الأول.")
+        await update.message.reply_text("لسه ما فعّلتش حسابك. ابعت /start الأول.")
         return
 
     if row["program"] == "ksa":
         if row["verified"]:
-            await update.message.reply_text("حسابك مفعّل ✅ وداخلة في سحوبات الهدايا.")
+            await update.message.reply_text("حسابك مفعّل ✅ وداخل في سحوبات الهدايا.")
             return
         if row["tag_id"]:
             keyword = database.get_user_tag_keyword(user.id)
@@ -495,7 +495,7 @@ async def wheel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or not row["program"]:
-        await update.message.reply_text("لسه ما فعّلتيش حسابك. ابعتي /start الأول.")
+        await update.message.reply_text("لسه ما فعّلتش حسابك. ابعت /start الأول.")
         return
 
     if row["program"] == "ksa":
@@ -737,7 +737,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚙️ لوحة إدارة وفر كاش\n\n"
         f"⏳ طلبات بانتظار الدفع: {summary['pending_count']}\n"
         f"💰 إجمالي المستحق حاليًا: {_format_egp(summary['pending_total'])} جنيه\n\n"
-        "اختاري اللي عاوزة تعمليه:"
+        "اختار اللي عاوز تعمله:"
     )
     if not _admin_webapp_url():
         text += "\n\n⚠️ لوحة الويب لسه محتاجة Railway Public Domain."
@@ -777,7 +777,7 @@ async def _show_pending_redeems(query, page: int = 0):
     buttons.append([InlineKeyboardButton("🏠 لوحة الإدارة", callback_data="admin:home")])
 
     await query.edit_message_text(
-        f"💰 طلبات الاستبدال المعلقة\nعددها: {total}\nالصفحة {page+1} من {max_page+1}\n\nدوسي على أي عميل لفتح الطلب:",
+        f"💰 طلبات الاستبدال المعلقة\nعددها: {total}\nالصفحة {page+1} من {max_page+1}\n\nدوس على أي عميل لفتح الطلب:",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -796,7 +796,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ لوحة إدارة وفر كاش\n\n"
             f"⏳ طلبات بانتظار الدفع: {summary['pending_count']}\n"
             f"💰 إجمالي المستحق حاليًا: {_format_egp(summary['pending_total'])} جنيه\n\n"
-            "اختاري اللي عاوزة تعمليه:",
+            "اختار اللي عاوز تعمله:",
             reply_markup=_admin_home_markup(),
         )
         return
@@ -886,7 +886,7 @@ async def markpaid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _require_admin(update):
         return
     if not context.args:
-        await update.message.reply_text("الأفضل استخدمي /admin ثم دوسي ✅ تم الدفع.\nأو: /markpaid <آيدي العميل>")
+        await update.message.reply_text("الأفضل استخدم /admin ثم دوس ✅ تم الدفع.\nأو: /markpaid <آيدي العميل>")
         return
     try:
         target_id = int(context.args[0])
@@ -1554,7 +1554,7 @@ async def addtags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [ln.strip() for ln in text.split("\n")[1:] if ln.strip()]
     if not lines:
         await update.message.reply_text(
-            "الاستخدام: اكتبي /addtags وتحتها (اختياري) ksa أو egypt في أول سطر، وبعدها كل تاج في سطر لوحده"
+            "الاستخدام: اكتب /addtags وتحتها (اختياري) ksa أو egypt في أول سطر، وبعدها كل تاج في سطر لوحده"
         )
         return
     program = "egypt"
@@ -1596,8 +1596,8 @@ async def listtags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    برنامج السعودية بس: لما تشوفي عمولة/تحويل نزلتلك على تاج معين في تقرير أمازون،
-    ابعتي /verify <keyword> - هيفعّل صاحب التاج ده، ويرجع التاج لأول واحد
+    برنامج السعودية بس: لما تشوف عمولة/تحويل نزلتلك على تاج معين في تقرير أمازون،
+    ابعت /verify <keyword> - هيفعّل صاحب التاج ده، ويرجع التاج لأول واحد
     مستني في الطابور تلقائيًا.
     """
     if not _require_admin(update):
@@ -1624,7 +1624,7 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=holder["user_id"],
-            text="🎉 مبروك! اتأكد اشتراكك في أمازون برايم وحسابك دلوقتي مفعّل بالكامل.\nهتدخلي سحوبات الهدايا القادمة 🎁",
+            text="🎉 مبروك! اتأكد اشتراكك في أمازون برايم وحسابك دلوقتي مفعّل بالكامل.\nهتدخل سحوبات الهدايا القادمة 🎁",
         )
         keyboard = _wheel_keyboard()
         if keyboard:
@@ -1646,7 +1646,7 @@ async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=next_user_id,
                     text=(
                         "دورك جه! 🎉 دوس على الزرار تحت وسجّل اشتراكك في أمازون برايم.\n"
-                        "⚠️ الزرار ده مخصص ليكي وحدك — متبعتيهوش لحد تاني."
+                        "⚠️ الزرار ده مخصص ليك وحدك — متبعتوش لحد تاني."
                     ),
                     reply_markup=_prime_keyboard(tag["keyword"]),
                 )
@@ -1765,7 +1765,7 @@ async def removeuser(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if not context.args:
         await update.message.reply_text(
-            "الاستخدام: /removeuser <آيدي العميل>\nخدي الآيدي من /verified أو /stats"
+            "الاستخدام: /removeuser <آيدي العميل>\nخد الآيدي من /verified أو /stats"
         )
         return
     try:
@@ -1868,7 +1868,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بعت رسالة لعميل واحد بعينه بآيدي حسابه على تليجرام (شوفيه من /verified أو /listusers)."""
+    """بعت رسالة لعميل واحد بعينه بآيدي حسابه على تليجرام (شوفه من /verified أو /listusers)."""
     if not _require_admin(update):
         return
     if len(context.args) < 2:
@@ -1880,7 +1880,7 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         target_id = int(context.args[0])
     except ValueError:
-        await update.message.reply_text("آيدي العميل لازم يكون رقم. خديه من /verified أو /listusers.")
+        await update.message.reply_text("آيدي العميل لازم يكون رقم. خده من /verified أو /listusers.")
         return
     text = " ".join(context.args[1:])
     try:
@@ -1898,8 +1898,8 @@ async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not context.args:
         await update.message.reply_text(
-            "افتحي حساب وفر كاش من الموقع، اضغطي «اعمل كود ربط Telegram»، "
-            "وبعدين ابعتي هنا:\n/linkweb الكود"
+            "افتح حساب وفر كاش من الموقع، اضغط «اعمل كود ربط Telegram»، "
+            "وبعدين ابعت هنا:\n/linkweb الكود"
         )
         return
     code = context.args[0].strip()

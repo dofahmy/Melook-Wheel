@@ -87,7 +87,7 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
       <input id="phone" class="input" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" />
       <button id="sendBtn" class="btn" onclick="sendOtp()">إرسال كود التحقق على WhatsApp</button>
       <button class="btn secondary" onclick="useExistingOtp()">وصلني كود بالفعل</button>
-      <p class="note">لو لسه ماوصلكيش كود اضغطي «إرسال كود التحقق». ولو خدمة العملاء أعادت تفعيل حسابك والكود وصلك بالفعل، اكتبي رقمك واضغطي «وصلني كود بالفعل».</p>
+      <p class="note">لو لسه ماوصلكش كود اضغط «إرسال كود التحقق». ولو خدمة العملاء أعادت تفعيل حسابك والكود وصلك بالفعل، اكتب رقمك واضغط «وصلني كود بالفعل».</p>
     </div>
     <div id="otpStep" class="hide">
       <label>اكتب كود التحقق</label>
@@ -157,7 +157,7 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 
           <div id="linkResult" class="hide" style="margin-top:14px">
             <div id="linkCode" class="code"></div>
-            <p class="note" style="text-align:center">ابعتي للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
+            <p class="note" style="text-align:center">ابعت للبوت:<br><b id="linkCommand" dir="ltr"></b></p>
           </div>
         </div>
       </div>
@@ -205,9 +205,9 @@ let currentPhone='';
 function msg(text,ok=false){const e=document.getElementById('authMsg');e.textContent=text;e.className='msg '+(ok?'ok':'err')}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'};const r=await fetch(path,opts);let d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(d.error||'حصل خطأ');return d}
 function openOtpStep(phone,messageText){currentPhone=phone;document.getElementById('phoneStep').classList.add('hide');document.getElementById('otpStep').classList.remove('hide');document.getElementById('otp').focus();msg(messageText||'',true)}
-function useExistingOtp(){const phone=document.getElementById('phone').value.trim();if(!phone){msg('اكتبي رقم الموبايل الأول');return}openOtpStep(phone,'اكتبي الكود اللي وصلك على WhatsApp.')}
-async function sendOtp(){const b=document.getElementById('sendBtn');b.disabled=true;try{const phone=document.getElementById('phone').value.trim();await api('/api/auth/send-otp',{method:'POST',body:JSON.stringify({phone,source:src})});openOtpStep(phone,'الكود اتبعت على WhatsApp. اكتبيه هنا.')}catch(e){msg(e.message)}finally{b.disabled=false}}
-async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabled=true;try{const code=document.getElementById('otp').value.trim();const phone=currentPhone||document.getElementById('phone').value.trim();if(!phone){msg('اكتبي رقم الموبايل الأول');return}await api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone,code,source:src})});await loadMe()}catch(e){msg(e.message)}finally{b.disabled=false}}
+function useExistingOtp(){const phone=document.getElementById('phone').value.trim();if(!phone){msg('اكتب رقم الموبايل الأول');return}openOtpStep(phone,'اكتب الكود اللي وصلك على WhatsApp.')}
+async function sendOtp(){const b=document.getElementById('sendBtn');b.disabled=true;try{const phone=document.getElementById('phone').value.trim();await api('/api/auth/send-otp',{method:'POST',body:JSON.stringify({phone,source:src})});openOtpStep(phone,'الكود اتبعت على WhatsApp. اكتبه هنا.')}catch(e){msg(e.message)}finally{b.disabled=false}}
+async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabled=true;try{const code=document.getElementById('otp').value.trim();const phone=currentPhone||document.getElementById('phone').value.trim();if(!phone){msg('اكتب رقم الموبايل الأول');return}await api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone,code,source:src})});await loadMe()}catch(e){msg(e.message)}finally{b.disabled=false}}
 function backPhone(){document.getElementById('otpStep').classList.add('hide');document.getElementById('phoneStep').classList.remove('hide');msg('')}
 async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');syncLoggedInShell(true);const bal=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');const aid='WAFR-'+x.account_id;document.getElementById('balance').textContent=bal;document.getElementById('accountId').textContent=aid;document.getElementById('accountId2').textContent=aid;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;const first=sourceNames[(x.source_first||'direct').toLowerCase()]||x.source_first||'دخول مباشر';const last=sourceNames[(x.source_last||'direct').toLowerCase()]||x.source_last||'دخول مباشر';document.getElementById('sourceText').textContent='أول مرة وصلتي لنا من: '+first+' • آخر دخول من: '+last;if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide');syncLoggedInShell(false)}}
 async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
@@ -224,7 +224,7 @@ async function loadOffers({silent=false}={}){
     const d=await api('/api/app/offers'); const items=d.data||[];
     const now=new Date();
     status.textContent=(d.message?d.message+' • ':'')+'آخر تحديث '+now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-    if(!items.length){list.innerHTML='<div class="empty-box">مفيش عروض متاحة دلوقتي. ارجعي تاني بعد شوية 🔥</div>';return}
+    if(!items.length){list.innerHTML='<div class="empty-box">مفيش عروض متاحة دلوقتي. ارجع تاني بعد شوية 🔥</div>';return}
     list.innerHTML=items.map(x=>{
       const p=x.product||{};
       const rawCaption=x.caption||'';

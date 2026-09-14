@@ -405,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/me":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             session_token = self._session_token()
             headers = {}
@@ -430,7 +430,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/deal-image":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             qs = parse_qs(parsed.query)
             try:
@@ -487,7 +487,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/offers":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             user_id = int(account["user_id"])
             rows, mode, seen_up_to = database.list_web_offers_for_user(user_id, 20)
@@ -546,7 +546,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/golden-status":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             user_id = int(account["user_id"])
             pending = database.get_pending_lucky_spin(user_id)
@@ -576,7 +576,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/golden-question":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             try:
                 data = _golden_question_payload(int(account["user_id"]))
@@ -590,7 +590,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/redemption-status":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             data = database.get_web_redemption_status(int(account["user_id"]))
             self._send_json(200, {"ok": True, "data": data})
@@ -599,7 +599,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/account-history":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             data = database.get_web_account_history(int(account["user_id"]), 20)
             self._send_json(200, {"ok": True, "data": data})
@@ -693,7 +693,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/send-otp":
             phone = web_auth.normalize_egypt_phone(str(payload.get("phone") or ""))
             if not phone:
-                self._send_json(400, {"ok": False, "error": "اكتبي رقم موبايل مصري صحيح"})
+                self._send_json(400, {"ok": False, "error": "اكتب رقم موبايل مصري صحيح"})
                 return
             existing = database.get_web_account_by_phone(phone)
             if existing and int(existing.get("is_suspended") or 0):
@@ -751,7 +751,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/link-code":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             if account.get("telegram_user_id"):
                 self._send_json(409, {"ok": False, "error": "Telegram مربوط بالفعل بالحساب"})
@@ -764,7 +764,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/golden-answer":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             try:
                 question_id = int(payload.get("question_id") or 0)
@@ -794,7 +794,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/golden-claim":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             try:
                 spin_id = int(payload.get("spin_id") or 0)
@@ -819,7 +819,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app/redeem":
             account = self._auth_web()
             if not account:
-                self._send_json(401, {"ok": False, "error": "محتاج تسجلي دخول"})
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             user_id = int(account["user_id"])
             request = database.create_redemption_request(user_id)
@@ -921,7 +921,7 @@ class Handler(BaseHTTPRequestHandler):
                 request_id = 0
             code = str(payload.get("gift_code") or "").strip()
             if not request_id or not code:
-                self._send_json(400, {"ok": False, "error": "اكتبي كود بطاقة الهدية"})
+                self._send_json(400, {"ok": False, "error": "اكتب كود بطاقة الهدية"})
                 return
             r = database.reserve_redemption_for_send(request_id, code)
             if not r:
