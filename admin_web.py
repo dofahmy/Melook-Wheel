@@ -624,7 +624,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/admin/customers":
             search = qs.get("search", [""])[0]
-            rows = [dict(x) for x in database.list_customer_reports(period, search)]
+            rows = [dict(x) for x in database.list_customer_reports(period, search, date_from=date_from, date_to=date_to)]
             self._send_json(200, {"ok": True, "data": rows})
             return
         if parsed.path == "/api/admin/customer":
@@ -652,8 +652,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
-            rows = [dict(x) for x in database.list_central_customers(period, search)]
+            rows = [dict(x) for x in database.list_central_customers(period, search, date_from=date_from, date_to=date_to)]
             self._send_json(200, {"ok": True, "data": rows})
+            return
+        if parsed.path == "/api/admin/customer-list-stats":
+            self._send_json(200, {"ok": True, "data": database.get_customer_list_stats(period, date_from, date_to)})
             return
         if parsed.path == "/api/admin/funnel":
             self._send_json(200, {"ok": True, "data": database.get_admin_funnel(period)})

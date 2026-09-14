@@ -1624,14 +1624,16 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         }
 
 
-def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0):
-    q_where, _ = _period_where("g.created_at", period)
-    s_where, _ = _period_where("ls.created_at", period)
+def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0, date_from: str | None = None, date_to: str | None = None):
+    """قائمة العملاء. فلتر الفترة هنا معناه: العملاء الجدد الذين انضموا في الفترة،
+    بينما أرقام النشاط/اللفات/المنتجات المعروضة في الصف تظل إجماليات العميل حتى الآن.
+    """
+    joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
     search = (search or "").strip()
     like = f"%{search.lstrip('@')}%"
     with get_conn() as conn:
         return conn.execute(f"""
-            SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at,
+            SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at, u.joined_at,
                    wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id,
                    COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
@@ -1646,15 +1648,15 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
             FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             LEFT JOIN (
-                SELECT g.user_id, COUNT(*) AS products_shown,
-                       SUM(g.epc) AS expected_revenue,
-                       SUM(CASE WHEN g.answered=1 AND g.was_correct=1 THEN g.reward_value ELSE 0 END) AS product_rewards
-                FROM golden_questions g WHERE {q_where} GROUP BY g.user_id
+                SELECT user_id, COUNT(*) AS products_shown,
+                       SUM(epc) AS expected_revenue,
+                       SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END) AS product_rewards
+                FROM golden_questions GROUP BY user_id
             ) q ON q.user_id=u.user_id
             LEFT JOIN (
-                SELECT ls.user_id, COUNT(*) AS spin_count,
-                       SUM(CASE WHEN ls.status='claimed' THEN ls.prize ELSE 0 END) AS claimed_prizes
-                FROM lucky_spins ls WHERE {s_where} GROUP BY ls.user_id
+                SELECT user_id, COUNT(*) AS spin_count,
+                       SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END) AS claimed_prizes
+                FROM lucky_spins GROUP BY user_id
             ) s ON s.user_id=u.user_id
             LEFT JOIN (
                 SELECT user_id,
@@ -1664,10 +1666,29 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
                 FROM redemption_requests GROUP BY user_id
             ) r ON r.user_id=u.user_id
             WHERE u.program='egypt'
+              AND {joined_where}
               AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ?)
-            ORDER BY expected_revenue DESC, u.user_id DESC
+            ORDER BY CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 0 ELSE 1 END,
+                     datetime(u.last_activity_at) DESC, datetime(u.joined_at) DESC, u.user_id DESC
             LIMIT ? OFFSET ?
-        """, (search, like, like, like, int(limit), int(offset))).fetchall()
+        """, (*joined_params, search, like, like, like, int(limit), int(offset))).fetchall()
+
+
+def get_customer_list_stats(period: str = "all", date_from: str | None = None, date_to: str | None = None) -> dict:
+    """عدد العملاء الجدد في الفترة + عدد الموجودين Online الآن (آخر نشاط خلال 5 دقائق)."""
+    joined_where, joined_params = _period_where("joined_at", period, date_from, date_to)
+    with get_conn() as conn:
+        new_count = conn.execute(
+            f"SELECT COUNT(*) AS c FROM users WHERE program='egypt' AND {joined_where}",
+            joined_params,
+        ).fetchone()["c"] or 0
+        online_now = conn.execute("""
+            SELECT COUNT(*) AS c FROM users
+            WHERE program='egypt' AND last_activity_at IS NOT NULL
+              AND datetime(last_activity_at) >= datetime('now','-5 minutes')
+        """).fetchone()["c"] or 0
+        total = conn.execute("SELECT COUNT(*) AS c FROM users WHERE program='egypt'").fetchone()["c"] or 0
+        return {"new_customers": int(new_count), "online_now": int(online_now), "total_customers": int(total)}
 
 
 def get_customer_report(user_id: int, period: str = "all") -> dict | None:
@@ -2477,9 +2498,9 @@ def get_central_admin_summary(period: str = "all") -> dict:
         }
 
 
-def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0):
-    """نفس تقرير العملاء لكن مع هوية المنصة والموبايل ومصدر العميل."""
-    return list_customer_reports(period, search, limit, offset)
+def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0, date_from: str | None = None, date_to: str | None = None):
+    """قائمة العملاء المركزية؛ الفترة تخص تاريخ انضمام العميل."""
+    return list_customer_reports(period, search, limit, offset, date_from, date_to)
 
 
 
