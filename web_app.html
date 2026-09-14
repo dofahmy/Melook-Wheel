@@ -2,7 +2,10 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
+<meta name="theme-color" content="#f8fbf9" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>وفر كاش</title>
 <style>
 :root{font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;color:#101828;background:#f4f7f5;--ink:#111827;--muted:#667085;--soft:#f7f9f8;--green:#14804a;--green2:#ecfdf3;--gold:#f0b429}
@@ -41,6 +44,27 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 
 
 .redeem-box{max-width:650px;margin:0 auto;text-align:right}.redeem-balance{background:linear-gradient(135deg,#101828,#1d2939);color:#fff;border-radius:20px;padding:22px;margin:10px 0 16px}.redeem-balance .muted{color:#cbd5e1;font-size:14px}.redeem-amount{font-size:38px;font-weight:900;margin:5px 0}.redeem-amount small{font-size:16px}.redeem-note{background:#fffaeb;border:1px solid #fedf89;color:#7a2e0e;border-radius:14px;padding:12px;line-height:1.7;margin:12px 0}.redeem-request{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.status-pill{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.status-pending{background:#fff4e5;color:#b54708}.status-processing{background:#eef4ff;color:#3538cd}.status-paid{background:#ecfdf3;color:#027a48}.stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.stat-box{background:#fff;border:1px solid #e9ecef;border-radius:16px;padding:14px}.stat-box span{display:block;color:#667085;font-size:12px}.stat-box b{display:block;font-size:22px;margin-top:4px}.history-card{background:#fff;border:1px solid #e9ecef;border-radius:18px;padding:14px;margin:12px 0;text-align:right}.history-card h3{margin:0 0 8px}.history-row{padding:11px 0;border-bottom:1px solid #f0f0f0}.history-row:last-child{border-bottom:0}.gift-code-view{background:#f4f3ff;border:1px dashed #7f56d9;border-radius:10px;padding:12px;margin:10px 0 6px;font-family:monospace;font-weight:900;direction:ltr;text-align:center;user-select:all;cursor:pointer}.redeem-delivery{background:#fffaf0;border:1px solid #f2d59b;border-radius:14px;padding:14px;margin-top:10px;line-height:1.85}.redeem-delivery .redeem-success{font-weight:800;color:#027a48;margin-bottom:8px}.redeem-link{display:block;text-align:center;background:#101828;color:#fff;text-decoration:none;border-radius:12px;padding:12px 14px;margin-top:12px;font-weight:800}.copy-hint{text-align:center;color:#667085;font-size:13px;margin-top:4px}.empty-history{color:#667085;padding:14px;text-align:center}@media(max-width:520px){.stats-grid{grid-template-columns:1fr 1fr}.redeem-amount{font-size:32px}}
+
+/* ===== Mobile App UI ===== */
+:root{--app-nav-h:74px}
+.mobile-bottom-nav{display:none}
+@media(max-width:600px){
+ body{background:#f5f7f6;-webkit-tap-highlight-color:transparent}
+ .wrap{width:100%;max-width:none;padding:calc(10px + env(safe-area-inset-top)) 14px calc(var(--app-nav-h) + 20px + env(safe-area-inset-bottom))}
+ .mobile-bottom-nav{position:fixed;z-index:1000;right:0;left:0;bottom:0;height:calc(var(--app-nav-h) + env(safe-area-inset-bottom));padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);border-top:1px solid #e6ebe8;box-shadow:0 -8px 28px rgba(16,24,40,.08);backdrop-filter:blur(18px);grid-template-columns:repeat(5,1fr);direction:rtl}
+ body.logged-in .mobile-bottom-nav{display:grid}
+ .nav-btn{border:0;background:transparent;color:#667085;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:inherit;font-size:11px;font-weight:800;border-radius:14px}
+ .nav-btn .nav-ico{font-size:21px}.nav-btn.active{color:#087a4b;background:#effaf4}
+ #accountCard.app-subscreen>.hero,#accountCard.app-subscreen>.section-title,#accountCard.app-subscreen>.actions,#accountCard.app-subscreen>#accountDetails,#accountCard.app-subscreen>section.card,#accountCard.app-subscreen>.footer-note{display:none!important}
+ #accountCard.app-subscreen>#offersPanel,#accountCard.app-subscreen>#goldenPanel,#accountCard.app-subscreen>#redeemPanel,#accountCard.app-subscreen>#accountPanel{display:none!important;margin:0!important;border:0;box-shadow:none;background:transparent;padding:0;border-radius:0}
+ #accountCard.screen-offers>#offersPanel,#accountCard.screen-golden>#goldenPanel,#accountCard.screen-redeem>#redeemPanel,#accountCard.screen-account>#accountPanel{display:block!important}
+ #accountCard.app-subscreen .offers-head,#accountCard.app-subscreen .golden-head{position:sticky;top:0;z-index:20;background:rgba(245,247,246,.96);backdrop-filter:blur(14px);margin:0 -14px 12px;padding:12px 14px;border-bottom:1px solid #e7ebe9}
+ #accountCard.app-subscreen .close-link{display:none}
+ #accountCard.app-subscreen .offers-list{grid-template-columns:1fr}
+ #accountCard.app-subscreen .offer-media{height:300px}
+ .wrap.offers-mode{max-width:none}
+ #loginCard{margin-top:8vh}
+}
 </style>
 </head>
 <body>
@@ -74,10 +98,10 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 
     <div class="section-title"><h2>تعمل إيه دلوقتي؟</h2><span>وفر كاش</span></div>
     <section class="actions">
-      <button class="action primary" onclick="showOffers()"><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
-      <button class="action gold" onclick="showGolden()"><span class="ico">🎡</span><b>عجلة العروض الذهبية</b><p>لف العجلة وابدأ جولة المكافآت.</p></button>
-      <button class="action" onclick="showRedeem()"><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
-      <button class="action" onclick="showAccount()"><span class="ico">👤</span><b>حسابي</b><p>رصيدك، مكاسبك وطلبات الاستبدال.</p></button>
+      <button class="action primary" onclick="openAppScreen('offers')"><span class="ico">🔥</span><b>أحدث عروض أمازون</b><p>شوف أحدث المنتجات والعروض اللي نزلت.</p></button>
+      <button class="action gold" onclick="openAppScreen('golden')"><span class="ico">🎡</span><b>عجلة العروض الذهبية</b><p>لف العجلة وابدأ جولة المكافآت.</p></button>
+      <button class="action" onclick="openAppScreen('redeem')"><span class="ico">🎁</span><b>استبدال الرصيد</b><p>استبدل الجنيهات الصحيحة ببطاقة هدية.</p></button>
+      <button class="action" onclick="openAppScreen('account')"><span class="ico">👤</span><b>حسابي</b><p>رصيدك، مكاسبك وطلبات الاستبدال.</p></button>
     </section>
 
     <section id="offersPanel" class="offers-panel hide">
@@ -137,7 +161,33 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
     <div class="footer-note">وفر كاش • حساب واحد من أي منصة</div>
   </main>
 </div>
+<nav class="mobile-bottom-nav" aria-label="التنقل الرئيسي">
+<button class="nav-btn active" data-screen="home" onclick="openAppScreen('home')"><span class="nav-ico">🏠</span><span>الرئيسية</span></button>
+<button class="nav-btn" data-screen="offers" onclick="openAppScreen('offers')"><span class="nav-ico">🔥</span><span>العروض</span></button>
+<button class="nav-btn" data-screen="golden" onclick="openAppScreen('golden')"><span class="nav-ico">🎡</span><span>العجلة</span></button>
+<button class="nav-btn" data-screen="redeem" onclick="openAppScreen('redeem')"><span class="nav-ico">🎁</span><span>الاستبدال</span></button>
+<button class="nav-btn" data-screen="account" onclick="openAppScreen('account')"><span class="nav-ico">👤</span><span>حسابي</span></button>
+</nav>
 <script>
+
+const APP_SCREENS=['home','offers','golden','redeem','account'];
+function setNavActive(s){document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.screen===s))}
+function appScreen(s){
+ const m=document.getElementById('accountCard'); if(!m)return;
+ m.classList.remove('app-subscreen',...APP_SCREENS.map(x=>'screen-'+x));
+ if(s!=='home')m.classList.add('app-subscreen','screen-'+s);
+ setNavActive(s); window.scrollTo(0,0);
+}
+async function openAppScreen(s){
+ if(s==='home'){hideOffers();hideGolden();hideRedeem();hideAccount();appScreen('home');return}
+ appScreen(s);
+ if(s==='offers')await showOffers(true);
+ else if(s==='golden')await showGolden(true);
+ else if(s==='redeem')await showRedeem(true);
+ else if(s==='account')await showAccount(true);
+}
+function syncLoggedInShell(v){document.body.classList.toggle('logged-in',!!v);if(!v)appScreen('home')}
+
 const sourceNames={direct:'دخول مباشر',tiktok:'TikTok',snapchat:'Snapchat',instagram:'Instagram',facebook:'Facebook',telegram:'Telegram',whatsapp:'WhatsApp'};
 const src=(new URLSearchParams(location.search).get('src')||localStorage.getItem('wafr_src')||'direct').toLowerCase();
 localStorage.setItem('wafr_src',src); document.getElementById('sourceBadge').textContent='المصدر: '+(sourceNames[src]||src);
@@ -149,7 +199,7 @@ function useExistingOtp(){const phone=document.getElementById('phone').value.tri
 async function sendOtp(){const b=document.getElementById('sendBtn');b.disabled=true;try{const phone=document.getElementById('phone').value.trim();await api('/api/auth/send-otp',{method:'POST',body:JSON.stringify({phone,source:src})});openOtpStep(phone,'الكود اتبعت على WhatsApp. اكتبيه هنا.')}catch(e){msg(e.message)}finally{b.disabled=false}}
 async function verifyOtp(){const b=document.getElementById('verifyBtn');b.disabled=true;try{const code=document.getElementById('otp').value.trim();const phone=currentPhone||document.getElementById('phone').value.trim();if(!phone){msg('اكتبي رقم الموبايل الأول');return}await api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone,code,source:src})});await loadMe()}catch(e){msg(e.message)}finally{b.disabled=false}}
 function backPhone(){document.getElementById('otpStep').classList.add('hide');document.getElementById('phoneStep').classList.remove('hide');msg('')}
-async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');const bal=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');const aid='WAFR-'+x.account_id;document.getElementById('balance').textContent=bal;document.getElementById('accountId').textContent=aid;document.getElementById('accountId2').textContent=aid;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;const first=sourceNames[(x.source_first||'direct').toLowerCase()]||x.source_first||'دخول مباشر';const last=sourceNames[(x.source_last||'direct').toLowerCase()]||x.source_last||'دخول مباشر';document.getElementById('sourceText').textContent='أول مرة وصلتي لنا من: '+first+' • آخر دخول من: '+last;if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide')}}
+async function loadMe(){try{const d=await api('/api/app/me');const x=d.data;document.getElementById('loginCard').classList.add('hide');document.getElementById('accountCard').classList.remove('hide');syncLoggedInShell(true);const bal=Number(x.gift_balance||0).toFixed(2).replace(/\.00$/,'');const aid='WAFR-'+x.account_id;document.getElementById('balance').textContent=bal;document.getElementById('accountId').textContent=aid;document.getElementById('accountId2').textContent=aid;document.getElementById('phoneLabel').textContent='رقم الدخول: '+x.phone;const first=sourceNames[(x.source_first||'direct').toLowerCase()]||x.source_first||'دخول مباشر';const last=sourceNames[(x.source_last||'direct').toLowerCase()]||x.source_last||'دخول مباشر';document.getElementById('sourceText').textContent='أول مرة وصلتي لنا من: '+first+' • آخر دخول من: '+last;if(x.telegram_linked){document.getElementById('linkedBox').classList.remove('hide');document.getElementById('linkBox').classList.add('hide')}}catch(e){document.getElementById('loginCard').classList.remove('hide');document.getElementById('accountCard').classList.add('hide');syncLoggedInShell(false)}}
 async function makeLinkCode(){try{const d=await api('/api/app/link-code',{method:'POST',body:'{}'});document.getElementById('linkCode').textContent=d.data.code;document.getElementById('linkCommand').textContent='/linkweb '+d.data.code;document.getElementById('linkResult').classList.remove('hide')}catch(e){alert(e.message)}}
 function money(v){const n=Number(v||0);return Number.isFinite(n)?n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'):'0'}
 function esc(s){return String(s??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]))}
@@ -268,11 +318,11 @@ async function loadOffers({silent=false}={}){
     status.textContent='تعذر تحديث العروض الآن — هنجرب تلقائيًا بعد دقيقة';
   }finally{offersLoading=false}
 }
-async function showOffers(){
+async function showOffers(fromNav=false){
   const panel=document.getElementById('offersPanel');
   document.querySelector('.wrap').classList.add('offers-mode');
   panel.classList.remove('hide');
-  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  if(!fromNav)panel.scrollIntoView({behavior:'smooth',block:'start'});
   await loadOffers();
   if(offersRefreshTimer) clearInterval(offersRefreshTimer);
   offersRefreshTimer=setInterval(()=>{
@@ -338,8 +388,8 @@ function spinTelegramWheel(){
 }
 let goldenSpinData=null;
 let goldenBusy=false;
-async function showGolden(){
-  hideOffers();const panel=document.getElementById('goldenPanel');panel.classList.remove('hide');panel.scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('goldenContent').innerHTML='<div class="loading">جاري تجهيز العجلة…</div>';
+async function showGolden(fromNav=false){
+  hideOffers();const panel=document.getElementById('goldenPanel');panel.classList.remove('hide');if(!fromNav)panel.scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('goldenContent').innerHTML='<div class="loading">جاري تجهيز العجلة…</div>';
   try{const d=await api('/api/app/golden-status');const x=d.data||{};if(x.stage==='prize'){goldenSpinData=x;renderPrizeWheel(x);return}if(x.stage==='question'){await loadGoldenQuestion();return}const p=x.progress||{};document.getElementById('goldenContent').innerHTML=goldenWheelHtml(`تقدم الجولة: ${p.answered||0}/${p.target||5} • الصح: ${p.correct||0}`,false);initTelegramWheel(false)}catch(e){document.getElementById('goldenContent').innerHTML=`<div class="empty-box">${esc(e.message)}</div>`}
 }
 function hideGolden(){document.getElementById('goldenPanel').classList.add('hide')}
@@ -398,7 +448,7 @@ function statusAr(v){return ({pending:'قيد الانتظار',processing:'جا
 function statusClass(v){return 'status-'+(v||'pending')}
 function fmtDate(v){if(!v)return '—';try{return new Date(v+'Z').toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'})}catch(e){return v}}
 function closeMainPanels(except){['offersPanel','goldenPanel','redeemPanel','accountPanel'].forEach(id=>{if(id!==except){const e=document.getElementById(id);if(e)e.classList.add('hide')}})}
-async function showRedeem(){
+async function showRedeem(fromNav=false){
   closeMainPanels('redeemPanel'); const panel=document.getElementById('redeemPanel'); panel.classList.remove('hide'); panel.scrollIntoView({behavior:'smooth',block:'start'}); await loadRedeem();
 }
 function hideRedeem(){document.getElementById('redeemPanel').classList.add('hide')}
@@ -417,7 +467,7 @@ async function redeemNow(){
   try{const d=await api('/api/app/redeem',{method:'POST',body:'{}'});const x=d.data||{};alert('✅ تم إنشاء طلب استبدال بقيمة '+money(x.amount)+' جنيه. المتبقي في رصيدك '+money(x.remainder)+' جنيه.');await loadMe();await loadRedeem();}
   catch(e){alert(e.message);await loadRedeem()}
 }
-async function showAccount(){
+async function showAccount(fromNav=false){
   closeMainPanels('accountPanel'); const panel=document.getElementById('accountPanel'); panel.classList.remove('hide'); panel.scrollIntoView({behavior:'smooth',block:'start'}); await loadAccountHistory();
 }
 function hideAccount(){document.getElementById('accountPanel').classList.add('hide')}
