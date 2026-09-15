@@ -422,6 +422,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "service": "wafr"})
             return
 
+        # One-time IP capture for a Telegram online session, then redirect to Amazon.
+        if parsed.path == "/tg-go":
+            qs = parse_qs(parsed.query)
+            try:
+                user_id = int(qs.get("u", ["0"])[0])
+                question_id = int(qs.get("q", ["0"])[0])
+                supplied_sig = str(qs.get("s", [""])[0])
+            except Exception:
+                user_id, question_id, supplied_sig = 0, 0, ""
+            payload = f"{user_id}:{question_id}"
+            secret = str(getattr(config, "BOT_TOKEN", "") or "").encode("utf-8")
+            expected_sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32] if secret else ""
+            if not user_id or not question_id or not expected_sig or not hmac.compare_digest(supplied_sig, expected_sig):
+                self._send_json(403, {"ok": False, "error": "invalid link"})
+                return
+            qrow = database.get_golden_question_for_redirect(question_id, user_id)
+            if not qrow or product_catalog is None:
+                self._send_json(404, {"ok": False, "error": "product not found"})
+                return
+            target = product_catalog.build_affiliate_link(str(qrow["asin"]))
+            database.capture_telegram_user_ip(user_id, self._client_ip())
+            database.set_user_activity_now(user_id)
+            self.send_response(302)
+            self._security_headers()
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Location", target)
+            self.end_headers()
+            return
+
         # Public web-account API authenticated by session cookie.
         if parsed.path == "/api/app/me":
             account = self._auth_web()

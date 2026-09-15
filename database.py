@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     tag_id INTEGER,
     tag_assigned_at TEXT,
     last_activity_at TEXT,
+    last_ip TEXT,
+    ip_capture_needed INTEGER DEFAULT 1,
     verified INTEGER DEFAULT 0,
     verified_at TEXT,
     queued_at TEXT,
@@ -169,6 +171,8 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN golden_round_earnings REAL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN pending_offer_from_id INTEGER",
     "ALTER TABLE users ADD COLUMN pending_offer_to_id INTEGER",
+    "ALTER TABLE users ADD COLUMN last_ip TEXT",
+    "ALTER TABLE users ADD COLUMN ip_capture_needed INTEGER DEFAULT 1",
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
     "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
@@ -353,11 +357,62 @@ def get_user_tag_keyword(user_id: int):
 
 
 def set_user_activity_now(user_id: int):
+    """Mark activity. A return after >5 minutes offline starts a new IP-capture session."""
+    with get_conn() as conn:
+        now = datetime.utcnow().isoformat()
+        row = conn.execute(
+            "SELECT last_activity_at FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        was_offline = True
+        if row and row["last_activity_at"]:
+            try:
+                previous = datetime.fromisoformat(str(row["last_activity_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
+                was_offline = (datetime.utcnow() - previous).total_seconds() > 300
+            except Exception:
+                was_offline = True
+        if was_offline:
+            conn.execute(
+                "UPDATE users SET last_activity_at=?, ip_capture_needed=1 WHERE user_id=?",
+                (now, user_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET last_activity_at=? WHERE user_id=?", (now, user_id)
+            )
+
+
+def user_needs_ip_capture(user_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT ip_capture_needed FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        return bool(row and int(row["ip_capture_needed"] or 0))
+
+
+def capture_telegram_user_ip(user_id: int, ip_address: str | None):
+    """Save IP for a Telegram user and close the current session's capture requirement."""
+    ip_address = (ip_address or "").strip()[:64]
+    if not ip_address:
+        return
     with get_conn() as conn:
         conn.execute(
-            "UPDATE users SET last_activity_at = ? WHERE user_id = ?",
-            (datetime.utcnow().isoformat(), user_id),
+            "UPDATE users SET last_ip=?, ip_capture_needed=0 WHERE user_id=?",
+            (ip_address, int(user_id)),
         )
+        # If this Telegram user is linked to a web account, keep both views in sync.
+        conn.execute(
+            "UPDATE web_accounts SET last_ip=? WHERE user_id=? OR telegram_user_id=?",
+            (ip_address, int(user_id), int(user_id)),
+        )
+
+
+def get_golden_question_for_redirect(question_id: int, user_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id,user_id,asin FROM golden_questions WHERE id=? AND user_id=? LIMIT 1",
+            (int(question_id), int(user_id)),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def deactivate_user(user_id: int):
@@ -1660,7 +1715,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
     with get_conn() as conn:
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at, u.joined_at,
-                   wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id, wa.last_ip,
+                   wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id, COALESCE(wa.last_ip, u.last_ip) AS last_ip,
                    COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
                    COALESCE(q.products_shown,0) AS products_shown,

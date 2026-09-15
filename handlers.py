@@ -10,6 +10,9 @@
 import logging
 import json
 import os
+import hashlib
+import hmac
+from urllib.parse import urlencode
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -1098,6 +1101,24 @@ def _extract_asin(url: str) -> str | None:
     return match.group(1).upper() if match else None
 
 
+def _telegram_ip_capture_link(user_id: int, question_id: int, direct_url: str) -> str:
+    """Use Wafr redirect only while this Telegram online session still needs an IP capture."""
+    try:
+        if not database.user_needs_ip_capture(user_id):
+            return direct_url
+    except Exception:
+        return direct_url
+    domain = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip().strip("/")
+    if not domain:
+        return direct_url
+    payload = f"{int(user_id)}:{int(question_id)}"
+    secret = str(getattr(config, "BOT_TOKEN", "") or "").encode("utf-8")
+    if not secret:
+        return direct_url
+    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    return f"https://{domain}/tg-go?{urlencode({'u': int(user_id), 'q': int(question_id), 's': sig})}"
+
+
 async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int):
     row = database.get_user(user_id)
     answered_count = row["golden_answered_count"] if row else 0
@@ -1162,6 +1183,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     )
     database.log_quiz_asked(user_id, product.asin)
     product_link = product_catalog.build_affiliate_link(product.asin)
+    # First Amazon click after an offline -> online return goes through Wafr once
+    # so Railway can capture the current public IP. Later clicks stay direct.
+    product_link = _telegram_ip_capture_link(user_id, question_id, product_link)
 
     caption = (
         f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
