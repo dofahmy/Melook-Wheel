@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS users (
     golden_answered_count INTEGER DEFAULT 0,
     golden_round_earnings REAL DEFAULT 0,
     golden_target INTEGER DEFAULT 5,
+    first_round_bonus_used INTEGER DEFAULT 0,
     pending_offer_from_id INTEGER,
     pending_offer_to_id INTEGER,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
@@ -148,6 +149,20 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     code_sent_at TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS admin_reward_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    old_gift_balance REAL DEFAULT 0,
+    old_points_balance INTEGER DEFAULT 0,
+    old_spins_balance INTEGER DEFAULT 0,
+    cancelled_lucky_spins INTEGER DEFAULT 0,
+    cancelled_redemptions INTEGER DEFAULT 0,
+    admin_id INTEGER,
+    customer_message TEXT,
+    created_at TEXT NOT NULL
+);
+
 """
 
 _MIGRATIONS = [
@@ -207,7 +222,14 @@ def init_db():
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA wal_autocheckpoint = 1000")
         conn.execute("PRAGMA mmap_size = 268435456")
+        # first_round_bonus_used is intentionally migrated outside _MIGRATIONS.
+        # Existing customers must NOT receive the new-customer welcome round; only
+        # accounts created after this deployment start with the default value 0.
+        existing_user_columns = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         conn.executescript(SCHEMA)
+        if existing_user_columns and "first_round_bonus_used" not in existing_user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN first_round_bonus_used INTEGER DEFAULT 0")
+            conn.execute("UPDATE users SET first_round_bonus_used = 1")
         for stmt in _MIGRATIONS:
             try:
                 conn.execute(stmt)
@@ -752,6 +774,85 @@ def reset_gift_balance(user_id: int) -> float:
             "UPDATE users SET gift_balance = 0 WHERE user_id = ?", (user_id,)
         )
         return old
+
+
+def admin_zero_customer_balance_and_spins(user_id: int, admin_id: int | None = None, customer_message: str = "") -> dict | None:
+    """Hard reset of all *current/unpaid* customer rewards without deleting history.
+
+    Paid redemption history and answered-question history remain untouched. Pending
+    lucky spins and pending/processing redemption requests are cancelled so no
+    pre-reset reward can be collected after the reset.
+    """
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """SELECT user_id, gift_balance, points_balance, spins_balance
+               FROM users WHERE user_id=?""", (int(user_id),)
+        ).fetchone()
+        if not row:
+            return None
+
+        old_gift = float(row["gift_balance"] or 0)
+        old_points = int(row["points_balance"] or 0)
+        old_spins = int(row["spins_balance"] or 0)
+
+        pending_spin_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM lucky_spins WHERE user_id=? AND status='pending'",
+            (int(user_id),),
+        ).fetchone()["c"] or 0
+        pending_redemption_count = conn.execute(
+            """SELECT COUNT(*) AS c FROM redemption_requests
+               WHERE user_id=? AND status IN ('pending','processing')""",
+            (int(user_id),),
+        ).fetchone()["c"] or 0
+
+        conn.execute(
+            """UPDATE users SET gift_balance=0, points_balance=0, spins_balance=0,
+               golden_opened_count=0, golden_answered_count=0,
+               golden_round_earnings=0, golden_target=?
+               WHERE user_id=?""",
+            (GOLDEN_TARGET_COUNT, int(user_id)),
+        )
+        conn.execute(
+            """UPDATE lucky_spins SET status='cancelled'
+               WHERE user_id=? AND status='pending'""",
+            (int(user_id),),
+        )
+        conn.execute(
+            """UPDATE redemption_requests SET status='cancelled'
+               WHERE user_id=? AND status IN ('pending','processing')""",
+            (int(user_id),),
+        )
+
+        # Keep old questions/spins/redemptions as evidence/history; only current
+        # entitlements are zeroed/cancelled.
+        conn.execute(
+            """INSERT INTO admin_reward_resets
+               (user_id, old_gift_balance, old_points_balance, old_spins_balance,
+                cancelled_lucky_spins, cancelled_redemptions, admin_id, customer_message, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (int(user_id), old_gift, old_points, old_spins,
+             int(pending_spin_count), int(pending_redemption_count),
+             int(admin_id) if admin_id is not None else None,
+             str(customer_message or "")[:2000], now),
+        )
+
+        wa = conn.execute(
+            "SELECT id, phone_e164, telegram_user_id FROM web_accounts WHERE user_id=? LIMIT 1",
+            (int(user_id),),
+        ).fetchone()
+        return {
+            "user_id": int(user_id),
+            "old_gift_balance": old_gift,
+            "old_points_balance": old_points,
+            "old_spins_balance": old_spins,
+            "cancelled_lucky_spins": int(pending_spin_count),
+            "cancelled_redemptions": int(pending_redemption_count),
+            "telegram_user_id": int(wa["telegram_user_id"]) if wa and wa["telegram_user_id"] else None,
+            "phone_e164": wa["phone_e164"] if wa else None,
+            "created_at": now,
+        }
 
 
 def list_spin_history(user_id: int | None = None):
@@ -1319,9 +1420,27 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
         )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
-               golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
+               golden_round_earnings, golden_target, first_round_bonus_used FROM users WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
+
+        # One-time welcome round for NEW accounts only. The first completed round
+        # is worth exactly 2.00 EGP, regardless of the per-question EPC reward.
+        # Mark it used at completion; resets/reactivation never clear this flag.
+        if (
+            int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
+            and int(progress["first_round_bonus_used"] or 0) == 0
+        ):
+            conn.execute(
+                "UPDATE users SET golden_round_earnings = 2.0, first_round_bonus_used = 1 WHERE user_id = ?",
+                (user_id,),
+            )
+            progress = conn.execute(
+                """SELECT golden_answered_count, golden_opened_count,
+                   golden_round_earnings, golden_target, first_round_bonus_used
+                   FROM users WHERE user_id = ?""",
+                (user_id,),
+            ).fetchone()
 
         # Business rule: any fully completed Golden Offers round must be worth
         # at least 0.40 EGP to the customer. Wrong answers can still add penalty

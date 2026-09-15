@@ -109,6 +109,7 @@ def choose_product(
     user_id: int = 0,
     current_round_epc: float = 0.0,
     all_seen_asins: set[str] | None = None,
+    first_round_bonus: bool = False,
 ) -> CatalogProduct:
     """Dynamic selector: minimize repeats while guaranteeing the first 5 products
     in a round can reach EGYPT_MIN_ROUND_EPC.
@@ -123,6 +124,19 @@ def choose_product(
     seen = set(all_seen_asins or set())
     target = float(getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
     slot = int(question_index) % 5
+
+    # One-time welcome round: its first three questions are the three
+    # highest-EPC products in the current catalog.
+    if first_round_bonus and 0 <= int(question_index) < 3:
+        ranked = sorted(products, key=lambda p: p.expected_revenue_per_click, reverse=True)
+        top_three = ranked[:3]
+        preferred = top_three[int(question_index)] if len(top_three) > int(question_index) else None
+        if preferred and preferred.asin not in excluded:
+            return preferred
+        remaining_top = [p for p in top_three if p.asin not in excluded]
+        if remaining_top:
+            return remaining_top[0]
+
 
     def available(prefer_unseen: bool) -> list[CatalogProduct]:
         base = [p for p in products if p.asin not in excluded]

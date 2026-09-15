@@ -1160,6 +1160,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
             user_id=user_id,
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
+            first_round_bonus=(int(row["first_round_bonus_used"] or 0) == 0),
         )
         question = product_catalog.question_for(product)
     except Exception as exc:

@@ -188,6 +188,7 @@ def _golden_question_payload(user_id: int, existing=None):
         user_id=user_id,
         current_round_epc=current_round_epc,
         all_seen_asins=all_seen_asins,
+        first_round_bonus=(int(row["first_round_bonus_used"] or 0) == 0),
     )
     question = product_catalog.question_for(product)
     reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
