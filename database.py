@@ -1322,6 +1322,27 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
+
+        # Business rule: any fully completed Golden Offers round must be worth
+        # at least 0.40 EGP to the customer. Wrong answers can still add penalty
+        # questions, but they must not make the final completed-round prize fall
+        # below the advertised minimum. This is enforced here so Telegram and
+        # Web App use exactly the same rule.
+        min_round_reward = float(getattr(config, "EGYPT_MIN_ROUND_CUSTOMER_REWARD", 0.40))
+        if (
+            int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
+            and float(progress["golden_round_earnings"] or 0) < min_round_reward
+        ):
+            conn.execute(
+                "UPDATE users SET golden_round_earnings = ? WHERE user_id = ?",
+                (min_round_reward, user_id),
+            )
+            progress = conn.execute(
+                """SELECT golden_answered_count, golden_opened_count,
+                   golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
+                (user_id,),
+            ).fetchone()
+
         return {
             "correct": bool(is_correct),
             "answered_count": progress["golden_answered_count"],
