@@ -241,10 +241,18 @@
   body.gift-stage h1 { font-size: clamp(22px, 6vw, 29px); margin: 8px 0 2px; }
   body.gift-stage .sub { font-size: 13px; margin-bottom: 8px; }
   body.gift-stage .gift-box {
-    width: min(70vw, 260px, 38vh);
-    height: min(70vw, 260px, 38vh);
+    width: min(82vw, 330px);
+    height: auto;
+    aspect-ratio: 1 / 1;
     margin: 4px 0 8px;
     flex: 0 0 auto;
+    overflow: visible;
+  }
+  body.gift-stage .gift-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
   }
   body.gift-stage .open-hint { margin-top: 2px; }
   body.gift-stage .hint { margin-top: 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -254,7 +262,7 @@
     body.gift-stage .brand { font-size: 17px; padding: 4px 18px; }
     body.gift-stage h1 { font-size: 20px; margin-top: 5px; }
     body.gift-stage .sub { font-size: 12px; margin-bottom: 4px; }
-    body.gift-stage .gift-box { width: min(58vw, 210px, 32vh); height: min(58vw, 210px, 32vh); }
+    body.gift-stage .gift-box { width: min(72vw, 250px); height: auto; aspect-ratio: 1 / 1; }
     body.gift-stage .hint { font-size: 11px; margin-top: 6px; }
   }
 
