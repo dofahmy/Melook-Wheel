@@ -88,7 +88,7 @@ EGYPT_GOLDEN_PRODUCTS_FILE = os.getenv(
 )
 
 # تاج روابط منتجات العجلة الذهبية.
-EGYPT_GOLDEN_PARTNER_TAG = os.getenv("EGYPT_GOLDEN_PARTNER_TAG", "leeno-21")
+EGYPT_GOLDEN_PARTNER_TAG = os.getenv("EGYPT_GOLDEN_PARTNER_TAG", "wishitworktha-21")
 
 # معادلة جائزة العميل الشخصية:
 # EPC المكتوب × نسبة الكليكات المعتمدة × نسبة قيمة الكليك الفعلية × نصيب العميل.
