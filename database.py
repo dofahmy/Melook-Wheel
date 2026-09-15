@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS users (
     first_round_bonus_used INTEGER DEFAULT 0,
     pending_offer_from_id INTEGER,
     pending_offer_to_id INTEGER,
+    bonus_rounds_used INTEGER DEFAULT 0,
+    normal_rounds_since_bonus INTEGER DEFAULT 0,
+    bonus_next_after INTEGER DEFAULT 0,
+    current_round_kind TEXT,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
 
@@ -57,6 +61,12 @@ CREATE TABLE IF NOT EXISTS tags (
 
 CREATE TABLE IF NOT EXISTS admins (
     user_id INTEGER PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wheel_spins (
@@ -194,6 +204,10 @@ _MIGRATIONS = [
     "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
     "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
+    "ALTER TABLE users ADD COLUMN bonus_rounds_used INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN normal_rounds_since_bonus INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN bonus_next_after INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN current_round_kind TEXT",
 ]
 @contextmanager
 def get_conn():
@@ -1098,6 +1112,79 @@ def get_redemption_summary():
         }
 
 
+# ---------- نظام الجولات التحفيزية ----------
+BONUS_DEFAULTS = {
+    "bonus_enabled": "0",
+    "bonus_multiplier": "2.0",
+    "bonus_min_normal_rounds": "3",
+    "bonus_max_normal_rounds": "5",
+    "bonus_max_per_account": "8",
+    "bonus_target_epc": "106.16",
+}
+
+def _setting_value(conn, key: str, default: str) -> str:
+    row = conn.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (key,)).fetchone()
+    return str(row["setting_value"]) if row else str(default)
+
+def get_bonus_settings() -> dict:
+    with get_conn() as conn:
+        vals = {k: _setting_value(conn, k, v) for k, v in BONUS_DEFAULTS.items()}
+        active = conn.execute("SELECT COUNT(*) AS n FROM users WHERE current_round_kind='bonus' AND golden_answered_count < golden_target").fetchone()["n"]
+        used = conn.execute("SELECT COALESCE(SUM(bonus_rounds_used),0) AS n FROM users").fetchone()["n"]
+    return {
+        "enabled": vals["bonus_enabled"] == "1",
+        "multiplier": float(vals["bonus_multiplier"]),
+        "min_normal_rounds": int(vals["bonus_min_normal_rounds"]),
+        "max_normal_rounds": int(vals["bonus_max_normal_rounds"]),
+        "max_per_account": int(vals["bonus_max_per_account"]),
+        "target_epc": float(vals["bonus_target_epc"]),
+        "active_now": int(active or 0),
+        "used_total": int(used or 0),
+    }
+
+def update_bonus_settings(enabled=None, multiplier=None, min_normal_rounds=None, max_normal_rounds=None, max_per_account=None, target_epc=None) -> dict:
+    now = datetime.utcnow().isoformat()
+    updates = {}
+    if enabled is not None: updates["bonus_enabled"] = "1" if bool(enabled) else "0"
+    if multiplier is not None: updates["bonus_multiplier"] = str(max(1.0, min(float(multiplier), 10.0)))
+    if min_normal_rounds is not None: updates["bonus_min_normal_rounds"] = str(max(1, int(min_normal_rounds)))
+    if max_normal_rounds is not None: updates["bonus_max_normal_rounds"] = str(max(1, int(max_normal_rounds)))
+    if max_per_account is not None: updates["bonus_max_per_account"] = str(max(0, int(max_per_account)))
+    if target_epc is not None: updates["bonus_target_epc"] = str(max(0.0, float(target_epc)))
+    with get_conn() as conn:
+        for key, value in updates.items():
+            conn.execute("INSERT INTO app_settings(setting_key,setting_value,updated_at) VALUES(?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=excluded.updated_at", (key, value, now))
+    return get_bonus_settings()
+
+def ensure_current_round_kind(user_id: int) -> str:
+    """يثبت نوع الجولة عند بدايتها. إيقاف النظام لا يغيّر جولة Bonus بدأت بالفعل."""
+    import random
+    with get_conn() as conn:
+        u = conn.execute("SELECT golden_answered_count,first_round_bonus_used,bonus_rounds_used,normal_rounds_since_bonus,bonus_next_after,current_round_kind FROM users WHERE user_id=?", (int(user_id),)).fetchone()
+        if not u: return "normal"
+        if u["current_round_kind"]:
+            return str(u["current_round_kind"])
+        if int(u["first_round_bonus_used"] or 0) == 0:
+            kind = "welcome"
+        else:
+            enabled = _setting_value(conn, "bonus_enabled", "0") == "1"
+            max_per = int(_setting_value(conn, "bonus_max_per_account", "8"))
+            lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
+            hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
+            nxt = int(u["bonus_next_after"] or 0)
+            if nxt <= 0:
+                nxt = random.randint(lo, hi)
+                conn.execute("UPDATE users SET bonus_next_after=? WHERE user_id=?", (nxt, int(user_id)))
+            kind = "bonus" if enabled and int(u["bonus_rounds_used"] or 0) < max_per and int(u["normal_rounds_since_bonus"] or 0) >= nxt else "normal"
+        conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
+        return kind
+
+def get_bonus_multiplier() -> float:
+    return float(get_bonus_settings()["multiplier"])
+
+def get_bonus_target_epc() -> float:
+    return float(get_bonus_settings()["target_epc"])
+
 # ---------- عروض القناة الذهبية (Golden Deals) ----------
 
 MAX_CACHED_GOLDEN_DEALS = 50
@@ -1135,10 +1222,19 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
                    VALUES (?, ?, 0, 'pending', ?)""",
                 (user_id, prize, datetime.utcnow().isoformat()),
             )
+            u = conn.execute("SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?", (user_id,)).fetchone()
+            kind = str(u["current_round_kind"] or "normal") if u else "normal"
+            if kind == "bonus":
+                import random
+                lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
+                hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
+                conn.execute("UPDATE users SET bonus_rounds_used=bonus_rounds_used+1, normal_rounds_since_bonus=0, bonus_next_after=? WHERE user_id=?", (random.randint(lo, hi), user_id))
+            elif kind == "normal":
+                conn.execute("UPDATE users SET normal_rounds_since_bonus=normal_rounds_since_bonus+1 WHERE user_id=?", (user_id,))
             conn.execute(
                 """UPDATE users SET golden_opened_count = 0,
                    golden_answered_count = 0, golden_round_earnings = 0,
-                   golden_target = ? WHERE user_id = ?""",
+                   golden_target = ?, current_round_kind=NULL WHERE user_id = ?""",
                 (GOLDEN_TARGET_COUNT, user_id),
             )
             return cur.lastrowid, prize, 0

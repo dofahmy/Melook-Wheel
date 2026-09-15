@@ -1154,13 +1154,16 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         asked_asins = database.list_todays_quizzed_asins(user_id)
         all_seen_asins = database.list_all_quizzed_asins(user_id)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
+        round_kind = database.ensure_current_round_kind(user_id)
         product = product_catalog.choose_product(
             asked_asins,
             question_index=answered_count,
             user_id=user_id,
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
-            first_round_bonus=(int(row["first_round_bonus_used"] or 0) == 0),
+            first_round_bonus=(round_kind == "welcome"),
+            bonus_round=(round_kind == "bonus"),
+            bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
         )
         question = product_catalog.question_for(product)
     except Exception as exc:
@@ -1174,6 +1177,8 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     reward_value = product_catalog.customer_reward_for_epc(
         product.expected_revenue_per_click
     )
+    if round_kind == "bonus":
+        reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     question_id = database.create_golden_question(
         user_id=user_id,
         asin=product.asin,
@@ -1188,8 +1193,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     # so Railway can capture the current public IP. Later clicks stay direct.
     product_link = _telegram_ip_capture_link(user_id, question_id, product_link)
 
+    bonus_label = "🎁 جولة مكافأة ×" + str(database.get_bonus_multiplier()) + "\n" if round_kind == "bonus" else ""
     caption = (
-        f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
+        bonus_label + f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
         f"دوس على لينك المنتج تحت وشوف تفاصيله كويس قبل ما تجاوب 👇\n\n"
         f"{question['prompt']}"
     )

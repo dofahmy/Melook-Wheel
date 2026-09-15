@@ -110,6 +110,8 @@ def choose_product(
     current_round_epc: float = 0.0,
     all_seen_asins: set[str] | None = None,
     first_round_bonus: bool = False,
+    bonus_round: bool = False,
+    bonus_target_epc: float | None = None,
 ) -> CatalogProduct:
     """Dynamic selector: minimize repeats while guaranteeing the first 5 products
     in a round can reach EGYPT_MIN_ROUND_EPC.
@@ -122,7 +124,7 @@ def choose_product(
     products = load_products()
     excluded = set(excluded_asins or set())
     seen = set(all_seen_asins or set())
-    target = float(getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
+    target = float(bonus_target_epc if bonus_round and bonus_target_epc is not None else getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
     slot = int(question_index) % 5
 
     # One-time welcome round: its first three questions are the three
