@@ -1154,6 +1154,31 @@ def update_bonus_settings(enabled=None, multiplier=None, min_normal_rounds=None,
     with get_conn() as conn:
         for key, value in updates.items():
             conn.execute("INSERT INTO app_settings(setting_key,setting_value,updated_at) VALUES(?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=excluded.updated_at", (key, value, now))
+
+        # If the admin changes the normal-round interval, old per-user thresholds
+        # must not keep values from the previous settings (for example 3-5 after
+        # the admin changes it to 1-3). Rebuild the NEXT threshold for accounts
+        # that are not already inside a bonus round. A normal round already in
+        # progress is allowed to finish; the next round will use the new rule.
+        if "bonus_min_normal_rounds" in updates or "bonus_max_normal_rounds" in updates:
+            import random
+            lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
+            hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
+            rows = conn.execute(
+                """SELECT user_id, normal_rounds_since_bonus, current_round_kind
+                   FROM users
+                   WHERE COALESCE(current_round_kind,'') != 'bonus'"""
+            ).fetchall()
+            for row in rows:
+                # If the customer already completed at least the new minimum,
+                # make the very next round a bonus. Otherwise choose a fresh
+                # threshold inside the newly saved interval.
+                done = int(row["normal_rounds_since_bonus"] or 0)
+                nxt = lo if done >= lo else random.randint(lo, hi)
+                conn.execute(
+                    "UPDATE users SET bonus_next_after=? WHERE user_id=?",
+                    (nxt, int(row["user_id"])),
+                )
     return get_bonus_settings()
 
 def ensure_current_round_kind(user_id: int) -> str:
