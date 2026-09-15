@@ -229,6 +229,35 @@
     display: none;
   }
 
+
+  /* Telegram: keep the gift box fully visible after the second wheel */
+  body.gift-stage {
+    min-height: var(--tg-viewport-stable-height, 100vh);
+    padding-top: 10px;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    justify-content: flex-start;
+  }
+  body.gift-stage .brand { font-size: 19px; padding: 6px 22px; }
+  body.gift-stage h1 { font-size: clamp(22px, 6vw, 29px); margin: 8px 0 2px; }
+  body.gift-stage .sub { font-size: 13px; margin-bottom: 8px; }
+  body.gift-stage .gift-box {
+    width: min(70vw, 260px, 38vh);
+    height: min(70vw, 260px, 38vh);
+    margin: 4px 0 8px;
+    flex: 0 0 auto;
+  }
+  body.gift-stage .open-hint { margin-top: 2px; }
+  body.gift-stage .hint { margin-top: 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  body.gift-stage .result { margin-top: 10px; padding: 12px 20px; }
+
+  @media (max-height: 650px) {
+    body.gift-stage .brand { font-size: 17px; padding: 4px 18px; }
+    body.gift-stage h1 { font-size: 20px; margin-top: 5px; }
+    body.gift-stage .sub { font-size: 12px; margin-bottom: 4px; }
+    body.gift-stage .gift-box { width: min(58vw, 210px, 32vh); height: min(58vw, 210px, 32vh); }
+    body.gift-stage .hint { font-size: 11px; margin-top: 6px; }
+  }
+
 </style>
 </head>
 <body>
@@ -551,10 +580,13 @@ spinBtn.addEventListener('click', () => {
     if (isGoldenMode) {
       document.querySelector('.wheel-wrap').classList.add('finished');
       spinBtn.classList.add('finished');
+      document.body.classList.add('gift-stage');
       const giftBox = document.getElementById('giftBox');
       giftBox.classList.add('show');
       document.getElementById('openHint').classList.add('show');
-      giftBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
       return;
     }
 
