@@ -362,6 +362,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return None
 
+    def _client_ip(self):
+        """Best-effort public client IP as forwarded by Railway's reverse proxy."""
+        forwarded = (self.headers.get("X-Forwarded-For") or "").strip()
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip()[:64]
+        real_ip = (self.headers.get("X-Real-IP") or "").strip()
+        if real_ip:
+            return real_ip[:64]
+        try:
+            return str(self.client_address[0])[:64]
+        except Exception:
+            return ""
+
     def _auth_web(self):
         account = web_auth.get_account_from_session(self._session_token())
         if account and int(account.get("is_suspended") or 0):
@@ -371,6 +384,8 @@ class Handler(BaseHTTPRequestHandler):
         if account:
             try:
                 database.set_user_activity_now(int(account["user_id"]))
+                database.set_web_account_last_ip(int(account["id"]), self._client_ip())
+                account["last_ip"] = self._client_ip()
             except Exception:
                 pass
         return account
@@ -729,6 +744,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(401, {"ok": False, "error": err})
                 return
             account = database.get_or_create_web_account(phone, source)
+            database.set_web_account_last_ip(int(account["id"]), self._client_ip())
+            account["last_ip"] = self._client_ip()
             if int(account.get("is_suspended") or 0):
                 self._send_json(423, {"ok": False, "error": 'لاحظنا دخول وخروج متكرر على حسابك. لحماية بياناتك وحسابك تم إيقاف الحساب مؤقتًا، وسيقوم أحد ممثلي خدمة العملاء بالتواصل معك خلال 24 ساعة.', "suspended": True})
                 return

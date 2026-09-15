@@ -1660,7 +1660,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
     with get_conn() as conn:
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at, u.joined_at,
-                   wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id,
+                   wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id, wa.last_ip,
                    COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
                    COALESCE(q.products_shown,0) AS products_shown,
@@ -1802,6 +1802,7 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     source_last TEXT DEFAULT 'direct',
     created_at TEXT NOT NULL,
     last_login_at TEXT,
+    last_ip TEXT,
     is_suspended INTEGER NOT NULL DEFAULT 0,
     suspended_at TEXT,
     suspended_reason TEXT,
@@ -1860,6 +1861,7 @@ def init_web_accounts_schema():
             "ALTER TABLE web_accounts ADD COLUMN suspended_at TEXT",
             "ALTER TABLE web_accounts ADD COLUMN suspended_reason TEXT",
             "ALTER TABLE web_accounts ADD COLUMN reactivated_at TEXT",
+            "ALTER TABLE web_accounts ADD COLUMN last_ip TEXT",
         ):
             try:
                 conn.execute(stmt)
@@ -1914,6 +1916,18 @@ def get_or_create_web_account(phone_e164: str, source: str = "direct") -> dict:
         )
         row = conn.execute("SELECT * FROM web_accounts WHERE id=?", (account_id,)).fetchone()
         return dict(row)
+
+
+def set_web_account_last_ip(account_id: int, ip_address: str | None):
+    """Store the latest public IP seen for this Web account (admin visibility only)."""
+    ip_address = (ip_address or "").strip()[:64]
+    if not ip_address:
+        return
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE web_accounts SET last_ip=? WHERE id=?",
+            (ip_address, int(account_id)),
+        )
 
 
 def create_web_session(token_hash: str, account_id: int, expires_at: str):
