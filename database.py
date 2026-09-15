@@ -1094,6 +1094,16 @@ def list_golden_deals_posted_today():
         ).fetchall()
 
 
+def list_all_quizzed_asins(user_id: int) -> set[str]:
+    """كل المنتجات التي ظهرت لهذا العميل سابقًا في أسئلة العجلة."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT asin FROM golden_questions WHERE user_id=? AND asin IS NOT NULL AND TRIM(asin)<>''",
+            (int(user_id),),
+        ).fetchall()
+    return {str(row["asin"]).strip().upper() for row in rows if row["asin"]}
+
+
 def list_todays_quizzed_asins(user_id: int) -> set[str]:
     """كل الـ ASINs اللي العميل ده اتسأل عنها النهاردة بالفعل."""
     today = datetime.utcnow().date().isoformat()
@@ -1147,6 +1157,22 @@ def reset_golden_progress(user_id: int):
                golden_round_earnings = 0, golden_target = ? WHERE user_id = ?""",
             (GOLDEN_TARGET_COUNT, user_id),
         )
+
+
+def get_current_golden_round_epc(user_id: int, answered_count: int | None = None) -> float:
+    """مجموع EPC للأسئلة الحالية في الجولة."""
+    if answered_count is None:
+        row = get_user(user_id)
+        answered_count = int(row["golden_answered_count"] or 0) if row else 0
+    n = max(0, int(answered_count or 0))
+    if n <= 0:
+        return 0.0
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT epc FROM golden_questions WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (int(user_id), n),
+        ).fetchall()
+    return float(sum(float(row["epc"] or 0) for row in rows))
 
 
 def create_golden_question(
