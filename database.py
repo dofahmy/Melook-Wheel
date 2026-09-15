@@ -1105,42 +1105,6 @@ def list_todays_quizzed_asins(user_id: int) -> set[str]:
         return {r["asin"] for r in rows}
 
 
-def list_all_quizzed_asins(user_id: int) -> set[str]:
-    """All products ever shown to this customer, used to minimize repeats."""
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT asin FROM golden_questions WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-        return {str(r["asin"]).upper() for r in rows if r["asin"]}
-
-
-def get_current_golden_round_epc(user_id: int, answered_count: int | None = None) -> float:
-    """Sum EPC of questions already created in the current round.
-
-    The users.golden_answered_count counter is reset when a round is converted
-    into its lucky spin, so the latest N questions belong to the active round.
-    """
-    with get_conn() as conn:
-        if answered_count is None:
-            row = conn.execute(
-                "SELECT golden_answered_count FROM users WHERE user_id = ?", (user_id,)
-            ).fetchone()
-            answered_count = int(row["golden_answered_count"] or 0) if row else 0
-        n = max(int(answered_count or 0), 0)
-        if n <= 0:
-            return 0.0
-        row = conn.execute(
-            """SELECT COALESCE(SUM(epc), 0) AS total FROM (
-                   SELECT epc FROM golden_questions
-                   WHERE user_id = ?
-                   ORDER BY id DESC LIMIT ?
-               )""",
-            (user_id, n),
-        ).fetchone()
-        return float(row["total"] or 0.0)
-
-
 def log_quiz_asked(user_id: int, asin: str):
     today = datetime.utcnow().date().isoformat()
     with get_conn() as conn:
@@ -2497,31 +2461,31 @@ def count_suspended_web_accounts() -> int:
 
 def get_central_admin_summary(period: str = "all") -> dict:
     """ملخص مركزي يجمع نشاط Telegram وحسابات الويب في شاشة واحدة."""
-    web_where, _ = _period_where("created_at", period)
-    login_where, _ = _period_where("seen_at", period)
-    click_where, _ = _period_where("clicked_at", period)
-    spin_where, _ = _period_where("created_at", period)
-    redeem_where, _ = _period_where("requested_at", period)
+    web_where, web_params = _period_where("created_at", period)
+    login_where, login_params = _period_where("seen_at", period)
+    click_where, click_params = _period_where("clicked_at", period)
+    spin_where, spin_params = _period_where("created_at", period)
+    redeem_where, redeem_params = _period_where("requested_at", period)
     with get_conn() as conn:
         total = conn.execute("SELECT COUNT(*) c FROM users WHERE program='egypt'").fetchone()["c"] or 0
-        web = conn.execute(f"SELECT COUNT(*) c FROM web_accounts WHERE {web_where}").fetchone()["c"] or 0
+        web = conn.execute(f"SELECT COUNT(*) c FROM web_accounts WHERE {web_where}", web_params).fetchone()["c"] or 0
         web_all = conn.execute("SELECT COUNT(*) c FROM web_accounts").fetchone()["c"] or 0
         linked = conn.execute("SELECT COUNT(*) c FROM web_accounts WHERE telegram_user_id IS NOT NULL").fetchone()["c"] or 0
         web_only = conn.execute("SELECT COUNT(*) c FROM web_accounts WHERE telegram_user_id IS NULL").fetchone()["c"] or 0
         tg_only = conn.execute("""SELECT COUNT(*) c FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             WHERE u.program='egypt' AND wa.id IS NULL AND u.user_id>0""").fetchone()["c"] or 0
-        logins = conn.execute(f"SELECT COUNT(*) c FROM web_source_events WHERE {login_where}").fetchone()["c"] or 0
-        clicks = conn.execute(f"SELECT COUNT(*) c FROM web_offer_clicks WHERE {click_where}").fetchone()["c"] or 0
-        unique_clickers = conn.execute(f"SELECT COUNT(DISTINCT account_id) c FROM web_offer_clicks WHERE {click_where}").fetchone()["c"] or 0
-        spins = conn.execute(f"SELECT COUNT(*) c FROM lucky_spins WHERE {spin_where}").fetchone()["c"] or 0
-        claims = conn.execute(f"SELECT COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) s FROM lucky_spins WHERE {spin_where}").fetchone()["s"] or 0
-        redeems = conn.execute(f"SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE {redeem_where}").fetchone()
+        logins = conn.execute(f"SELECT COUNT(*) c FROM web_source_events WHERE {login_where}", login_params).fetchone()["c"] or 0
+        clicks = conn.execute(f"SELECT COUNT(*) c FROM web_offer_clicks WHERE {click_where}", click_params).fetchone()["c"] or 0
+        unique_clickers = conn.execute(f"SELECT COUNT(DISTINCT account_id) c FROM web_offer_clicks WHERE {click_where}", click_params).fetchone()["c"] or 0
+        spins = conn.execute(f"SELECT COUNT(*) c FROM lucky_spins WHERE {spin_where}", spin_params).fetchone()["c"] or 0
+        claims = conn.execute(f"SELECT COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) s FROM lucky_spins WHERE {spin_where}", spin_params).fetchone()["s"] or 0
+        redeems = conn.execute(f"SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE {redeem_where}", redeem_params).fetchone()
         pending = conn.execute("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE status IN ('pending','processing')").fetchone()
         paid = conn.execute("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM redemption_requests WHERE status='paid'").fetchone()
         sources = conn.execute(f"""SELECT source, COUNT(*) events, COUNT(DISTINCT account_id) accounts
             FROM web_source_events WHERE {login_where}
-            GROUP BY source ORDER BY accounts DESC, events DESC LIMIT 20""").fetchall()
+            GROUP BY source ORDER BY accounts DESC, events DESC LIMIT 20""", login_params).fetchall()
         return {
             "users_total": int(total), "web_accounts_period": int(web), "web_accounts_total": int(web_all),
             "telegram_linked": int(linked), "web_only": int(web_only), "telegram_only": int(tg_only),
@@ -2546,52 +2510,52 @@ def get_admin_funnel(period: str = "all") -> dict:
     ملاحظة: النظام الحالي لا يسجل الزائر المجهول قبل إنشاء الحساب، لذلك أول خطوة هنا
     هي الحسابات التي ظهر لها نشاط Web مسجل بالفعل خلال الفترة.
     """
-    event_where, _ = _period_where("e.seen_at", period)
-    click_where, _ = _period_where("c.clicked_at", period)
-    spin_where, _ = _period_where("ls.created_at", period)
-    redeem_where, _ = _period_where("r.requested_at", period)
-    paid_where, _ = _period_where("r.paid_at", period)
+    event_where, event_params = _period_where("e.seen_at", period)
+    click_where, click_params = _period_where("c.clicked_at", period)
+    spin_where, spin_params = _period_where("ls.created_at", period)
+    redeem_where, redeem_params = _period_where("r.requested_at", period)
+    paid_where, paid_params = _period_where("r.paid_at", period)
     with get_conn() as conn:
         active = conn.execute(f"""
             SELECT COUNT(DISTINCT e.account_id) AS c
             FROM web_source_events e
             WHERE {event_where}
-        """).fetchone()["c"] or 0
+        """, event_params).fetchone()["c"] or 0
         linked = conn.execute(f"""
             SELECT COUNT(DISTINCT e.account_id) AS c
             FROM web_source_events e
             JOIN web_accounts wa ON wa.id=e.account_id
             WHERE {event_where} AND wa.telegram_user_id IS NOT NULL
-        """).fetchone()["c"] or 0
+        """, event_params).fetchone()["c"] or 0
         clickers = conn.execute(f"""
             SELECT COUNT(DISTINCT c.account_id) AS c
             FROM web_offer_clicks c
             WHERE {click_where}
-        """).fetchone()["c"] or 0
+        """, click_params).fetchone()["c"] or 0
         players = conn.execute(f"""
             SELECT COUNT(DISTINCT wa.id) AS c
             FROM lucky_spins ls
             JOIN web_accounts wa ON wa.user_id=ls.user_id
             WHERE {spin_where}
-        """).fetchone()["c"] or 0
+        """, spin_params).fetchone()["c"] or 0
         winners = conn.execute(f"""
             SELECT COUNT(DISTINCT wa.id) AS c
             FROM lucky_spins ls
             JOIN web_accounts wa ON wa.user_id=ls.user_id
             WHERE {spin_where} AND ls.status='claimed'
-        """).fetchone()["c"] or 0
+        """, spin_params).fetchone()["c"] or 0
         requested = conn.execute(f"""
             SELECT COUNT(DISTINCT wa.id) AS c
             FROM redemption_requests r
             JOIN web_accounts wa ON wa.user_id=r.user_id
             WHERE {redeem_where}
-        """).fetchone()["c"] or 0
+        """, redeem_params).fetchone()["c"] or 0
         paid = conn.execute(f"""
             SELECT COUNT(DISTINCT wa.id) AS c
             FROM redemption_requests r
             JOIN web_accounts wa ON wa.user_id=r.user_id
             WHERE r.status='paid' AND {paid_where}
-        """).fetchone()["c"] or 0
+        """, paid_params).fetchone()["c"] or 0
 
         return {
             "active_web_accounts": int(active),
