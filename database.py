@@ -1801,10 +1801,16 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE status IN ('pending','processing')
         """).fetchone()
-        balances = conn.execute("""
-            SELECT COALESCE(SUM(gift_balance),0) AS total
-            FROM users WHERE program='egypt'
-        """).fetchone()
+        # Current customer balance must use the SAME customer scope as the
+        # selected report period (same join-date filter as the Customers table).
+        # This prevents balances belonging to customers outside the selected
+        # period from leaking into the report total.
+        balance_where, balance_params = _period_where("u.joined_at", period, date_from, date_to)
+        balances = conn.execute(f"""
+            SELECT COALESCE(SUM(COALESCE(u.gift_balance,0)),0) AS total
+            FROM users u
+            WHERE u.program='egypt' AND {balance_where}
+        """, balance_params).fetchone()
 
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
