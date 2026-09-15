@@ -703,8 +703,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
-            rows = [dict(x) for x in database.list_central_customers(period, search, date_from=date_from, date_to=date_to)]
-            self._send_json(200, {"ok": True, "data": rows})
+            try:
+                limit = max(1, min(100, int(qs.get("limit", ["20"])[0])))
+                offset = max(0, int(qs.get("offset", ["0"])[0]))
+            except Exception:
+                limit, offset = 20, 0
+            rows = [dict(x) for x in database.list_central_customers(period, search, limit=limit, offset=offset, date_from=date_from, date_to=date_to)]
+            total = database.count_customer_reports(period, search, date_from=date_from, date_to=date_to)
+            self._send_json(200, {"ok": True, "data": {"rows": rows, "total": total, "limit": limit, "offset": offset}})
             return
         if parsed.path == "/api/admin/customer-list-stats":
             self._send_json(200, {"ok": True, "data": database.get_customer_list_stats(period, date_from, date_to)})

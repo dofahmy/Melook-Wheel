@@ -1878,6 +1878,23 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
         """, (*joined_params, search, like, like, like, like, int(limit), int(offset))).fetchall()
 
 
+def count_customer_reports(period: str = "all", search: str = "", date_from: str | None = None, date_to: str | None = None) -> int:
+    """Count customers matching the same join-date/search filters used by the admin customer list."""
+    joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
+    search = (search or "").strip()
+    like = f"%{search.lstrip('@')}%"
+    with get_conn() as conn:
+        row = conn.execute(f"""
+            SELECT COUNT(*) AS c
+            FROM users u
+            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            WHERE u.program='egypt'
+              AND {joined_where}
+              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ? OR COALESCE(wa.last_ip, u.last_ip, '') LIKE ?)
+        """, (*joined_params, search, like, like, like, like)).fetchone()
+        return int(row["c"] or 0)
+
+
 def get_customer_list_stats(period: str = "all", date_from: str | None = None, date_to: str | None = None) -> dict:
     """عدد العملاء الجدد في الفترة + عدد الموجودين Online الآن (آخر نشاط خلال 5 دقائق)."""
     joined_where, joined_params = _period_where("joined_at", period, date_from, date_to)
