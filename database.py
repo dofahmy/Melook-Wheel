@@ -1718,8 +1718,8 @@ def get_customer_list_stats(period: str = "all", date_from: str | None = None, d
 
 
 def get_customer_report(user_id: int, period: str = "all") -> dict | None:
-    q_where, _ = _period_where("created_at", period)
-    s_where, _ = _period_where("created_at", period)
+    q_where, q_params = _period_where("created_at", period)
+    s_where, s_params = _period_where("created_at", period)
     with get_conn() as conn:
         u = conn.execute(
             "SELECT * FROM users WHERE user_id=?", (user_id,)
@@ -1732,12 +1732,12 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
             FROM golden_questions WHERE user_id=? AND {q_where}
-        """, (user_id,)).fetchone()
+        """, (user_id, *q_params)).fetchone()
         s = conn.execute(f"""
             SELECT COUNT(*) AS spin_count,
                    COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
             FROM lucky_spins WHERE user_id=? AND {s_where}
-        """, (user_id,)).fetchone()
+        """, (user_id, *s_params)).fetchone()
         r = conn.execute("""
             SELECT COUNT(*) AS redemption_count,
                    COALESCE(SUM(CASE WHEN status='paid' THEN amount ELSE 0 END),0) AS paid_total,
