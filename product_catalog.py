@@ -107,40 +107,73 @@ def choose_product(
     excluded_asins: set[str] | None = None,
     question_index: int = 0,
     user_id: int = 0,
+    current_round_epc: float = 0.0,
+    all_seen_asins: set[str] | None = None,
 ) -> CatalogProduct:
+    """Dynamic selector: minimize repeats while guaranteeing the first 5 products
+    in a round can reach EGYPT_MIN_ROUND_EPC.
+
+    For slots 1-4 it only chooses a product if enough EPC remains in the catalog
+    to finish the 5-product target. On slot 5 it chooses the smallest available
+    EPC that completes the target. Previously seen products are used only when
+    the unseen catalog cannot satisfy the constraint.
+    """
     products = load_products()
-    excluded = excluded_asins or set()
+    excluded = set(excluded_asins or set())
+    seen = set(all_seen_asins or set())
+    target = float(getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
+    slot = int(question_index) % 5
 
-    # كل جولة من 5 أسئلة = منتج واحد من كل شريحة EPC:
-    # < 0.25 | 0.25–<0.75 | 0.75–<2 | 2–4 | >4
-    # نعمل rotation حسب user_id حتى لا يكون ترتيب الشرائح متوقعًا،
-    # مع الحفاظ على منتج واحد بالضبط من كل شريحة في كل جولة.
-    mix = ("very_low", "low", "medium", "high", "premium")
-    offset = abs(int(user_id or 0)) % len(mix)
-    tier = mix[(int(question_index) + offset) % len(mix)]
+    def available(prefer_unseen: bool) -> list[CatalogProduct]:
+        base = [p for p in products if p.asin not in excluded]
+        if prefer_unseen:
+            unseen = [p for p in base if p.asin not in seen]
+            if unseen:
+                return unseen
+        return base
 
-    def in_tier(product: CatalogProduct) -> bool:
-        epc = product.expected_revenue_per_click
-        if tier == "very_low":
-            return epc < 0.25
-        if tier == "low":
-            return 0.25 <= epc < 0.75
-        if tier == "medium":
-            return 0.75 <= epc < 2.0
-        if tier == "high":
-            return 2.0 <= epc <= 4.0
-        return epc > 4.0
+    # Wrong-answer penalty questions after the original 5 still avoid repeats,
+    # but they are outside the 5-product EPC guarantee.
+    if int(question_index) >= 5:
+        pool = available(True) or available(False) or products
+        return random.choice(pool)
 
-    eligible = [p for p in products if in_tier(p)]
-    candidates = [p for p in eligible if p.asin not in excluded]
+    slots_after = 4 - slot
+    for prefer_unseen in (True, False):
+        pool = available(prefer_unseen)
+        if not pool:
+            continue
 
-    if candidates:
-        return random.choice(candidates)
-    if eligible:
-        return random.choice(eligible)
+        if slots_after == 0:
+            need = max(target - float(current_round_epc or 0), 0.0)
+            enough = [p for p in pool if p.expected_revenue_per_click + 1e-12 >= need]
+            if enough:
+                # Smallest EPC that safely closes the round; randomize ties.
+                enough.sort(key=lambda p: p.expected_revenue_per_click)
+                floor = enough[0].expected_revenue_per_click
+                near = [p for p in enough if p.expected_revenue_per_click <= floor + 0.05]
+                return random.choice(near)
+            continue
 
-    remaining = [p for p in products if p.asin not in excluded] or products
-    return random.choice(remaining)
+        feasible = []
+        for candidate in pool:
+            remaining = [
+                p.expected_revenue_per_click for p in pool
+                if p.asin != candidate.asin
+            ]
+            remaining.sort(reverse=True)
+            best_future = sum(remaining[:slots_after])
+            if float(current_round_epc or 0) + candidate.expected_revenue_per_click + best_future + 1e-12 >= target:
+                feasible.append(candidate)
+        if feasible:
+            # Prefer lower EPC now, preserving high-EPC products to subsidize later rounds.
+            feasible.sort(key=lambda p: p.expected_revenue_per_click)
+            window = feasible[:max(1, min(20, len(feasible)))]
+            return random.choice(window)
+
+    # Safety fallback if the catalog itself cannot meet the target.
+    pool = available(True) or available(False) or products
+    return max(pool, key=lambda p: p.expected_revenue_per_click)
 
 def _unique_timestamp_ms() -> int:
     global _last_link_timestamp

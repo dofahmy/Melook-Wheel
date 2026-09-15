@@ -1131,8 +1131,14 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
 
     try:
         asked_asins = database.list_todays_quizzed_asins(user_id)
+        all_seen_asins = database.list_all_quizzed_asins(user_id)
+        current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         product = product_catalog.choose_product(
-            asked_asins, question_index=answered_count, user_id=user_id
+            asked_asins,
+            question_index=answered_count,
+            user_id=user_id,
+            current_round_epc=current_round_epc,
+            all_seen_asins=all_seen_asins,
         )
         question = product_catalog.question_for(product)
     except Exception as exc:

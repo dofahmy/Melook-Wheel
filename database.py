@@ -1105,6 +1105,42 @@ def list_todays_quizzed_asins(user_id: int) -> set[str]:
         return {r["asin"] for r in rows}
 
 
+def list_all_quizzed_asins(user_id: int) -> set[str]:
+    """All products ever shown to this customer, used to minimize repeats."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT asin FROM golden_questions WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return {str(r["asin"]).upper() for r in rows if r["asin"]}
+
+
+def get_current_golden_round_epc(user_id: int, answered_count: int | None = None) -> float:
+    """Sum EPC of questions already created in the current round.
+
+    The users.golden_answered_count counter is reset when a round is converted
+    into its lucky spin, so the latest N questions belong to the active round.
+    """
+    with get_conn() as conn:
+        if answered_count is None:
+            row = conn.execute(
+                "SELECT golden_answered_count FROM users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            answered_count = int(row["golden_answered_count"] or 0) if row else 0
+        n = max(int(answered_count or 0), 0)
+        if n <= 0:
+            return 0.0
+        row = conn.execute(
+            """SELECT COALESCE(SUM(epc), 0) AS total FROM (
+                   SELECT epc FROM golden_questions
+                   WHERE user_id = ?
+                   ORDER BY id DESC LIMIT ?
+               )""",
+            (user_id, n),
+        ).fetchone()
+        return float(row["total"] or 0.0)
+
+
 def log_quiz_asked(user_id: int, asin: str):
     today = datetime.utcnow().date().isoformat()
     with get_conn() as conn:

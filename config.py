@@ -93,8 +93,9 @@ EGYPT_GOLDEN_PARTNER_TAG = os.getenv("EGYPT_GOLDEN_PARTNER_TAG", "leeno-21")
 # معادلة جائزة العميل الشخصية:
 # EPC المكتوب × نسبة الكليكات المعتمدة × نسبة قيمة الكليك الفعلية × نصيب العميل.
 EGYPT_APPROVED_CLICK_RATE = float(os.getenv("EGYPT_APPROVED_CLICK_RATE", "0.30"))
-EGYPT_REAL_CLICK_VALUE_RATE = float(os.getenv("EGYPT_REAL_CLICK_VALUE_RATE", "0.30"))
+EGYPT_REAL_CLICK_VALUE_RATE = float(os.getenv("EGYPT_REAL_CLICK_VALUE_RATE", "0.157"))
 EGYPT_CUSTOMER_REWARD_RATE = float(os.getenv("EGYPT_CUSTOMER_REWARD_RATE", "0.40"))
+EGYPT_MIN_ROUND_EPC = float(os.getenv("EGYPT_MIN_ROUND_EPC", "21.23"))
 # تقسيم منتجات الجولة حسب ERP. كل 5 أسئلة = 2 منخفض + 2 متوسط + 1 عالي.
 # الحدود قابلة للتعديل من ENV من غير تعديل الكود.
 EGYPT_GOLDEN_LOW_MIN_EPC = float(os.getenv("EGYPT_GOLDEN_LOW_MIN_EPC", "0.25"))

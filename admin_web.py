@@ -180,8 +180,14 @@ def _golden_question_payload(user_id: int, existing=None):
 
     asked_asins = database.list_todays_quizzed_asins(user_id)
     answered_count = int(row["golden_answered_count"] or 0)
+    all_seen_asins = database.list_all_quizzed_asins(user_id)
+    current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
     product = product_catalog.choose_product(
-        asked_asins, question_index=answered_count, user_id=user_id
+        asked_asins,
+        question_index=answered_count,
+        user_id=user_id,
+        current_round_epc=current_round_epc,
+        all_seen_asins=all_seen_asins,
     )
     question = product_catalog.question_for(product)
     reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
