@@ -249,10 +249,14 @@
     overflow: visible;
   }
   body.gift-stage .gift-box img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
     object-position: center;
+    max-width: none;
+    max-height: none;
   }
   body.gift-stage .open-hint { margin-top: 2px; }
   body.gift-stage .hint { margin-top: 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -300,7 +304,7 @@
 <button id="spin">🎡 لف عجلة الهدايا وافتح صندوقك</button>
 
 <button class="gift-box" id="giftBox" aria-label="افتح صندوق الجائزة">
-  <img src="golden_gift_box.png" alt="صندوق الجائزة">
+  <img src="golden_gift_box.png?v=20260915-fullbox" alt="صندوق الجائزة">
 </button>
 <div class="open-hint" id="openHint">دوس على الصندوق وافتح جائزتك</div>
 
