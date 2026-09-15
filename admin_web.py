@@ -893,6 +893,45 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
             return
 
+        if parsed.path == "/api/admin/zero-customer-rewards":
+            try:
+                user_id = int(payload.get("user_id") or 0)
+            except Exception:
+                user_id = 0
+            message = str(payload.get("message") or "").strip()
+            if not user_id:
+                self._send_json(400, {"ok": False, "error": "رقم العميل غير صحيح"})
+                return
+            if not message:
+                self._send_json(400, {"ok": False, "error": "اكتبي الرسالة اللي هتتبعت للعميل"})
+                return
+
+            result = database.admin_zero_customer_balance_and_spins(user_id, admin_id, message)
+            if not result:
+                self._send_json(404, {"ok": False, "error": "الحساب غير موجود"})
+                return
+
+            delivered = False
+            delivery_error = ""
+            telegram_user_id = result.get("telegram_user_id")
+            if telegram_user_id:
+                delivered, delivery_error = _telegram_send_message(int(telegram_user_id), message)
+
+            result["message_sent"] = bool(delivered)
+            result["message_delivery"] = "telegram" if delivered else "not_delivered"
+            if delivery_error:
+                result["message_error"] = delivery_error
+
+            response_message = "تم تصفير الرصيد واللفات وإلغاء أي مستحقات معلقة ✅"
+            if delivered:
+                response_message += " وتم إرسال الرسالة للعميل على Telegram."
+            elif telegram_user_id:
+                response_message += " لكن تعذر إرسال رسالة Telegram."
+            else:
+                response_message += " العميل غير مربوط بـ Telegram، لذلك لم تُرسل رسالة خارجية."
+            self._send_json(200, {"ok": True, "data": result, "message": response_message})
+            return
+
         if parsed.path == "/api/admin/suspend-customer":
             try:
                 user_id = int(payload.get("user_id") or 0)

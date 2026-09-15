@@ -50,8 +50,8 @@ function renderCustomers(){let rows=[...customersCache];if(ipSortDirection)rows.
   document.getElementById('customersBody').innerHTML=rows.map(r=>{
     let suspended=Number(r.is_suspended||0)===1;
     let status=suspended?'<span class="badge red">موقوف</span>':'<span class="badge green">نشط</span>';
-    let action='';
-    if(!r.web_account_id){action='<span class="small">بدون حساب Web</span>';}else if(suspended){action='<span class="small">موجود في صفحة الموقوفين</span>';}else{action=`<button class="btn" onclick="event.stopPropagation();suspendCustomer(${Number(r.user_id)},'${esc(r.phone_e164||'')}')">إيقاف</button>`;}
+    let action=`<button class="btn danger" onclick="event.stopPropagation();zeroCustomerRewards(${Number(r.user_id)},'${esc(r.phone_e164||'')}')">تصفير الرصيد واللفات</button>`;
+    if(!r.web_account_id){action+=' <span class="small">بدون حساب Web</span>';}else if(suspended){action+=' <span class="small">موجود في صفحة الموقوفين</span>';}else{action+=` <button class="btn" onclick="event.stopPropagation();suspendCustomer(${Number(r.user_id)},'${esc(r.phone_e164||'')}')">إيقاف</button>`;}
     return `<tr><td class="link" onclick="openCustomer(${r.user_id})">${r.username?'@'+esc(r.username):esc(r.user_id)}</td><td>${platform(r)}</td><td>${esc(r.phone_e164||'—')}</td><td dir="ltr">${esc(r.last_ip||'—')}</td><td>${esc(r.source_last||r.source_first||'—')}</td><td>${r.telegram_user_id?'<span class="badge green">مربوط</span>':'—'}</td><td>${onlineStatus(r)}</td><td>${cairoDateTime(r.last_activity_at)}</td><td>${cairoDateTime(r.joined_at)}</td><td>${n(r.spin_count)}</td><td>${n(r.products_shown)}</td><td>${n(r.paid_total)} ج</td><td>${n(r.pending_total)} ج</td><td>${n(r.gift_balance)} ج</td><td>${status}</td><td>${action}</td></tr>`;
   }).join('');
 }
@@ -65,6 +65,24 @@ async function loadCustomers(){try{
   document.getElementById('customerStats').innerHTML=cards([['👤 عملاء جدد في الفترة',n(stats.new_customers)],['🟢 Online الآن',n(stats.online_now)],['👥 إجمالي العملاء',n(stats.total_customers)]]);
   renderCustomers();
 }catch(e){note(e.message,'err')}}
+
+async function zeroCustomerRewards(userId,phone){
+  let label=phone||('User '+userId);
+  const defaultMessage='⚠️ تنبيه من وفر كاش\n\nتم رصد استخدام غير طبيعي للحساب أثناء المشاركة في عجلة العروض، ولذلك تم إلغاء الرصيد واللفات الحالية.\n\nحفاظًا على عدالة النظام، يُسمح باستخدام العجلة من حساب واحد فقط لكل مستخدم، وأي محاولة لتكرار الاستفادة من خلال أكثر من حساب قد تؤدي إلى إلغاء المكافآت.\n\nتقدر تكمل استخدام وفر كاش بشكل طبيعي من حسابك الأساسي. 💛';
+  if(!confirm('تصفير كل الرصيد واللفات الحالية للحساب '+label+'؟\n\nسيتم أيضًا إلغاء أي لفة أو طلب استبدال معلق. التاريخ القديم والمدفوعات المكتملة لن تُحذف.')) return;
+  let message=prompt('الرسالة التي ستُرسل للعميل — يمكنك تعديلها قبل الإرسال:',defaultMessage);
+  if(message===null)return;
+  message=message.trim();
+  if(!message){note('اكتبي رسالة للعميل قبل تنفيذ التصفير','err');return}
+  try{
+    let r=await api('/api/admin/zero-customer-rewards',{
+      method:'POST',
+      body:JSON.stringify({user_id:userId,message})
+    });
+    note(r.message||'تم تصفير الرصيد واللفات','ok');
+    await loadCustomers();
+  }catch(e){note(e.message,'err')}
+}
 
 async function suspendCustomer(userId,phone){
   let label=phone||('User '+userId);
