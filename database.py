@@ -1891,7 +1891,10 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
     """قائمة العملاء. فلتر الفترة هنا معناه: العملاء الجدد الذين انضموا في الفترة،
     بينما أرقام النشاط/اللفات/المنتجات المعروضة في الصف تظل إجماليات العميل حتى الآن.
     """
-    joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
+    if period == "online":
+        joined_where, joined_params = "u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []
+    else:
+        joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
     search = (search or "").strip()
     like = f"%{search.lstrip('@')}%"
     with get_conn() as conn:
@@ -1939,7 +1942,10 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
 
 def count_customer_reports(period: str = "all", search: str = "", date_from: str | None = None, date_to: str | None = None) -> int:
     """Count customers matching the same join-date/search filters used by the admin customer list."""
-    joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
+    if period == "online":
+        joined_where, joined_params = "u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []
+    else:
+        joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
     search = (search or "").strip()
     like = f"%{search.lstrip('@')}%"
     with get_conn() as conn:
@@ -1956,7 +1962,7 @@ def count_customer_reports(period: str = "all", search: str = "", date_from: str
 
 def get_customer_list_stats(period: str = "all", date_from: str | None = None, date_to: str | None = None) -> dict:
     """عدد العملاء الجدد في الفترة + عدد الموجودين Online الآن (آخر نشاط خلال 5 دقائق)."""
-    joined_where, joined_params = _period_where("joined_at", period, date_from, date_to)
+    joined_where, joined_params = (("last_activity_at IS NOT NULL AND datetime(last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []) if period == "online" else _period_where("joined_at", period, date_from, date_to))
     with get_conn() as conn:
         new_count = conn.execute(
             f"SELECT COUNT(*) AS c FROM users WHERE program='egypt' AND {joined_where}",
