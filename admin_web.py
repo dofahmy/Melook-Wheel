@@ -3,6 +3,7 @@ import hmac
 import html
 import json
 import os
+import re
 import threading
 import time
 from http.cookies import SimpleCookie
@@ -58,8 +59,20 @@ def _validate_init_data(init_data: str):
         return None
 
 
+def _wheel_select_url() -> str:
+    """رابط عجلة الاختيار مع كسر الكاش، ويُفتح كـ Telegram Mini App."""
+    raw = str(getattr(config, "WHEEL_URL", "") or "").strip()
+    if not raw:
+        return ""
+    parts = urlsplit(raw)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update({"mode": "select", "t": str(int(time.time() * 1000))})
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
 def _telegram_send_message(chat_id: int, text: str, button_text: str | None = None,
-                           button_url: str | None = None) -> tuple[bool, str]:
+                           button_url: str | None = None,
+                           button_web_app: bool = False) -> tuple[bool, str]:
     try:
         payload = {
             "chat_id": int(chat_id),
@@ -68,7 +81,12 @@ def _telegram_send_message(chat_id: int, text: str, button_text: str | None = No
             "disable_web_page_preview": True,
         }
         if button_text and button_url:
-            payload["reply_markup"] = {"inline_keyboard": [[{"text": button_text, "url": button_url}]]}
+            button = {"text": button_text}
+            if button_web_app:
+                button["web_app"] = {"url": button_url}
+            else:
+                button["url"] = button_url
+            payload["reply_markup"] = {"inline_keyboard": [[button]]}
         r = requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
             json=payload,
@@ -89,19 +107,23 @@ def _telegram_send_message(chat_id: int, text: str, button_text: str | None = No
 
 def _personalize_customer_message(template: str, customer: dict) -> str:
     name = str(customer.get("first_name") or customer.get("username") or "").strip()
-    return str(template or "").replace("{first_name}", html.escape(name) if name else "بيك")
+    text = str(template or "").replace("{first_name}", html.escape(name) if name else "بيك")
+    # واجهة الأدمن تعرض **النص** بشكل أوضح، ونحوّله إلى HTML الذي يفهمه Telegram.
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text, flags=re.DOTALL)
 
 
 def _run_customer_campaign(campaign_id: int, customers: list[dict], message: str,
                            button_text: str | None, button_url: str | None,
-                           mark_welcome: bool = False):
+                           mark_welcome: bool = False, button_web_app: bool = False):
     for customer in customers:
         user_id = int(customer["user_id"])
         if str(customer.get("telegram_status") or "unknown") == "blocked":
             database.record_campaign_delivery(campaign_id, user_id, "blocked", "مستبعد: حاظر البوت")
             continue
         text = _personalize_customer_message(message, customer)
-        ok, error = _telegram_send_message(user_id, text, button_text, button_url)
+        ok, error = _telegram_send_message(
+            user_id, text, button_text, button_url, button_web_app=button_web_app,
+        )
         if ok:
             database.record_campaign_delivery(campaign_id, user_id, "sent")
             if mark_welcome:
@@ -737,8 +759,20 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
-            rows = [dict(x) for x in database.list_central_customers(period, search, date_from=date_from, date_to=date_to)]
-            self._send_json(200, {"ok": True, "data": rows})
+            try:
+                limit = max(10, min(int(qs.get("limit", ["50"])[0]), 100))
+                offset = max(0, int(qs.get("offset", ["0"])[0]))
+            except (TypeError, ValueError):
+                self._send_json(400, {"ok": False, "error": "رقم الصفحة غير صحيح"})
+                return
+            rows = [dict(x) for x in database.list_central_customers(
+                period, search, limit=limit, offset=offset,
+                date_from=date_from, date_to=date_to,
+            )]
+            total = database.count_customer_reports(period, search, date_from, date_to)
+            self._send_json(200, {"ok": True, "data": {
+                "rows": rows, "total": total, "limit": limit, "offset": offset,
+            }})
             return
         if parsed.path == "/api/admin/customer-list-stats":
             self._send_json(200, {"ok": True, "data": database.get_customer_list_stats(period, date_from, date_to)})
@@ -1013,7 +1047,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(400, {"ok": False, "error": "اكتب نص الرسالة"})
                     return
                 button_text = str(payload.get("button_text") or ("🎡 لف العجلة الآن" if is_welcome else "")).strip() or None
-                button_url = str(payload.get("button_url") or getattr(config, "WHEEL_URL", "")).strip() or None
+                typed_button_url = str(payload.get("button_url") or "").strip()
+                button_web_app = bool(is_welcome)
+                button_url = (typed_button_url or (_wheel_select_url() if is_welcome else "")) or None
                 if bool(button_text) != bool(button_url):
                     self._send_json(400, {"ok": False, "error": "زر الرسالة يحتاج اسم ورابط معًا"})
                     return
@@ -1031,7 +1067,7 @@ class Handler(BaseHTTPRequestHandler):
                                          "customers", len(customers), {"campaign_id": campaign_id, "filters": filters})
                 threading.Thread(
                     target=_run_customer_campaign,
-                    args=(campaign_id, customers, message, button_text, button_url, is_welcome),
+                    args=(campaign_id, customers, message, button_text, button_url, is_welcome, button_web_app),
                     daemon=True,
                     name=f"customer-campaign-{campaign_id}",
                 ).start()
