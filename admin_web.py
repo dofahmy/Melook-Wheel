@@ -70,6 +70,16 @@ def _wheel_select_url() -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def _resolve_customer_button(button_text: str | None, typed_url: str | None,
+                             is_welcome: bool = False) -> tuple[str | None, bool]:
+    """الرابط الفارغ مع زر موجود يعني عجلة Telegram الافتراضية."""
+    typed_url = str(typed_url or "").strip()
+    use_default_wheel = bool(button_text and not typed_url)
+    web_app = bool(is_welcome or use_default_wheel)
+    url = typed_url or (_wheel_select_url() if use_default_wheel or is_welcome else "")
+    return (url or None), web_app
+
+
 def _telegram_send_message(chat_id: int, text: str, button_text: str | None = None,
                            button_url: str | None = None,
                            button_web_app: bool = False) -> tuple[bool, str]:
@@ -1048,10 +1058,14 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 button_text = str(payload.get("button_text") or ("🎡 لف العجلة الآن" if is_welcome else "")).strip() or None
                 typed_button_url = str(payload.get("button_url") or "").strip()
-                button_web_app = bool(is_welcome)
-                button_url = (typed_button_url or (_wheel_select_url() if is_welcome else "")) or None
+                # وجود اسم زر مع ترك الرابط فارغًا معناه استخدام عجلة Telegram
+                # تلقائيًا، سواء الإرسال كان للمحددين أو حملة فحص القدامى.
+                button_url, button_web_app = _resolve_customer_button(
+                    button_text, typed_button_url, is_welcome,
+                )
                 if bool(button_text) != bool(button_url):
-                    self._send_json(400, {"ok": False, "error": "زر الرسالة يحتاج اسم ورابط معًا"})
+                    error = "رابط عجلة Telegram (WHEEL_URL) غير مضبوط" if button_text and not typed_button_url else "زر الرسالة يحتاج اسم ورابط معًا"
+                    self._send_json(400, {"ok": False, "error": error})
                     return
                 # Known blocked customers never count as targets and never receive retries.
                 customers = [x for x in customers if str(x.get("telegram_status") or "unknown") != "blocked"]
