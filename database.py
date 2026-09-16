@@ -2897,7 +2897,11 @@ def list_customer_center(filters: dict | None = None, limit: int = 500, offset: 
             FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             WHERE {where}
-            ORDER BY datetime(u.joined_at) DESC, u.user_id DESC
+            ORDER BY CASE WHEN u.last_activity_at IS NOT NULL
+                                AND datetime(u.last_activity_at) >= datetime('now','-5 minutes')
+                           THEN 0 ELSE 1 END,
+                     datetime(u.last_activity_at) DESC,
+                     datetime(u.joined_at) DESC, u.user_id DESC
             LIMIT ? OFFSET ?
         """, (*params, limit, offset)).fetchall()
         total = conn.execute(f"""
