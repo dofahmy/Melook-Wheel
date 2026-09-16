@@ -680,7 +680,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period, date_from, date_to)})
             return
         if parsed.path == "/api/admin/bonus-settings":
-            self._send_json(200, {"ok": True, "data": database.get_bonus_settings()})
+            settings = database.get_bonus_settings()
+            settings.update({
+                "approved_click_rate": float(config.EGYPT_APPROVED_CLICK_RATE),
+                "real_click_value_rate": float(config.EGYPT_REAL_CLICK_VALUE_RATE),
+                "customer_reward_rate": float(config.EGYPT_CUSTOMER_REWARD_RATE),
+            })
+            self._send_json(200, {"ok": True, "data": settings})
             return
         if parsed.path == "/api/admin/product-report":
             rows = database.list_product_activity_report(period, date_from, date_to)
