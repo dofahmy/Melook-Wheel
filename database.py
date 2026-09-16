@@ -1799,7 +1799,9 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         }
 
 
-def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0, date_from: str | None = None, date_to: str | None = None):
+def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0,
+                          date_from: str | None = None, date_to: str | None = None,
+                          sort_key: str = "online", sort_dir: str = "desc"):
     """قائمة العملاء. فلتر الفترة هنا معناه: العملاء الجدد الذين انضموا في الفترة،
     بينما أرقام النشاط/اللفات/المنتجات المعروضة في الصف تظل إجماليات العميل حتى الآن.
     """
@@ -1810,6 +1812,25 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
         joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
     search = (search or "").strip()
     like = f"%{search.lstrip('@')}%"
+    sort_columns = {
+        "customer": "COALESCE(u.username, CAST(u.user_id AS TEXT))",
+        "platform": "CASE WHEN wa.id IS NOT NULL AND wa.telegram_user_id IS NOT NULL THEN 2 WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END",
+        "phone": "COALESCE(wa.phone_e164,'')",
+        "ip": "COALESCE(wa.last_ip,u.last_ip,'')",
+        "source": "COALESCE(wa.source_last,wa.source_first,'')",
+        "telegram": "CASE WHEN wa.telegram_user_id IS NOT NULL THEN 1 ELSE 0 END",
+        "online": "CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 1 ELSE 0 END",
+        "last_activity": "datetime(u.last_activity_at)",
+        "joined": "datetime(u.joined_at)",
+        "spins": "COALESCE(s.spin_count,0)",
+        "products": "COALESCE(q.products_shown,0)",
+        "paid": "COALESCE(r.paid_total,0)",
+        "pending": "COALESCE(r.pending_total,0)",
+        "balance": "COALESCE(u.gift_balance,0)",
+        "status": "COALESCE(wa.is_suspended,0)",
+    }
+    safe_sort = sort_columns.get(str(sort_key or "online"), sort_columns["online"])
+    safe_dir = "ASC" if str(sort_dir or "desc").lower() == "asc" else "DESC"
     with get_conn() as conn:
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at, u.joined_at,
@@ -1847,7 +1868,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
             WHERE u.program='egypt'
               AND {joined_where}
               AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ?)
-            ORDER BY CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 0 ELSE 1 END,
+            ORDER BY {safe_sort} {safe_dir},
                      datetime(u.last_activity_at) DESC, datetime(u.joined_at) DESC, u.user_id DESC
             LIMIT ? OFFSET ?
         """, (*joined_params, search, like, like, like, int(limit), int(offset))).fetchall()
@@ -2716,9 +2737,11 @@ def get_central_admin_summary(period: str = "all") -> dict:
         }
 
 
-def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0, date_from: str | None = None, date_to: str | None = None):
+def list_central_customers(period: str = "all", search: str = "", limit: int = 500, offset: int = 0,
+                           date_from: str | None = None, date_to: str | None = None,
+                           sort_key: str = "online", sort_dir: str = "desc"):
     """قائمة العملاء المركزية؛ الفترة تخص تاريخ انضمام العميل."""
-    return list_customer_reports(period, search, limit, offset, date_from, date_to)
+    return list_customer_reports(period, search, limit, offset, date_from, date_to, sort_key, sort_dir)
 
 
 
@@ -2910,10 +2933,22 @@ def _customer_filter_sql(filters: dict | None = None):
     return " AND ".join(where), params
 
 
-def list_customer_center(filters: dict | None = None, limit: int = 500, offset: int = 0):
+def list_customer_center(filters: dict | None = None, limit: int = 500, offset: int = 0,
+                         sort_key: str = "online", sort_dir: str = "desc"):
     where, params = _customer_filter_sql(filters)
     limit = max(1, min(int(limit or 500), 5000))
     offset = max(0, int(offset or 0))
+    sort_columns = {
+        "customer": "COALESCE(u.first_name,u.username,CAST(u.user_id AS TEXT))",
+        "telegram": "CASE COALESCE(u.telegram_status,'unknown') WHEN 'active' THEN 2 WHEN 'unknown' THEN 1 ELSE 0 END",
+        "online": "CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 1 ELSE 0 END",
+        "joined": "datetime(u.joined_at)",
+        "last_activity": "datetime(u.last_activity_at)",
+        "balance": "COALESCE(u.gift_balance,0)",
+        "last_message": "datetime(u.last_message_at)",
+    }
+    safe_sort = sort_columns.get(str(sort_key or "online"), sort_columns["online"])
+    safe_dir = "ASC" if str(sort_dir or "desc").lower() == "asc" else "DESC"
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT u.user_id, u.username, u.first_name, u.joined_at, u.last_activity_at, u.is_active,
@@ -2926,9 +2961,7 @@ def list_customer_center(filters: dict | None = None, limit: int = 500, offset: 
             FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             WHERE {where}
-            ORDER BY CASE WHEN u.last_activity_at IS NOT NULL
-                                AND datetime(u.last_activity_at) >= datetime('now','-5 minutes')
-                           THEN 0 ELSE 1 END,
+            ORDER BY {safe_sort} {safe_dir},
                      datetime(u.last_activity_at) DESC,
                      datetime(u.joined_at) DESC, u.user_id DESC
             LIMIT ? OFFSET ?

@@ -779,6 +779,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
+            sort_key = qs.get("sort", ["online"])[0]
+            sort_dir = qs.get("dir", ["desc"])[0]
             try:
                 limit = max(10, min(int(qs.get("limit", ["50"])[0]), 100))
                 offset = max(0, int(qs.get("offset", ["0"])[0]))
@@ -788,6 +790,7 @@ class Handler(BaseHTTPRequestHandler):
             rows = [dict(x) for x in database.list_central_customers(
                 period, search, limit=limit, offset=offset,
                 date_from=date_from, date_to=date_to,
+                sort_key=sort_key, sort_dir=sort_dir,
             )]
             total = database.count_customer_reports(period, search, date_from, date_to)
             self._send_json(200, {"ok": True, "data": {
@@ -821,7 +824,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 limit = int(qs.get("limit", ["500"])[0])
                 offset = int(qs.get("offset", ["0"])[0])
-                data = database.list_customer_center(filters, limit, offset)
+                sort_key = qs.get("sort", ["online"])[0]
+                sort_dir = qs.get("dir", ["desc"])[0]
+                data = database.list_customer_center(filters, limit, offset, sort_key, sort_dir)
             except (TypeError, ValueError):
                 self._send_json(400, {"ok": False, "error": "قيمة فلتر غير صحيحة"})
                 return
