@@ -207,16 +207,27 @@
   .gift-box {
     display: none;
     position: relative;
-    margin: 6px 0 24px;
+    margin: 6px auto 24px;
+    padding: 0;
     border: 0;
-    background: transparent;
-    width: min(82vw, 330px); height: min(82vw, 330px);
+    background-color: transparent;
+    background-image: url("golden_gift_box.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    width: min(82vw, 330px);
+    height: min(82vw, 330px);
+    min-width: 220px;
+    min-height: 220px;
     cursor: pointer;
+    overflow: visible;
     filter: drop-shadow(0 14px 20px rgba(216, 163, 36, 0.5));
     animation: giftPulse 1s ease-in-out infinite alternate;
+    -webkit-appearance: none;
+    appearance: none;
   }
   .gift-box.show { display: block; }
-  .gift-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .gift-box img { display: none !important; }
   @keyframes giftPulse { from { transform: scale(0.96); } to { transform: scale(1.08); } }
   .open-hint { display: none; color: #ffe27a; margin-top: 5px; font-weight: 700; }
   .open-hint.show { display: block; }
@@ -248,16 +259,7 @@
     flex: 0 0 auto;
     overflow: visible;
   }
-  body.gift-stage .gift-box img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
-    max-width: none;
-    max-height: none;
-  }
+  body.gift-stage .gift-box img { display: none !important; }
   body.gift-stage .open-hint { margin-top: 2px; }
   body.gift-stage .hint { margin-top: 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   body.gift-stage .result { margin-top: 10px; padding: 12px 20px; }

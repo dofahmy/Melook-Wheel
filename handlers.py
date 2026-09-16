@@ -1193,10 +1193,19 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     # so Railway can capture the current public IP. Later clicks stay direct.
     product_link = _telegram_ip_capture_link(user_id, question_id, product_link)
 
-    bonus_label = "🎁 جولة مكافأة ×" + str(database.get_bonus_multiplier()) + "\n" if round_kind == "bonus" else ""
+    if round_kind == "bonus":
+        bonus_label = (
+            "🎁✨ مبروك! دي جولة مكافأة خاصة ✨🎁\n"
+            "🔥 مكافأتك في الجولة دي أكبر من الجولات العادية\n"
+            "💰 افتح العروض وكمل الجولة للنهاية علشان تجمع مكافأتك\n"
+            "🎯 ركّز في تفاصيل كل منتج قبل ما تجاوب\n"
+            "👑 يلا كمّل جولة المكافأة!\n\n"
+        )
+    else:
+        bonus_label = ""
     caption = (
         bonus_label + f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
-        f"دوس على لينك المنتج تحت وشوف تفاصيله كويس قبل ما تجاوب 👇\n\n"
+        f"👇 دوس على لينك المنتج وشوف تفاصيله كويس قبل ما تجاوب\n\n"
         f"{question['prompt']}"
     )
     buttons = [
