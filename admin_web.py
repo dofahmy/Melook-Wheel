@@ -235,9 +235,12 @@ def _golden_question_payload(user_id: int, existing=None):
 
     qrow = existing or database.get_pending_web_golden_question(user_id)
     if qrow:
+        round_kind = database.ensure_current_round_kind(user_id)
         product = product_catalog.get_product(str(qrow.get("asin") or ""))
         return {
             "stage": "question",
+            "round_kind": round_kind,
+            "bonus_round": round_kind == "bonus",
             "question_id": int(qrow["id"]),
             "prompt": qrow.get("prompt") or "جاوبي السؤال",
             "options": qrow.get("options") or [],
@@ -259,15 +262,21 @@ def _golden_question_payload(user_id: int, existing=None):
     answered_count = int(row["golden_answered_count"] or 0)
     all_seen_asins = database.list_all_quizzed_asins(user_id)
     current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
+    round_kind = database.ensure_current_round_kind(user_id)
     product = product_catalog.choose_product(
         asked_asins,
         question_index=answered_count,
         user_id=user_id,
         current_round_epc=current_round_epc,
         all_seen_asins=all_seen_asins,
+        first_round_bonus=(round_kind == "welcome"),
+        bonus_round=(round_kind == "bonus"),
+        bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
     )
     question = product_catalog.question_for(product)
     reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
+    if round_kind == "bonus":
+        reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     product_link = product_catalog.build_affiliate_link(product.asin)
     question_id = database.create_golden_question(
         user_id=user_id,
@@ -283,6 +292,8 @@ def _golden_question_payload(user_id: int, existing=None):
     database.log_quiz_asked(user_id, product.asin)
     return {
         "stage": "question",
+        "round_kind": round_kind,
+        "bonus_round": round_kind == "bonus",
         "question_id": int(question_id),
         "prompt": question["prompt"],
         "options": question["options"],
@@ -745,6 +756,15 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/summary":
             self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period, date_from, date_to)})
             return
+        if parsed.path == "/api/admin/bonus-settings":
+            settings = database.get_bonus_settings()
+            settings.update({
+                "approved_click_rate": float(config.EGYPT_APPROVED_CLICK_RATE),
+                "real_click_value_rate": float(config.EGYPT_REAL_CLICK_VALUE_RATE),
+                "customer_reward_rate": float(config.EGYPT_CUSTOMER_REWARD_RATE),
+            })
+            self._send_json(200, {"ok": True, "data": settings})
+            return
         if parsed.path == "/api/admin/redemptions":
             rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
             self._send_json(200, {"ok": True, "data": rows})
@@ -1030,6 +1050,22 @@ class Handler(BaseHTTPRequestHandler):
         admin_id = self._auth_admin()
         if not admin_id:
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
+            return
+
+        if parsed.path == "/api/admin/bonus-settings":
+            try:
+                data = database.update_bonus_settings(
+                    enabled=payload.get("enabled") if "enabled" in payload else None,
+                    multiplier=payload.get("multiplier"),
+                    min_normal_rounds=payload.get("min_normal_rounds"),
+                    max_normal_rounds=payload.get("max_normal_rounds"),
+                    max_per_account=payload.get("max_per_account"),
+                    target_epc=payload.get("target_epc"),
+                )
+            except (TypeError, ValueError) as exc:
+                self._send_json(400, {"ok": False, "error": "قيم إعدادات الجولات التحفيزية غير صحيحة"})
+                return
+            self._send_json(200, {"ok": True, "data": data, "message": "تم حفظ إعدادات الجولات التحفيزية ✅"})
             return
 
         # -------- Customer communication center --------
