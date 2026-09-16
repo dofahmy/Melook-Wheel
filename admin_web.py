@@ -765,6 +765,22 @@ class Handler(BaseHTTPRequestHandler):
             })
             self._send_json(200, {"ok": True, "data": settings})
             return
+        if parsed.path == "/api/admin/product-report":
+            rows = database.list_product_activity_report(period, date_from, date_to)
+            data = []
+            for row in rows:
+                item = dict(row)
+                if product_catalog is not None:
+                    try:
+                        product = product_catalog.get_product(str(item.get("asin") or ""))
+                    except Exception:
+                        product = None
+                    item["title"] = getattr(product, "title", "") if product else ""
+                else:
+                    item["title"] = ""
+                data.append(item)
+            self._send_json(200, {"ok": True, "data": data})
+            return
         if parsed.path == "/api/admin/redemptions":
             rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
             self._send_json(200, {"ok": True, "data": rows})
