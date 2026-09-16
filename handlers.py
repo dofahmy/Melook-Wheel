@@ -42,6 +42,19 @@ RESTART_KEYBOARD = ReplyKeyboardMarkup(
 _BOTH_PROGRAMS = bool(config.KSA_BASE_CHANNEL) and bool(config.EGYPT_BASE_CHANNEL)
 
 
+async def bot_membership_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """سجّل حظر/فك حظر البوت فور وصول my_chat_member من Telegram."""
+    change = update.my_chat_member
+    if not change or not change.chat or change.chat.type != "private":
+        return
+    user_id = int(change.chat.id)
+    status = change.new_chat_member.status
+    if status == ChatMemberStatus.KICKED:
+        database.set_telegram_delivery_status(user_id, "blocked", "Telegram my_chat_member: blocked")
+    elif status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR):
+        database.set_telegram_delivery_status(user_id, "active")
+
+
 def _program_choice_keyboard():
     return InlineKeyboardMarkup(
         [[
@@ -153,7 +166,7 @@ async def _is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int, chann
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بداية البوت الحالية: مصر فقط — ترحيب ثم عجلة العروض الذهبية مباشرة."""
     user = update.effective_user
-    database.upsert_user(user.id, user.username)
+    database.upsert_user(user.id, user.username, user.first_name)
     database.set_user_activity_now(user.id)
     database.set_user_program(user.id, "egypt")
 
@@ -609,7 +622,7 @@ def _notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def _switch_program(update: Update, context: ContextTypes.DEFAULT_TYPE, target_program: str):
     """يسمح لأي عميل (جديد أو قديم) إنه ينضم لبرنامج تاني، حتى لو كان مسجّل في برنامج مختلف بالفعل."""
     user = update.effective_user
-    database.upsert_user(user.id, user.username)
+    database.upsert_user(user.id, user.username, user.first_name)
     current = database.get_user(user.id)
 
     if current["program"] != target_program:
@@ -1154,16 +1167,12 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         asked_asins = database.list_todays_quizzed_asins(user_id)
         all_seen_asins = database.list_all_quizzed_asins(user_id)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
-        round_kind = database.ensure_current_round_kind(user_id)
         product = product_catalog.choose_product(
             asked_asins,
             question_index=answered_count,
             user_id=user_id,
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
-            first_round_bonus=(round_kind == "welcome"),
-            bonus_round=(round_kind == "bonus"),
-            bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
         )
         question = product_catalog.question_for(product)
     except Exception as exc:
@@ -1177,8 +1186,6 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     reward_value = product_catalog.customer_reward_for_epc(
         product.expected_revenue_per_click
     )
-    if round_kind == "bonus":
-        reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     question_id = database.create_golden_question(
         user_id=user_id,
         asin=product.asin,
@@ -1193,19 +1200,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     # so Railway can capture the current public IP. Later clicks stay direct.
     product_link = _telegram_ip_capture_link(user_id, question_id, product_link)
 
-    if round_kind == "bonus":
-        bonus_label = (
-            "🎁✨ مبروك! دي جولة مكافأة خاصة ✨🎁\n"
-            "🔥 مكافأتك في الجولة دي أكبر من الجولات العادية\n"
-            "💰 افتح العروض وكمل الجولة للنهاية علشان تجمع مكافأتك\n"
-            "🎯 ركّز في تفاصيل كل منتج قبل ما تجاوب\n"
-            "👑 يلا كمّل جولة المكافأة!\n\n"
-        )
-    else:
-        bonus_label = ""
     caption = (
-        bonus_label + f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
-        f"👇 دوس على لينك المنتج وشوف تفاصيله كويس قبل ما تجاوب\n\n"
+        f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
+        f"دوس على لينك المنتج تحت وشوف تفاصيله كويس قبل ما تجاوب 👇\n\n"
         f"{question['prompt']}"
     )
     buttons = [
@@ -1907,8 +1904,15 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             await context.bot.send_message(chat_id=u["user_id"], text=message)
+            database.set_telegram_delivery_status(int(u["user_id"]), "active")
             sent += 1
-        except Exception:
+        except Exception as exc:
+            error = str(exc)
+            database.set_telegram_delivery_status(
+                int(u["user_id"]),
+                "blocked" if any(x in error.lower() for x in ("blocked", "deactivated", "chat not found")) else "unknown",
+                error,
+            )
             continue
     await update.message.reply_text(f"اترسلت الرسالة لـ {sent} مستخدم.")
 
@@ -1931,8 +1935,15 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = " ".join(context.args[1:])
     try:
         await context.bot.send_message(chat_id=target_id, text=text)
+        database.set_telegram_delivery_status(target_id, "active")
         await update.message.reply_text("✅ اترسلت الرسالة.")
     except Exception as exc:
+        error = str(exc)
+        database.set_telegram_delivery_status(
+            target_id,
+            "blocked" if any(x in error.lower() for x in ("blocked", "deactivated", "chat not found")) else "unknown",
+            error,
+        )
         await update.message.reply_text(f"❌ مقدرتش أبعت الرسالة: {exc}")
 
 # ---------------- ربط حساب Web App بحساب Telegram ----------------
@@ -1950,7 +1961,7 @@ async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     code = context.args[0].strip()
     # Ensure Telegram user exists before the merge/link operation.
-    database.upsert_user(user.id, user.username)
+    database.upsert_user(user.id, user.username, user.first_name)
     database.set_user_program(user.id, "egypt")
     import web_auth
     ok, message = web_auth.consume_link_code(code, user.id)
