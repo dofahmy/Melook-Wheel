@@ -25,6 +25,12 @@ ADMIN_IDS = _split_ids(os.getenv("ADMIN_IDS", ""))
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot_data.db")
 
+# إعدادات تحمّل الترافيك - مناسبة كبداية لحوالي 10,000 مستخدم/يوم على Worker واحد
+DATABASE_BUSY_TIMEOUT_MS = int(os.getenv("DATABASE_BUSY_TIMEOUT_MS", "30000"))
+DATABASE_CACHE_MB = int(os.getenv("DATABASE_CACHE_MB", "64"))
+TELEGRAM_CONNECTION_POOL_SIZE = int(os.getenv("TELEGRAM_CONNECTION_POOL_SIZE", "64"))
+TELEGRAM_POOL_TIMEOUT = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
+
 # لو عميل واخد لينك ولسه ما اتفعّلش (ما اشتركش في برايم) خلال المدة دي
 # بالدقايق، اللينك يترجع للـ Pool تلقائيًا ويتاخد من حد تاني (برنامج السعودية بس)
 TAG_LINK_TTL_MINUTES = int(os.getenv("TAG_LINK_TTL_MINUTES", "60"))
@@ -88,14 +94,13 @@ EGYPT_GOLDEN_PRODUCTS_FILE = os.getenv(
 )
 
 # تاج روابط منتجات العجلة الذهبية.
-EGYPT_GOLDEN_PARTNER_TAG = os.getenv("EGYPT_GOLDEN_PARTNER_TAG", "wishitworktha-21")
+EGYPT_GOLDEN_PARTNER_TAG = os.getenv("EGYPT_GOLDEN_PARTNER_TAG", "leeno-21")
 
 # معادلة جائزة العميل الشخصية:
 # EPC المكتوب × نسبة الكليكات المعتمدة × نسبة قيمة الكليك الفعلية × نصيب العميل.
 EGYPT_APPROVED_CLICK_RATE = float(os.getenv("EGYPT_APPROVED_CLICK_RATE", "0.30"))
-EGYPT_REAL_CLICK_VALUE_RATE = float(os.getenv("EGYPT_REAL_CLICK_VALUE_RATE", "0.157"))
+EGYPT_REAL_CLICK_VALUE_RATE = float(os.getenv("EGYPT_REAL_CLICK_VALUE_RATE", "0.30"))
 EGYPT_CUSTOMER_REWARD_RATE = float(os.getenv("EGYPT_CUSTOMER_REWARD_RATE", "0.40"))
-EGYPT_MIN_ROUND_EPC = float(os.getenv("EGYPT_MIN_ROUND_EPC", "21.23"))
 # تقسيم منتجات الجولة حسب ERP. كل 5 أسئلة = 2 منخفض + 2 متوسط + 1 عالي.
 # الحدود قابلة للتعديل من ENV من غير تعديل الكود.
 EGYPT_GOLDEN_LOW_MIN_EPC = float(os.getenv("EGYPT_GOLDEN_LOW_MIN_EPC", "0.25"))
@@ -104,19 +109,10 @@ EGYPT_GOLDEN_MEDIUM_MAX_EPC = float(os.getenv("EGYPT_GOLDEN_MEDIUM_MAX_EPC", "2.
 EGYPT_GOLDEN_QUESTIONS_PER_ROUND = int(
     os.getenv("EGYPT_GOLDEN_QUESTIONS_PER_ROUND", "5")
 )
+# مكافأة أول دورة مكتملة لكل عميل. الدورات التالية تظل بحساب EPC المعتاد.
+EGYPT_FIRST_ROUND_CUSTOMER_REWARD = float(
+    os.getenv("EGYPT_FIRST_ROUND_CUSTOMER_REWARD", "2.00")
+)
 
 # أقل رصيد جوايز (بالجنيه) لازم يوصله العميل قبل ما يقدر يطلب استبدال
 EGYPT_REDEEM_MIN_BALANCE = float(os.getenv("EGYPT_REDEEM_MIN_BALANCE", "5"))
-
-# Railway / SQLite tuning (safe defaults for a single worker)
-DATABASE_BUSY_TIMEOUT_MS = int(os.getenv("DATABASE_BUSY_TIMEOUT_MS", "30000"))
-DATABASE_CACHE_MB = int(os.getenv("DATABASE_CACHE_MB", "64"))
-TELEGRAM_CONNECTION_POOL_SIZE = int(os.getenv("TELEGRAM_CONNECTION_POOL_SIZE", "64"))
-TELEGRAM_POOL_TIMEOUT = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
-
-# -------- حساب وفر كاش المستقل / Web App --------
-# استخدمي قيمة عشوائية طويلة في Railway. لو فاضية هيستخدم BOT_TOKEN كبديل.
-WEB_AUTH_SECRET = os.getenv("WEB_AUTH_SECRET", "")
-# production: authevo | local testing only: dev
-OTP_DELIVERY_MODE = os.getenv("OTP_DELIVERY_MODE", "authevo")
-AUTHEVO_API_KEY = os.getenv("AUTHEVO_API_KEY", "")

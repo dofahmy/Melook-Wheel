@@ -1100,7 +1100,27 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
                 (user_id,),
             ).fetchone()
             if existing:
+                earlier_count = conn.execute(
+                    "SELECT COUNT(*) AS c FROM lucky_spins WHERE user_id=? AND id<?",
+                    (user_id, existing["id"]),
+                ).fetchone()["c"] or 0
+                if int(earlier_count) == 0:
+                    first_reward = round(float(getattr(config, "EGYPT_FIRST_ROUND_CUSTOMER_REWARD", 2.0)), 6)
+                    if float(existing["prize"] or 0) != first_reward:
+                        conn.execute(
+                            "UPDATE lucky_spins SET prize=? WHERE id=? AND status='pending'",
+                            (first_reward, existing["id"]),
+                        )
+                        existing = conn.execute(
+                            "SELECT * FROM lucky_spins WHERE id=?", (existing["id"],)
+                        ).fetchone()
                 return existing["id"], existing["prize"], existing["prize_index"]
+            previous_count = conn.execute(
+                "SELECT COUNT(*) AS c FROM lucky_spins WHERE user_id=?", (user_id,)
+            ).fetchone()["c"] or 0
+            if int(previous_count) == 0:
+                # قاعدة العمل: أول دورة مكتملة للعميل قيمتها ثابتة 2 جنيه.
+                prize = round(float(getattr(config, "EGYPT_FIRST_ROUND_CUSTOMER_REWARD", 2.0)), 6)
             cur = conn.execute(
                 """INSERT INTO lucky_spins
                    (user_id, prize, prize_index, status, created_at)
@@ -1395,26 +1415,6 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
-
-        # Business rule: any fully completed Golden Offers round must be worth
-        # at least 0.40 EGP to the customer. Wrong answers can still add penalty
-        # questions, but they must not make the final completed-round prize fall
-        # below the advertised minimum. This is enforced here so Telegram and
-        # Web App use exactly the same rule.
-        min_round_reward = float(getattr(config, "EGYPT_MIN_ROUND_CUSTOMER_REWARD", 0.40))
-        if (
-            int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
-            and float(progress["golden_round_earnings"] or 0) < min_round_reward
-        ):
-            conn.execute(
-                "UPDATE users SET golden_round_earnings = ? WHERE user_id = ?",
-                (min_round_reward, user_id),
-            )
-            progress = conn.execute(
-                """SELECT golden_answered_count, golden_opened_count,
-                   golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
-                (user_id,),
-            ).fetchone()
 
         return {
             "correct": bool(is_correct),
