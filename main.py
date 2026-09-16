@@ -8,7 +8,7 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, CommandHandler, MessageHandler, filters
 
 import config
 import database
@@ -35,7 +35,6 @@ def _build_customer_commands() -> list[BotCommand]:
         BotCommand("offers", "🛍️ آخر عروض أمازون"),
         BotCommand("goldenwheel", "🏆 عجلة العروض الذهبية"),
         BotCommand("myaccount", "📊 حسابي"),
-        BotCommand("linkweb", "ربط حساب الموقع بتيليجرام"),
         BotCommand("redeem", "استبدل رصيد الهدايا"),
         BotCommand("start", "إعادة تفعيل الحساب"),
         BotCommand("stop", "إلغاء الاشتراك"),
@@ -141,6 +140,7 @@ def main():
 
     # أوامر المستخدم العادي
     app.add_handler(CommandHandler("start", handlers.start))
+    app.add_handler(ChatMemberHandler(handlers.bot_membership_update, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(CommandHandler("mytag", handlers.mytag))
     app.add_handler(CommandHandler("stop", handlers.stop))
     app.add_handler(CallbackQueryHandler(handlers.buyer_type_callback, pattern="^buyertype:"))
@@ -152,7 +152,6 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handlers.handle_webapp_data))
     app.add_handler(MessageHandler(filters.Regex("^📊 حسابي$"), handlers.account_button))
     app.add_handler(CommandHandler("myaccount", handlers.account_button))
-    app.add_handler(CommandHandler("linkweb", handlers.linkweb))
     app.add_handler(MessageHandler(filters.Regex("^🏆 عجلة العروض الذهبية$"), handlers.golden_wheel_entry))
     if config.EGYPT_DEALS_CHANNEL:
         app.add_handler(
@@ -184,7 +183,7 @@ def main():
     app.add_handler(CommandHandler("msg", handlers.msg))
 
     logger.info("البوت بدأ الشغل...")
-    app.run_polling(allowed_updates=["message", "callback_query", "chat_member", "channel_post"])
+    app.run_polling(allowed_updates=["message", "callback_query", "my_chat_member", "chat_member", "channel_post"])
 
 
 if __name__ == "__main__":

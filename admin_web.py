@@ -58,24 +58,59 @@ def _validate_init_data(init_data: str):
         return None
 
 
-def _telegram_send_message(chat_id: int, text: str) -> tuple[bool, str]:
+def _telegram_send_message(chat_id: int, text: str, button_text: str | None = None,
+                           button_url: str | None = None) -> tuple[bool, str]:
     try:
+        payload = {
+            "chat_id": int(chat_id),
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if button_text and button_url:
+            payload["reply_markup"] = {"inline_keyboard": [[{"text": button_text, "url": button_url}]]}
         r = requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
-            json={
-                "chat_id": int(chat_id),
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
+            json=payload,
             timeout=20,
         )
         data = r.json()
         if r.ok and data.get("ok"):
+            database.set_telegram_delivery_status(int(chat_id), "active")
             return True, ""
-        return False, data.get("description") or f"HTTP {r.status_code}"
+        error = data.get("description") or f"HTTP {r.status_code}"
+        blocked = r.status_code == 403 and any(x in error.lower() for x in ("blocked", "deactivated", "chat not found"))
+        database.set_telegram_delivery_status(int(chat_id), "blocked" if blocked else "unknown", error)
+        return False, error
     except Exception as exc:
+        database.set_telegram_delivery_status(int(chat_id), "unknown", str(exc))
         return False, str(exc)
+
+
+def _personalize_customer_message(template: str, customer: dict) -> str:
+    name = str(customer.get("first_name") or customer.get("username") or "").strip()
+    return str(template or "").replace("{first_name}", html.escape(name) if name else "بيك")
+
+
+def _run_customer_campaign(campaign_id: int, customers: list[dict], message: str,
+                           button_text: str | None, button_url: str | None,
+                           mark_welcome: bool = False):
+    for customer in customers:
+        user_id = int(customer["user_id"])
+        if str(customer.get("telegram_status") or "unknown") == "blocked":
+            database.record_campaign_delivery(campaign_id, user_id, "blocked", "مستبعد: حاظر البوت")
+            continue
+        text = _personalize_customer_message(message, customer)
+        ok, error = _telegram_send_message(user_id, text, button_text, button_url)
+        if ok:
+            database.record_campaign_delivery(campaign_id, user_id, "sent")
+            if mark_welcome:
+                database.mark_welcome_check_sent(user_id)
+        else:
+            latest = database.get_user(user_id)
+            status = "blocked" if latest and latest["telegram_status"] == "blocked" else "failed"
+            database.record_campaign_delivery(campaign_id, user_id, status, error)
+        time.sleep(0.05)
 
 
 
@@ -158,12 +193,9 @@ def _golden_question_payload(user_id: int, existing=None):
 
     qrow = existing or database.get_pending_web_golden_question(user_id)
     if qrow:
-        round_kind = database.ensure_current_round_kind(user_id)
         product = product_catalog.get_product(str(qrow.get("asin") or ""))
         return {
             "stage": "question",
-            "round_kind": round_kind,
-            "bonus_round": round_kind == "bonus",
             "question_id": int(qrow["id"]),
             "prompt": qrow.get("prompt") or "جاوبي السؤال",
             "options": qrow.get("options") or [],
@@ -185,21 +217,15 @@ def _golden_question_payload(user_id: int, existing=None):
     answered_count = int(row["golden_answered_count"] or 0)
     all_seen_asins = database.list_all_quizzed_asins(user_id)
     current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
-    round_kind = database.ensure_current_round_kind(user_id)
     product = product_catalog.choose_product(
         asked_asins,
         question_index=answered_count,
         user_id=user_id,
         current_round_epc=current_round_epc,
         all_seen_asins=all_seen_asins,
-        first_round_bonus=(round_kind == "welcome"),
-        bonus_round=(round_kind == "bonus"),
-        bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
     )
     question = product_catalog.question_for(product)
     reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
-    if round_kind == "bonus":
-        reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     product_link = product_catalog.build_affiliate_link(product.asin)
     question_id = database.create_golden_question(
         user_id=user_id,
@@ -215,8 +241,6 @@ def _golden_question_payload(user_id: int, existing=None):
     database.log_quiz_asked(user_id, product.asin)
     return {
         "stage": "question",
-        "round_kind": round_kind,
-        "bonus_round": round_kind == "bonus",
         "question_id": int(question_id),
         "prompt": question["prompt"],
         "options": question["options"],
@@ -679,31 +703,6 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/summary":
             self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period, date_from, date_to)})
             return
-        if parsed.path == "/api/admin/bonus-settings":
-            settings = database.get_bonus_settings()
-            settings.update({
-                "approved_click_rate": float(config.EGYPT_APPROVED_CLICK_RATE),
-                "real_click_value_rate": float(config.EGYPT_REAL_CLICK_VALUE_RATE),
-                "customer_reward_rate": float(config.EGYPT_CUSTOMER_REWARD_RATE),
-            })
-            self._send_json(200, {"ok": True, "data": settings})
-            return
-        if parsed.path == "/api/admin/product-report":
-            rows = database.list_product_activity_report(period, date_from, date_to)
-            data = []
-            for row in rows:
-                item = dict(row)
-                if product_catalog is not None:
-                    try:
-                        product = product_catalog.get_product(str(item.get("asin") or ""))
-                    except Exception:
-                        product = None
-                    item["title"] = getattr(product, "title", "") if product else ""
-                else:
-                    item["title"] = ""
-                data.append(item)
-            self._send_json(200, {"ok": True, "data": data})
-            return
         if parsed.path == "/api/admin/redemptions":
             rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
             self._send_json(200, {"ok": True, "data": rows})
@@ -738,14 +737,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/admin/central-customers":
             search = qs.get("search", [""])[0]
-            try:
-                limit = max(1, min(100, int(qs.get("limit", ["20"])[0])))
-                offset = max(0, int(qs.get("offset", ["0"])[0]))
-            except Exception:
-                limit, offset = 20, 0
-            rows = [dict(x) for x in database.list_central_customers(period, search, limit=limit, offset=offset, date_from=date_from, date_to=date_to)]
-            total = database.count_customer_reports(period, search, date_from=date_from, date_to=date_to)
-            self._send_json(200, {"ok": True, "data": {"rows": rows, "total": total, "limit": limit, "offset": offset}})
+            rows = [dict(x) for x in database.list_central_customers(period, search, date_from=date_from, date_to=date_to)]
+            self._send_json(200, {"ok": True, "data": rows})
             return
         if parsed.path == "/api/admin/customer-list-stats":
             self._send_json(200, {"ok": True, "data": database.get_customer_list_stats(period, date_from, date_to)})
@@ -755,6 +748,51 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/admin/alerts":
             self._send_json(200, {"ok": True, "data": database.get_admin_alerts(30)})
+            return
+        if parsed.path == "/api/admin/customer-center":
+            filters = {
+                "search": qs.get("search", [""])[0],
+                "program": qs.get("program", [""])[0],
+                "telegram_status": qs.get("telegram_status", [""])[0],
+                "joined_from": qs.get("joined_from", [""])[0],
+                "joined_to": qs.get("joined_to", [""])[0],
+                "last_active_before": qs.get("last_active_before", [""])[0],
+                "min_balance": qs.get("min_balance", [""])[0],
+                "max_balance": qs.get("max_balance", [""])[0],
+                "welcome_unsent": qs.get("welcome_unsent", [""])[0] in ("1", "true"),
+            }
+            active = qs.get("is_active", [""])[0]
+            if active in ("0", "1"):
+                filters["is_active"] = active
+            try:
+                limit = int(qs.get("limit", ["500"])[0])
+                offset = int(qs.get("offset", ["0"])[0])
+                data = database.list_customer_center(filters, limit, offset)
+            except (TypeError, ValueError):
+                self._send_json(400, {"ok": False, "error": "قيمة فلتر غير صحيحة"})
+                return
+            self._send_json(200, {"ok": True, "data": data})
+            return
+        if parsed.path == "/api/admin/customer-operations":
+            try:
+                uid = int(qs.get("user_id", ["0"])[0])
+            except Exception:
+                uid = 0
+            if not uid:
+                self._send_json(400, {"ok": False, "error": "رقم العميل غير صحيح"})
+                return
+            self._send_json(200, {"ok": True, "data": database.get_customer_operations(uid)})
+            return
+        if parsed.path == "/api/admin/campaign":
+            try:
+                campaign_id = int(qs.get("id", ["0"])[0])
+            except Exception:
+                campaign_id = 0
+            data = database.get_campaign(campaign_id) if campaign_id else None
+            if not data:
+                self._send_json(404, {"ok": False, "error": "الحملة غير موجودة"})
+            else:
+                self._send_json(200, {"ok": True, "data": data})
             return
         if parsed.path == "/api/admin/session":
             self._send_json(200, {"ok": True, "data": {"authenticated": True}})
@@ -935,60 +973,100 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
             return
 
-        if parsed.path == "/api/admin/bonus-settings":
+        # -------- Customer communication center --------
+        if parsed.path in (
+            "/api/admin/customer-message",
+            "/api/admin/customer-broadcast",
+            "/api/admin/customer-balance",
+            "/api/admin/customer-reactivate",
+            "/api/admin/welcome-check",
+        ):
+            filters = payload.get("filters") if isinstance(payload.get("filters"), dict) else {}
+            explicit_ids = payload.get("user_ids") if isinstance(payload.get("user_ids"), list) else []
+            if explicit_ids:
+                filters = dict(filters)
+                filters["user_ids"] = explicit_ids
             try:
-                data = database.update_bonus_settings(
-                    enabled=payload.get("enabled") if "enabled" in payload else None,
-                    multiplier=payload.get("multiplier"),
-                    min_normal_rounds=payload.get("min_normal_rounds"),
-                    max_normal_rounds=payload.get("max_normal_rounds"),
-                    max_per_account=payload.get("max_per_account"),
-                    target_epc=payload.get("target_epc"),
+                selected = database.list_customer_center(filters, 5000, 0)
+            except (TypeError, ValueError):
+                self._send_json(400, {"ok": False, "error": "الفلاتر غير صحيحة"})
+                return
+            customers = list(selected.get("rows") or [])
+            if not customers:
+                self._send_json(409, {"ok": False, "error": "مفيش عملاء مطابقين للاختيار"})
+                return
+            if len(customers) > 1 and str(payload.get("confirm") or "") != "CONFIRM":
+                self._send_json(409, {"ok": False, "error": f"اكتب CONFIRM لتأكيد الإجراء على {len(customers)} عميل"})
+                return
+
+            if parsed.path in ("/api/admin/customer-message", "/api/admin/customer-broadcast", "/api/admin/welcome-check"):
+                is_welcome = parsed.path == "/api/admin/welcome-check"
+                default_welcome = (
+                    "أهلًا {first_name} 👋💚\n\n"
+                    "وحشتنا في <b>وفر كاش</b> 🤖\n"
+                    "رجعنا لك بعروض أكتر وهدايا أكبر، وفرصة تلف <b>عجلة الهدايا</b> "
+                    "وتكسب بطاقات هدايا فورية 🎁🎡\n\n"
+                    "اضغط على الزر وابدأ دلوقتي 👇"
                 )
-            except (TypeError, ValueError) as exc:
-                self._send_json(400, {"ok": False, "error": "قيم إعدادات الجولات التحفيزية غير صحيحة"})
+                message = str(payload.get("message") or (default_welcome if is_welcome else "")).strip()
+                if not message:
+                    self._send_json(400, {"ok": False, "error": "اكتب نص الرسالة"})
+                    return
+                button_text = str(payload.get("button_text") or ("🎡 لف العجلة الآن" if is_welcome else "")).strip() or None
+                button_url = str(payload.get("button_url") or getattr(config, "WHEEL_URL", "")).strip() or None
+                if bool(button_text) != bool(button_url):
+                    self._send_json(400, {"ok": False, "error": "زر الرسالة يحتاج اسم ورابط معًا"})
+                    return
+                # Known blocked customers never count as targets and never receive retries.
+                customers = [x for x in customers if str(x.get("telegram_status") or "unknown") != "blocked"]
+                if not customers:
+                    self._send_json(409, {"ok": False, "error": "كل العملاء المختارين حاظرين البوت"})
+                    return
+                campaign_id = database.create_customer_campaign(
+                    str(payload.get("name") or ("فحص العملاء القدامى" if is_welcome else "رسالة عملاء")),
+                    message, button_text, button_url, filters,
+                    [int(x["user_id"]) for x in customers], admin_id,
+                )
+                database.add_admin_audit(admin_id, "welcome_check" if is_welcome else "broadcast",
+                                         "customers", len(customers), {"campaign_id": campaign_id, "filters": filters})
+                threading.Thread(
+                    target=_run_customer_campaign,
+                    args=(campaign_id, customers, message, button_text, button_url, is_welcome),
+                    daemon=True,
+                    name=f"customer-campaign-{campaign_id}",
+                ).start()
+                self._send_json(202, {"ok": True, "data": {"campaign_id": campaign_id, "targets": len(customers)}})
                 return
-            self._send_json(200, {"ok": True, "data": data, "message": "تم حفظ إعدادات الجولات التحفيزية ✅"})
-            return
 
-        if parsed.path == "/api/admin/zero-customer-rewards":
-            try:
-                user_id = int(payload.get("user_id") or 0)
-            except Exception:
-                user_id = 0
-            message = str(payload.get("message") or "").strip()
-            if not user_id:
-                self._send_json(400, {"ok": False, "error": "رقم العميل غير صحيح"})
+            if parsed.path == "/api/admin/customer-balance":
+                try:
+                    amount = float(payload.get("amount"))
+                except (TypeError, ValueError):
+                    amount = 0
+                if amount == 0:
+                    self._send_json(400, {"ok": False, "error": "اكتب قيمة رصيد صحيحة"})
+                    return
+                reason = str(payload.get("reason") or "تعديل إداري").strip()
+                batch_key = str(payload.get("operation_key") or f"admin-{admin_id}-{int(time.time()*1000)}")[:100]
+                updated, errors = [], []
+                for customer in customers:
+                    uid = int(customer["user_id"])
+                    try:
+                        balance = database.adjust_customer_balance(uid, amount, reason, admin_id, f"{batch_key}:{uid}")
+                        updated.append({"user_id": uid, "balance": balance})
+                    except Exception as exc:
+                        errors.append({"user_id": uid, "error": str(exc)})
+                database.add_admin_audit(admin_id, "balance_adjust", "customers", len(updated),
+                                         {"amount": amount, "reason": reason, "errors": errors[:20]})
+                self._send_json(200, {"ok": True, "data": {"updated": updated, "errors": errors}})
                 return
-            if not message:
-                self._send_json(400, {"ok": False, "error": "اكتبي الرسالة اللي هتتبعت للعميل"})
+
+            if parsed.path == "/api/admin/customer-reactivate":
+                ids = [int(x["user_id"]) for x in customers]
+                count = database.reactivate_customer_users(ids)
+                database.add_admin_audit(admin_id, "reactivate", "customers", count, {"user_ids": ids[:100]})
+                self._send_json(200, {"ok": True, "data": {"reactivated": count}})
                 return
-
-            result = database.admin_zero_customer_balance_and_spins(user_id, admin_id, message)
-            if not result:
-                self._send_json(404, {"ok": False, "error": "الحساب غير موجود"})
-                return
-
-            delivered = False
-            delivery_error = ""
-            telegram_user_id = result.get("telegram_user_id")
-            if telegram_user_id:
-                delivered, delivery_error = _telegram_send_message(int(telegram_user_id), message)
-
-            result["message_sent"] = bool(delivered)
-            result["message_delivery"] = "telegram" if delivered else "not_delivered"
-            if delivery_error:
-                result["message_error"] = delivery_error
-
-            response_message = "تم تصفير الرصيد واللفات وإلغاء أي مستحقات معلقة ✅"
-            if delivered:
-                response_message += " وتم إرسال الرسالة للعميل على Telegram."
-            elif telegram_user_id:
-                response_message += " لكن تعذر إرسال رسالة Telegram."
-            else:
-                response_message += " العميل غير مربوط بـ Telegram، لذلك لم تُرسل رسالة خارجية."
-            self._send_json(200, {"ok": True, "data": result, "message": response_message})
-            return
 
         if parsed.path == "/api/admin/suspend-customer":
             try:

@@ -19,6 +19,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     username TEXT,
+    first_name TEXT,
     joined_at TEXT NOT NULL,
     is_active INTEGER DEFAULT 1,
     program TEXT,
@@ -40,13 +41,8 @@ CREATE TABLE IF NOT EXISTS users (
     golden_answered_count INTEGER DEFAULT 0,
     golden_round_earnings REAL DEFAULT 0,
     golden_target INTEGER DEFAULT 5,
-    first_round_bonus_used INTEGER DEFAULT 0,
     pending_offer_from_id INTEGER,
     pending_offer_to_id INTEGER,
-    bonus_rounds_used INTEGER DEFAULT 0,
-    normal_rounds_since_bonus INTEGER DEFAULT 0,
-    bonus_next_after INTEGER DEFAULT 0,
-    current_round_kind TEXT,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
 
@@ -61,12 +57,6 @@ CREATE TABLE IF NOT EXISTS tags (
 
 CREATE TABLE IF NOT EXISTS admins (
     user_id INTEGER PRIMARY KEY
-);
-
-CREATE TABLE IF NOT EXISTS app_settings (
-    setting_key TEXT PRIMARY KEY,
-    setting_value TEXT NOT NULL,
-    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wheel_spins (
@@ -160,19 +150,55 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
-CREATE TABLE IF NOT EXISTS admin_reward_resets (
+CREATE TABLE IF NOT EXISTS balance_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    old_gift_balance REAL DEFAULT 0,
-    old_points_balance INTEGER DEFAULT 0,
-    old_spins_balance INTEGER DEFAULT 0,
-    cancelled_lucky_spins INTEGER DEFAULT 0,
-    cancelled_redemptions INTEGER DEFAULT 0,
+    amount REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    reason TEXT NOT NULL,
+    operation_key TEXT UNIQUE,
     admin_id INTEGER,
-    customer_message TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS customer_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    message_text TEXT,
+    button_text TEXT,
+    button_url TEXT,
+    filters_json TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    total_targets INTEGER DEFAULT 0,
+    sent_count INTEGER DEFAULT 0,
+    blocked_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT NOT NULL,
+    finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS customer_campaign_recipients (
+    campaign_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    sent_at TEXT,
+    PRIMARY KEY (campaign_id, user_id),
+    FOREIGN KEY (campaign_id) REFERENCES customer_campaigns(id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER,
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_count INTEGER DEFAULT 0,
+    details_json TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 _MIGRATIONS = [
@@ -198,16 +224,21 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN pending_offer_to_id INTEGER",
     "ALTER TABLE users ADD COLUMN last_ip TEXT",
     "ALTER TABLE users ADD COLUMN ip_capture_needed INTEGER DEFAULT 1",
+    "ALTER TABLE users ADD COLUMN telegram_status TEXT DEFAULT 'unknown'",
+    "ALTER TABLE users ADD COLUMN first_name TEXT",
+    "ALTER TABLE users ADD COLUMN blocked_at TEXT",
+    "ALTER TABLE users ADD COLUMN unblocked_at TEXT",
+    "ALTER TABLE users ADD COLUMN last_message_status TEXT",
+    "ALTER TABLE users ADD COLUMN last_message_error TEXT",
+    "ALTER TABLE users ADD COLUMN last_message_at TEXT",
+    "ALTER TABLE users ADD COLUMN welcome_check_sent_at TEXT",
+    "ALTER TABLE users ADD COLUMN reactivated_at TEXT",
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
     "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
     "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
     "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
-    "ALTER TABLE users ADD COLUMN bonus_rounds_used INTEGER DEFAULT 0",
-    "ALTER TABLE users ADD COLUMN normal_rounds_since_bonus INTEGER DEFAULT 0",
-    "ALTER TABLE users ADD COLUMN bonus_next_after INTEGER DEFAULT 0",
-    "ALTER TABLE users ADD COLUMN current_round_kind TEXT",
 ]
 @contextmanager
 def get_conn():
@@ -236,14 +267,7 @@ def init_db():
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA wal_autocheckpoint = 1000")
         conn.execute("PRAGMA mmap_size = 268435456")
-        # first_round_bonus_used is intentionally migrated outside _MIGRATIONS.
-        # Existing customers must NOT receive the new-customer welcome round; only
-        # accounts created after this deployment start with the default value 0.
-        existing_user_columns = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         conn.executescript(SCHEMA)
-        if existing_user_columns and "first_round_bonus_used" not in existing_user_columns:
-            conn.execute("ALTER TABLE users ADD COLUMN first_round_bonus_used INTEGER DEFAULT 0")
-            conn.execute("UPDATE users SET first_round_bonus_used = 1")
         for stmt in _MIGRATIONS:
             try:
                 conn.execute(stmt)
@@ -331,6 +355,16 @@ def init_db():
             ON redemption_requests(status, requested_at);
         CREATE INDEX IF NOT EXISTS idx_redemptions_user_status
             ON redemption_requests(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_users_telegram_status
+            ON users(telegram_status);
+        CREATE INDEX IF NOT EXISTS idx_users_joined_at
+            ON users(joined_at);
+        CREATE INDEX IF NOT EXISTS idx_balance_ledger_user_created
+            ON balance_ledger(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_campaign_recipients_status
+            ON customer_campaign_recipients(campaign_id, status);
+        CREATE INDEX IF NOT EXISTS idx_audit_created
+            ON admin_audit_log(created_at);
         """)
         conn.execute("PRAGMA optimize")
 
@@ -341,7 +375,7 @@ def init_db():
 
 # ---------- المستخدمين ----------
 
-def upsert_user(user_id: int, username: str | None):
+def upsert_user(user_id: int, username: str | None, first_name: str | None = None):
     with get_conn() as conn:
         now = datetime.utcnow().isoformat()
         existing = conn.execute(
@@ -349,14 +383,17 @@ def upsert_user(user_id: int, username: str | None):
         ).fetchone()
         if existing:
             conn.execute(
-                "UPDATE users SET username = ?, is_active = 1 WHERE user_id = ?",
-                (username, user_id),
+                """UPDATE users SET username = ?, first_name=COALESCE(?, first_name), is_active = 1,
+                   telegram_status='active', unblocked_at=CASE
+                       WHEN telegram_status='blocked' THEN ? ELSE unblocked_at END
+                   WHERE user_id = ?""",
+                (username, first_name, now, user_id),
             )
         else:
             conn.execute(
-                """INSERT INTO users (user_id, username, joined_at, is_active, golden_target)
-                   VALUES (?, ?, ?, 1, ?)""",
-                (user_id, username, now, GOLDEN_TARGET_COUNT),
+                """INSERT INTO users (user_id, username, first_name, joined_at, is_active, golden_target, telegram_status)
+                   VALUES (?, ?, ?, ?, 1, ?, 'active')""",
+                (user_id, username, first_name, now, GOLDEN_TARGET_COUNT),
             )
 
 
@@ -790,85 +827,6 @@ def reset_gift_balance(user_id: int) -> float:
         return old
 
 
-def admin_zero_customer_balance_and_spins(user_id: int, admin_id: int | None = None, customer_message: str = "") -> dict | None:
-    """Hard reset of all *current/unpaid* customer rewards without deleting history.
-
-    Paid redemption history and answered-question history remain untouched. Pending
-    lucky spins and pending/processing redemption requests are cancelled so no
-    pre-reset reward can be collected after the reset.
-    """
-    now = datetime.utcnow().isoformat()
-    with get_conn() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            """SELECT user_id, gift_balance, points_balance, spins_balance
-               FROM users WHERE user_id=?""", (int(user_id),)
-        ).fetchone()
-        if not row:
-            return None
-
-        old_gift = float(row["gift_balance"] or 0)
-        old_points = int(row["points_balance"] or 0)
-        old_spins = int(row["spins_balance"] or 0)
-
-        pending_spin_count = conn.execute(
-            "SELECT COUNT(*) AS c FROM lucky_spins WHERE user_id=? AND status='pending'",
-            (int(user_id),),
-        ).fetchone()["c"] or 0
-        pending_redemption_count = conn.execute(
-            """SELECT COUNT(*) AS c FROM redemption_requests
-               WHERE user_id=? AND status IN ('pending','processing')""",
-            (int(user_id),),
-        ).fetchone()["c"] or 0
-
-        conn.execute(
-            """UPDATE users SET gift_balance=0, points_balance=0, spins_balance=0,
-               golden_opened_count=0, golden_answered_count=0,
-               golden_round_earnings=0, golden_target=?
-               WHERE user_id=?""",
-            (GOLDEN_TARGET_COUNT, int(user_id)),
-        )
-        conn.execute(
-            """UPDATE lucky_spins SET status='cancelled'
-               WHERE user_id=? AND status='pending'""",
-            (int(user_id),),
-        )
-        conn.execute(
-            """UPDATE redemption_requests SET status='cancelled'
-               WHERE user_id=? AND status IN ('pending','processing')""",
-            (int(user_id),),
-        )
-
-        # Keep old questions/spins/redemptions as evidence/history; only current
-        # entitlements are zeroed/cancelled.
-        conn.execute(
-            """INSERT INTO admin_reward_resets
-               (user_id, old_gift_balance, old_points_balance, old_spins_balance,
-                cancelled_lucky_spins, cancelled_redemptions, admin_id, customer_message, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (int(user_id), old_gift, old_points, old_spins,
-             int(pending_spin_count), int(pending_redemption_count),
-             int(admin_id) if admin_id is not None else None,
-             str(customer_message or "")[:2000], now),
-        )
-
-        wa = conn.execute(
-            "SELECT id, phone_e164, telegram_user_id FROM web_accounts WHERE user_id=? LIMIT 1",
-            (int(user_id),),
-        ).fetchone()
-        return {
-            "user_id": int(user_id),
-            "old_gift_balance": old_gift,
-            "old_points_balance": old_points,
-            "old_spins_balance": old_spins,
-            "cancelled_lucky_spins": int(pending_spin_count),
-            "cancelled_redemptions": int(pending_redemption_count),
-            "telegram_user_id": int(wa["telegram_user_id"]) if wa and wa["telegram_user_id"] else None,
-            "phone_e164": wa["phone_e164"] if wa else None,
-            "created_at": now,
-        }
-
-
 def list_spin_history(user_id: int | None = None):
     with get_conn() as conn:
         if user_id:
@@ -1112,104 +1070,6 @@ def get_redemption_summary():
         }
 
 
-# ---------- نظام الجولات التحفيزية ----------
-BONUS_DEFAULTS = {
-    "bonus_enabled": "0",
-    "bonus_multiplier": "2.0",
-    "bonus_min_normal_rounds": "3",
-    "bonus_max_normal_rounds": "5",
-    "bonus_max_per_account": "8",
-    "bonus_target_epc": "106.16",
-}
-
-def _setting_value(conn, key: str, default: str) -> str:
-    row = conn.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (key,)).fetchone()
-    return str(row["setting_value"]) if row else str(default)
-
-def get_bonus_settings() -> dict:
-    with get_conn() as conn:
-        vals = {k: _setting_value(conn, k, v) for k, v in BONUS_DEFAULTS.items()}
-        active = conn.execute("SELECT COUNT(*) AS n FROM users WHERE current_round_kind='bonus' AND golden_answered_count < golden_target").fetchone()["n"]
-        used = conn.execute("SELECT COALESCE(SUM(bonus_rounds_used),0) AS n FROM users").fetchone()["n"]
-    return {
-        "enabled": vals["bonus_enabled"] == "1",
-        "multiplier": float(vals["bonus_multiplier"]),
-        "min_normal_rounds": int(vals["bonus_min_normal_rounds"]),
-        "max_normal_rounds": int(vals["bonus_max_normal_rounds"]),
-        "max_per_account": int(vals["bonus_max_per_account"]),
-        "target_epc": float(vals["bonus_target_epc"]),
-        "active_now": int(active or 0),
-        "used_total": int(used or 0),
-    }
-
-def update_bonus_settings(enabled=None, multiplier=None, min_normal_rounds=None, max_normal_rounds=None, max_per_account=None, target_epc=None) -> dict:
-    now = datetime.utcnow().isoformat()
-    updates = {}
-    if enabled is not None: updates["bonus_enabled"] = "1" if bool(enabled) else "0"
-    if multiplier is not None: updates["bonus_multiplier"] = str(max(1.0, min(float(multiplier), 10.0)))
-    if min_normal_rounds is not None: updates["bonus_min_normal_rounds"] = str(max(1, int(min_normal_rounds)))
-    if max_normal_rounds is not None: updates["bonus_max_normal_rounds"] = str(max(1, int(max_normal_rounds)))
-    if max_per_account is not None: updates["bonus_max_per_account"] = str(max(0, int(max_per_account)))
-    if target_epc is not None: updates["bonus_target_epc"] = str(max(0.0, float(target_epc)))
-    with get_conn() as conn:
-        for key, value in updates.items():
-            conn.execute("INSERT INTO app_settings(setting_key,setting_value,updated_at) VALUES(?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=excluded.updated_at", (key, value, now))
-
-        # If the admin changes the normal-round interval, old per-user thresholds
-        # must not keep values from the previous settings (for example 3-5 after
-        # the admin changes it to 1-3). Rebuild the NEXT threshold for accounts
-        # that are not already inside a bonus round. A normal round already in
-        # progress is allowed to finish; the next round will use the new rule.
-        if "bonus_min_normal_rounds" in updates or "bonus_max_normal_rounds" in updates:
-            import random
-            lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
-            hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
-            rows = conn.execute(
-                """SELECT user_id, normal_rounds_since_bonus, current_round_kind
-                   FROM users
-                   WHERE COALESCE(current_round_kind,'') != 'bonus'"""
-            ).fetchall()
-            for row in rows:
-                # If the customer already completed at least the new minimum,
-                # make the very next round a bonus. Otherwise choose a fresh
-                # threshold inside the newly saved interval.
-                done = int(row["normal_rounds_since_bonus"] or 0)
-                nxt = lo if done >= lo else random.randint(lo, hi)
-                conn.execute(
-                    "UPDATE users SET bonus_next_after=? WHERE user_id=?",
-                    (nxt, int(row["user_id"])),
-                )
-    return get_bonus_settings()
-
-def ensure_current_round_kind(user_id: int) -> str:
-    """يثبت نوع الجولة عند بدايتها. إيقاف النظام لا يغيّر جولة Bonus بدأت بالفعل."""
-    import random
-    with get_conn() as conn:
-        u = conn.execute("SELECT golden_answered_count,first_round_bonus_used,bonus_rounds_used,normal_rounds_since_bonus,bonus_next_after,current_round_kind FROM users WHERE user_id=?", (int(user_id),)).fetchone()
-        if not u: return "normal"
-        if u["current_round_kind"]:
-            return str(u["current_round_kind"])
-        if int(u["first_round_bonus_used"] or 0) == 0:
-            kind = "welcome"
-        else:
-            enabled = _setting_value(conn, "bonus_enabled", "0") == "1"
-            max_per = int(_setting_value(conn, "bonus_max_per_account", "8"))
-            lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
-            hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
-            nxt = int(u["bonus_next_after"] or 0)
-            if nxt <= 0:
-                nxt = random.randint(lo, hi)
-                conn.execute("UPDATE users SET bonus_next_after=? WHERE user_id=?", (nxt, int(user_id)))
-            kind = "bonus" if enabled and int(u["bonus_rounds_used"] or 0) < max_per and int(u["normal_rounds_since_bonus"] or 0) >= nxt else "normal"
-        conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
-        return kind
-
-def get_bonus_multiplier() -> float:
-    return float(get_bonus_settings()["multiplier"])
-
-def get_bonus_target_epc() -> float:
-    return float(get_bonus_settings()["target_epc"])
-
 # ---------- عروض القناة الذهبية (Golden Deals) ----------
 
 MAX_CACHED_GOLDEN_DEALS = 50
@@ -1247,19 +1107,10 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
                    VALUES (?, ?, 0, 'pending', ?)""",
                 (user_id, prize, datetime.utcnow().isoformat()),
             )
-            u = conn.execute("SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?", (user_id,)).fetchone()
-            kind = str(u["current_round_kind"] or "normal") if u else "normal"
-            if kind == "bonus":
-                import random
-                lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
-                hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
-                conn.execute("UPDATE users SET bonus_rounds_used=bonus_rounds_used+1, normal_rounds_since_bonus=0, bonus_next_after=? WHERE user_id=?", (random.randint(lo, hi), user_id))
-            elif kind == "normal":
-                conn.execute("UPDATE users SET normal_rounds_since_bonus=normal_rounds_since_bonus+1 WHERE user_id=?", (user_id,))
             conn.execute(
                 """UPDATE users SET golden_opened_count = 0,
                    golden_answered_count = 0, golden_round_earnings = 0,
-                   golden_target = ?, current_round_kind=NULL WHERE user_id = ?""",
+                   golden_target = ? WHERE user_id = ?""",
                 (GOLDEN_TARGET_COUNT, user_id),
             )
             return cur.lastrowid, prize, 0
@@ -1541,30 +1392,29 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
         )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
-               golden_round_earnings, golden_target, first_round_bonus_used FROM users WHERE user_id = ?""",
+               golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
 
-        # One-time welcome round for NEW accounts only. The first completed round
-        # is worth exactly 2.00 EGP, regardless of the per-question EPC reward.
-        # Mark it used at completion; resets/reactivation never clear this flag.
+        # Business rule: any fully completed Golden Offers round must be worth
+        # at least 0.40 EGP to the customer. Wrong answers can still add penalty
+        # questions, but they must not make the final completed-round prize fall
+        # below the advertised minimum. This is enforced here so Telegram and
+        # Web App use exactly the same rule.
+        min_round_reward = float(getattr(config, "EGYPT_MIN_ROUND_CUSTOMER_REWARD", 0.40))
         if (
             int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
-            and int(progress["first_round_bonus_used"] or 0) == 0
+            and float(progress["golden_round_earnings"] or 0) < min_round_reward
         ):
             conn.execute(
-                "UPDATE users SET golden_round_earnings = 2.0, first_round_bonus_used = 1 WHERE user_id = ?",
-                (user_id,),
+                "UPDATE users SET golden_round_earnings = ? WHERE user_id = ?",
+                (min_round_reward, user_id),
             )
             progress = conn.execute(
                 """SELECT golden_answered_count, golden_opened_count,
-                   golden_round_earnings, golden_target, first_round_bonus_used
-                   FROM users WHERE user_id = ?""",
+                   golden_round_earnings, golden_target FROM users WHERE user_id = ?""",
                 (user_id,),
             ).fetchone()
-
-        # No minimum customer reward is enforced for normal rounds.
-        # The earned amount stays exactly as calculated from EPC and Railway reward-rate variables.
 
         return {
             "correct": bool(is_correct),
@@ -1882,11 +1732,6 @@ def _period_where(column: str, period: str, date_from: str | None = None, date_t
         d2 = cairo_now.strftime("%Y-%m-%d")
         start, end = _cairo_date_range_utc(d1, d2)
         return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
-    if p == "month":
-        d1 = cairo_now.replace(day=1).strftime("%Y-%m-%d")
-        d2 = cairo_now.strftime("%Y-%m-%d")
-        start, end = _cairo_date_range_utc(d1, d2)
-        return f"datetime({column}) >= datetime(?) AND datetime({column}) < datetime(?)", [start, end]
     return "1=1", []
 
 
@@ -1927,16 +1772,10 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE status IN ('pending','processing')
         """).fetchone()
-        # Current customer balance must use the SAME customer scope as the
-        # selected report period (same join-date filter as the Customers table).
-        # This prevents balances belonging to customers outside the selected
-        # period from leaking into the report total.
-        balance_where, balance_params = _period_where("u.joined_at", period, date_from, date_to)
-        balances = conn.execute(f"""
-            SELECT COALESCE(SUM(COALESCE(u.gift_balance,0)),0) AS total
-            FROM users u
-            WHERE u.program='egypt' AND {balance_where}
-        """, balance_params).fetchone()
+        balances = conn.execute("""
+            SELECT COALESCE(SUM(gift_balance),0) AS total
+            FROM users WHERE program='egypt'
+        """).fetchone()
 
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
@@ -1960,62 +1799,11 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         }
 
 
-def list_product_activity_report(period: str = "today", date_from: str | None = None, date_to: str | None = None):
-    """Aggregate Golden Offers product activity by ASIN for Amazon reconciliation.
-
-    One row per product. `views` is the number of golden-question product entries
-    created in the selected Cairo-time period. Advertised EPC is taken from the
-    stored question EPC, while calculated Amazon value uses the configured
-    approved-click and real-click-value factors.
-    """
-    q_where, q_params = _period_where("created_at", period, date_from, date_to)
-    approved_rate = float(getattr(config, "EGYPT_APPROVED_CLICK_RATE", 0.30))
-    real_value_rate = float(getattr(config, "EGYPT_REAL_CLICK_VALUE_RATE", 0.157))
-    factor = approved_rate * real_value_rate
-    with get_conn() as conn:
-        rows = conn.execute(f"""
-            SELECT UPPER(TRIM(asin)) AS asin,
-                   COUNT(*) AS views,
-                   COUNT(DISTINCT user_id) AS customers,
-                   COALESCE(AVG(epc),0) AS advertised_epc,
-                   COALESCE(SUM(epc),0) AS advertised_epc_total,
-                   MIN(created_at) AS first_seen_at,
-                   MAX(created_at) AS last_seen_at
-            FROM golden_questions
-            WHERE asin IS NOT NULL AND TRIM(asin)<>'' AND {q_where}
-            GROUP BY UPPER(TRIM(asin))
-            ORDER BY views DESC, last_seen_at DESC
-        """, q_params).fetchall()
-    out = []
-    for row in rows:
-        item = dict(row)
-        epc = float(item.get("advertised_epc") or 0)
-        epc_total = float(item.get("advertised_epc_total") or 0)
-        item["calculated_epc"] = epc * factor
-        item["calculated_total"] = epc_total * factor
-        out.append(item)
-    return out
-
-
-def get_product_activity_report_summary(period: str = "today", date_from: str | None = None, date_to: str | None = None) -> dict:
-    rows = list_product_activity_report(period, date_from, date_to)
-    return {
-        "unique_products": len(rows),
-        "entries": sum(int(r.get("views") or 0) for r in rows),
-        "unique_customers": len(set()),
-        "advertised_epc_total": sum(float(r.get("advertised_epc_total") or 0) for r in rows),
-        "calculated_total": sum(float(r.get("calculated_total") or 0) for r in rows),
-    }
-
-
 def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0, date_from: str | None = None, date_to: str | None = None):
     """قائمة العملاء. فلتر الفترة هنا معناه: العملاء الجدد الذين انضموا في الفترة،
     بينما أرقام النشاط/اللفات/المنتجات المعروضة في الصف تظل إجماليات العميل حتى الآن.
     """
-    if period == "online":
-        joined_where, joined_params = "u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []
-    else:
-        joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
+    joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
     search = (search or "").strip()
     like = f"%{search.lstrip('@')}%"
     with get_conn() as conn:
@@ -2054,36 +1842,16 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
             ) r ON r.user_id=u.user_id
             WHERE u.program='egypt'
               AND {joined_where}
-              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ? OR COALESCE(wa.last_ip, u.last_ip, '') LIKE ?)
+              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ?)
             ORDER BY CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 0 ELSE 1 END,
                      datetime(u.last_activity_at) DESC, datetime(u.joined_at) DESC, u.user_id DESC
             LIMIT ? OFFSET ?
-        """, (*joined_params, search, like, like, like, like, int(limit), int(offset))).fetchall()
-
-
-def count_customer_reports(period: str = "all", search: str = "", date_from: str | None = None, date_to: str | None = None) -> int:
-    """Count customers matching the same join-date/search filters used by the admin customer list."""
-    if period == "online":
-        joined_where, joined_params = "u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []
-    else:
-        joined_where, joined_params = _period_where("u.joined_at", period, date_from, date_to)
-    search = (search or "").strip()
-    like = f"%{search.lstrip('@')}%"
-    with get_conn() as conn:
-        row = conn.execute(f"""
-            SELECT COUNT(*) AS c
-            FROM users u
-            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
-            WHERE u.program='egypt'
-              AND {joined_where}
-              AND (?='' OR CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ? OR COALESCE(wa.last_ip, u.last_ip, '') LIKE ?)
-        """, (*joined_params, search, like, like, like, like)).fetchone()
-        return int(row["c"] or 0)
+        """, (*joined_params, search, like, like, like, int(limit), int(offset))).fetchall()
 
 
 def get_customer_list_stats(period: str = "all", date_from: str | None = None, date_to: str | None = None) -> dict:
     """عدد العملاء الجدد في الفترة + عدد الموجودين Online الآن (آخر نشاط خلال 5 دقائق)."""
-    joined_where, joined_params = (("last_activity_at IS NOT NULL AND datetime(last_activity_at) >= datetime(\'now\',\'-5 minutes\')", []) if period == "online" else _period_where("joined_at", period, date_from, date_to))
+    joined_where, joined_params = _period_where("joined_at", period, date_from, date_to)
     with get_conn() as conn:
         new_count = conn.execute(
             f"SELECT COUNT(*) AS c FROM users WHERE program='egypt' AND {joined_where}",
@@ -3059,3 +2827,211 @@ def get_admin_alerts(limit: int = 30) -> dict:
             "ready_to_redeem": [dict(x) for x in ready],
             "clicked_no_spin": [dict(x) for x in clicked_no_spin],
         }
+
+
+# ---------- مركز إدارة العملاء والتواصل ----------
+
+def _customer_filter_sql(filters: dict | None = None):
+    filters = filters or {}
+    where = ["1=1"]
+    params: list = []
+    ids = []
+    for value in filters.get("user_ids") or []:
+        try:
+            ids.append(int(value))
+        except (TypeError, ValueError):
+            pass
+    if ids:
+        where.append("u.user_id IN (%s)" % ",".join("?" for _ in ids))
+        params.extend(ids)
+    if filters.get("program") in ("egypt", "ksa"):
+        where.append("u.program=?")
+        params.append(filters["program"])
+    if filters.get("telegram_status") in ("active", "blocked", "unknown"):
+        where.append("COALESCE(u.telegram_status,'unknown')=?")
+        params.append(filters["telegram_status"])
+    if filters.get("is_active") in (True, False, 0, 1, "0", "1"):
+        where.append("u.is_active=?")
+        params.append(1 if str(filters["is_active"]).lower() in ("true", "1") else 0)
+    if filters.get("joined_from"):
+        where.append("datetime(u.joined_at)>=datetime(?)")
+        params.append(str(filters["joined_from"]) + "T00:00:00")
+    if filters.get("joined_to"):
+        where.append("datetime(u.joined_at)<datetime(?, '+1 day')")
+        params.append(str(filters["joined_to"]) + "T00:00:00")
+    if filters.get("last_active_before"):
+        where.append("(u.last_activity_at IS NULL OR datetime(u.last_activity_at)<datetime(?))")
+        params.append(str(filters["last_active_before"]))
+    if filters.get("last_active_after"):
+        where.append("datetime(u.last_activity_at)>=datetime(?)")
+        params.append(str(filters["last_active_after"]))
+    if filters.get("min_balance") not in (None, ""):
+        where.append("COALESCE(u.gift_balance,0)>=?")
+        params.append(float(filters["min_balance"]))
+    if filters.get("max_balance") not in (None, ""):
+        where.append("COALESCE(u.gift_balance,0)<=?")
+        params.append(float(filters["max_balance"]))
+    if filters.get("welcome_unsent"):
+        where.append("u.welcome_check_sent_at IS NULL")
+    search = str(filters.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        where.append("(CAST(u.user_id AS TEXT) LIKE ? OR COALESCE(u.username,'') LIKE ? OR COALESCE(u.first_name,'') LIKE ? OR COALESCE(wa.phone_e164,'') LIKE ?)")
+        params.extend([like, like, like, like])
+    return " AND ".join(where), params
+
+
+def list_customer_center(filters: dict | None = None, limit: int = 500, offset: int = 0):
+    where, params = _customer_filter_sql(filters)
+    limit = max(1, min(int(limit or 500), 5000))
+    offset = max(0, int(offset or 0))
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT u.user_id, u.username, u.first_name, u.joined_at, u.last_activity_at, u.is_active,
+                   u.program, COALESCE(u.gift_balance,0) AS gift_balance,
+                   COALESCE(u.telegram_status,'unknown') AS telegram_status,
+                   u.blocked_at, u.unblocked_at, u.last_message_status,
+                   u.last_message_error, u.last_message_at, u.welcome_check_sent_at,
+                   u.reactivated_at, wa.phone_e164, wa.id AS web_account_id,
+                   COALESCE(wa.is_suspended,0) AS is_suspended
+            FROM users u
+            LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            WHERE {where}
+            ORDER BY datetime(u.joined_at) DESC, u.user_id DESC
+            LIMIT ? OFFSET ?
+        """, (*params, limit, offset)).fetchall()
+        total = conn.execute(f"""
+            SELECT COUNT(DISTINCT u.user_id) AS c
+            FROM users u LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            WHERE {where}
+        """, params).fetchone()["c"]
+        return {"rows": [dict(r) for r in rows], "total": int(total or 0)}
+
+
+def set_telegram_delivery_status(user_id: int, status: str, error: str | None = None):
+    status = status if status in ("active", "blocked", "unknown") else "unknown"
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        if status == "blocked":
+            conn.execute("""UPDATE users SET telegram_status='blocked', blocked_at=?,
+                         last_message_status='blocked', last_message_error=?, last_message_at=?
+                         WHERE user_id=?""", (now, (error or "")[:500], now, int(user_id)))
+        elif status == "active":
+            conn.execute("""UPDATE users SET telegram_status='active', unblocked_at=?,
+                         last_message_status='sent', last_message_error=NULL, last_message_at=?
+                         WHERE user_id=?""", (now, now, int(user_id)))
+        else:
+            conn.execute("""UPDATE users SET last_message_status='failed', last_message_error=?,
+                         last_message_at=? WHERE user_id=?""", ((error or "")[:500], now, int(user_id)))
+
+
+def mark_welcome_check_sent(user_id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET welcome_check_sent_at=? WHERE user_id=?",
+                     (datetime.utcnow().isoformat(), int(user_id)))
+
+
+def adjust_customer_balance(user_id: int, amount: float, reason: str, admin_id: int | None,
+                            operation_key: str | None = None):
+    amount = round(float(amount), 2)
+    if amount == 0:
+        raise ValueError("قيمة الرصيد لا يمكن أن تكون صفرًا")
+    reason = str(reason or "تعديل إداري").strip()[:250]
+    with get_conn() as conn:
+        if operation_key:
+            old = conn.execute("SELECT balance_after FROM balance_ledger WHERE operation_key=?", (operation_key,)).fetchone()
+            if old:
+                return float(old["balance_after"])
+        row = conn.execute("SELECT COALESCE(gift_balance,0) AS b FROM users WHERE user_id=?", (int(user_id),)).fetchone()
+        if not row:
+            raise ValueError("العميل غير موجود")
+        new_balance = round(float(row["b"] or 0) + amount, 2)
+        if new_balance < 0:
+            raise ValueError("الرصيد لا يكفي للخصم")
+        conn.execute("UPDATE users SET gift_balance=? WHERE user_id=?", (new_balance, int(user_id)))
+        conn.execute("""INSERT INTO balance_ledger
+                     (user_id,amount,balance_after,reason,operation_key,admin_id,created_at)
+                     VALUES (?,?,?,?,?,?,?)""",
+                     (int(user_id), amount, new_balance, reason, operation_key,
+                      int(admin_id) if admin_id else None, datetime.utcnow().isoformat()))
+        return new_balance
+
+
+def reactivate_customer_users(user_ids: list[int]):
+    ids = sorted({int(x) for x in user_ids if int(x) > 0})
+    if not ids:
+        return 0
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE users SET is_active=1, reactivated_at=? WHERE user_id IN (%s)" % ",".join("?" for _ in ids),
+            (now, *ids),
+        )
+        return int(cur.rowcount or 0)
+
+
+def create_customer_campaign(name: str, message_text: str, button_text: str | None,
+                             button_url: str | None, filters: dict, user_ids: list[int], admin_id: int):
+    now = datetime.utcnow().isoformat()
+    ids = sorted({int(x) for x in user_ids if int(x) > 0})
+    with get_conn() as conn:
+        cur = conn.execute("""INSERT INTO customer_campaigns
+            (name,message_text,button_text,button_url,filters_json,total_targets,created_by,created_at)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (str(name or "حملة عملاء")[:120], message_text, button_text, button_url,
+             json.dumps(filters or {}, ensure_ascii=False), len(ids), int(admin_id), now))
+        campaign_id = int(cur.lastrowid)
+        conn.executemany("INSERT OR IGNORE INTO customer_campaign_recipients(campaign_id,user_id) VALUES (?,?)",
+                         [(campaign_id, uid) for uid in ids])
+        return campaign_id
+
+
+def record_campaign_delivery(campaign_id: int, user_id: int, status: str, error: str | None = None):
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute("""UPDATE customer_campaign_recipients
+                     SET status=?, error=?, sent_at=? WHERE campaign_id=? AND user_id=?""",
+                     (status, (error or "")[:500] or None, now, int(campaign_id), int(user_id)))
+        counts = conn.execute("""SELECT
+            SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) sent,
+            SUM(CASE WHEN status='blocked' THEN 1 ELSE 0 END) blocked,
+            SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed,
+            SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending
+            FROM customer_campaign_recipients WHERE campaign_id=?""", (int(campaign_id),)).fetchone()
+        finished = now if int(counts["pending"] or 0) == 0 else None
+        eligible_total = int(counts["sent"] or 0) + int(counts["failed"] or 0) + int(counts["pending"] or 0)
+        conn.execute("""UPDATE customer_campaigns SET total_targets=?, sent_count=?, blocked_count=?, failed_count=?,
+                     status=?, finished_at=? WHERE id=?""",
+                     (eligible_total, int(counts["sent"] or 0), int(counts["blocked"] or 0), int(counts["failed"] or 0),
+                      "finished" if finished else "running", finished, int(campaign_id)))
+
+
+def get_campaign(campaign_id: int):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM customer_campaigns WHERE id=?", (int(campaign_id),)).fetchone()
+        return dict(row) if row else None
+
+
+def add_admin_audit(admin_id: int | None, action: str, target_type: str,
+                    target_count: int = 0, details: dict | None = None):
+    with get_conn() as conn:
+        conn.execute("""INSERT INTO admin_audit_log
+                     (admin_id,action,target_type,target_count,details_json,created_at)
+                     VALUES (?,?,?,?,?,?)""",
+                     (int(admin_id) if admin_id else None, str(action)[:100], str(target_type)[:50],
+                      int(target_count or 0), json.dumps(details or {}, ensure_ascii=False),
+                      datetime.utcnow().isoformat()))
+
+
+def get_customer_operations(user_id: int, limit: int = 50):
+    with get_conn() as conn:
+        ledger = conn.execute("""SELECT id,amount,balance_after,reason,admin_id,created_at
+                               FROM balance_ledger WHERE user_id=? ORDER BY id DESC LIMIT ?""",
+                              (int(user_id), int(limit))).fetchall()
+        deliveries = conn.execute("""SELECT r.campaign_id,r.status,r.error,r.sent_at,c.name
+                                   FROM customer_campaign_recipients r
+                                   JOIN customer_campaigns c ON c.id=r.campaign_id
+                                   WHERE r.user_id=? ORDER BY r.campaign_id DESC LIMIT ?""",
+                                  (int(user_id), int(limit))).fetchall()
+        return {"balance_ledger": [dict(x) for x in ledger],
+                "campaign_deliveries": [dict(x) for x in deliveries]}
