@@ -91,12 +91,22 @@ def _telegram_send_message(chat_id: int, text: str, button_text: str | None = No
             "disable_web_page_preview": True,
         }
         if button_text and button_url:
-            button = {"text": button_text}
             if button_web_app:
-                button["web_app"] = {"url": button_url}
+                # Telegram.WebApp.sendData (المستخدم داخل wheel1.html) يحتاج
+                # أن تُفتح الصفحة من KeyboardButton في Reply Keyboard، وليس
+                # من InlineKeyboardButton، وإلا تلف العجلة ولا تصل النتيجة للبوت.
+                payload["reply_markup"] = {
+                    "keyboard": [[{
+                        "text": button_text,
+                        "web_app": {"url": button_url},
+                    }]],
+                    "resize_keyboard": True,
+                    "one_time_keyboard": False,
+                }
             else:
-                button["url"] = button_url
-            payload["reply_markup"] = {"inline_keyboard": [[button]]}
+                payload["reply_markup"] = {
+                    "inline_keyboard": [[{"text": button_text, "url": button_url}]]
+                }
         r = requests.post(
             f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
             json=payload,
