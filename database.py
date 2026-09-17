@@ -1934,8 +1934,8 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             "SELECT COUNT(*) AS c FROM users WHERE program='egypt' AND is_active=1"
         ).fetchone()
         q = conn.execute(f"""
-            SELECT COUNT(*) AS products_shown,
-                   COALESCE(SUM(epc),0) AS expected_revenue,
+            SELECT COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS products_shown,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN epc ELSE 0 END),0) AS expected_revenue,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
             FROM golden_questions WHERE {q_where}
@@ -2041,8 +2041,9 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
             FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
             LEFT JOIN (
-                SELECT user_id, COUNT(*) AS products_shown,
-                       SUM(epc) AS expected_revenue,
+                SELECT user_id,
+                       SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS products_shown,
+                       SUM(CASE WHEN answered=1 AND was_correct=1 THEN epc ELSE 0 END) AS expected_revenue,
                        SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END) AS product_rewards
                 FROM golden_questions GROUP BY user_id
             ) q ON q.user_id=u.user_id
@@ -2119,8 +2120,8 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
         if not u:
             return None
         q = conn.execute(f"""
-            SELECT COUNT(*) AS products_shown,
-                   COALESCE(SUM(epc),0) AS expected_revenue,
+            SELECT COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS products_shown,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN epc ELSE 0 END),0) AS expected_revenue,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN reward_value ELSE 0 END),0) AS product_rewards,
                    COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END),0) AS correct_answers
             FROM golden_questions WHERE user_id=? AND {q_where}
