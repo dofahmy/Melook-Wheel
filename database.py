@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS golden_questions (
     question_type TEXT NOT NULL,
     correct_index INTEGER NOT NULL,
     epc REAL NOT NULL,
+    raw_epc REAL,
+    pool_type TEXT DEFAULT 'legacy',
     reward_value REAL NOT NULL,
     prompt TEXT,
     options_json TEXT,
@@ -250,6 +252,8 @@ _MIGRATIONS = [
     "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
     "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
+    "ALTER TABLE golden_questions ADD COLUMN raw_epc REAL",
+    "ALTER TABLE golden_questions ADD COLUMN pool_type TEXT DEFAULT 'legacy'",
     "ALTER TABLE users ADD COLUMN bonus_rounds_used INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN normal_rounds_since_bonus INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN bonus_next_after INTEGER DEFAULT 0",
@@ -1439,6 +1443,8 @@ def create_golden_question(
     prompt: str | None = None,
     options: list[str] | None = None,
     product_link: str | None = None,
+    raw_epc: float | None = None,
+    pool_type: str = "main",
 ) -> int:
     """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل.
 
@@ -1449,8 +1455,8 @@ def create_golden_question(
         cur = conn.execute(
             """INSERT INTO golden_questions
                (user_id, asin, question_type, correct_index, epc, reward_value,
-                prompt, options_json, product_link, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                prompt, options_json, product_link, raw_epc, pool_type, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 asin,
@@ -1461,6 +1467,8 @@ def create_golden_question(
                 prompt,
                 json.dumps(options, ensure_ascii=False) if options is not None else None,
                 product_link,
+                float(raw_epc if raw_epc is not None else epc),
+                str(pool_type or "main"),
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -1884,8 +1892,7 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         """, q_params).fetchone()
         spins = conn.execute(f"""
             SELECT COUNT(*) AS spin_count,
-                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes,
-                   COALESCE(SUM(CASE WHEN status!='cancelled' THEN prize ELSE 0 END),0) AS period_customer_rewards
+                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
             FROM lucky_spins WHERE {s_where}
         """, s_params).fetchone()
         requested = conn.execute(f"""
@@ -1916,7 +1923,6 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             "expected_revenue": expected_revenue,
             "product_rewards": product_rewards,
             "claimed_prizes": float(spins["claimed_prizes"] or 0),
-            "period_customer_rewards": float(spins["period_customer_rewards"] or 0),
             "requested_count": int(requested["c"] or 0),
             "requested_total": float(requested["total"] or 0),
             "paid_count": int(paid["c"] or 0),
@@ -1926,54 +1932,6 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             "unrequested_balance": float(balances["total"] or 0),
             "expected_net": expected_revenue - product_rewards,
         }
-
-
-def list_product_activity_report(period: str = "today", date_from: str | None = None, date_to: str | None = None):
-    """Aggregate Golden Offers product activity by ASIN for Amazon reconciliation.
-
-    One row per product. `views` is the number of golden-question product entries
-    created in the selected Cairo-time period. Advertised EPC is taken from the
-    stored question EPC, while calculated Amazon value uses the configured
-    approved-click and real-click-value factors.
-    """
-    q_where, q_params = _period_where("created_at", period, date_from, date_to)
-    approved_rate = float(getattr(config, "EGYPT_APPROVED_CLICK_RATE", 0.30))
-    real_value_rate = float(getattr(config, "EGYPT_REAL_CLICK_VALUE_RATE", 0.157))
-    factor = approved_rate * real_value_rate
-    with get_conn() as conn:
-        rows = conn.execute(f"""
-            SELECT UPPER(TRIM(asin)) AS asin,
-                   COUNT(*) AS views,
-                   COUNT(DISTINCT user_id) AS customers,
-                   COALESCE(AVG(epc),0) AS advertised_epc,
-                   COALESCE(SUM(epc),0) AS advertised_epc_total,
-                   MIN(created_at) AS first_seen_at,
-                   MAX(created_at) AS last_seen_at
-            FROM golden_questions
-            WHERE asin IS NOT NULL AND TRIM(asin)<>'' AND {q_where}
-            GROUP BY UPPER(TRIM(asin))
-            ORDER BY views DESC, last_seen_at DESC
-        """, q_params).fetchall()
-    out = []
-    for row in rows:
-        item = dict(row)
-        epc = float(item.get("advertised_epc") or 0)
-        epc_total = float(item.get("advertised_epc_total") or 0)
-        item["calculated_epc"] = epc * factor
-        item["calculated_total"] = epc_total * factor
-        out.append(item)
-    return out
-
-
-def get_product_activity_report_summary(period: str = "today", date_from: str | None = None, date_to: str | None = None) -> dict:
-    rows = list_product_activity_report(period, date_from, date_to)
-    return {
-        "unique_products": len(rows),
-        "entries": sum(int(r.get("views") or 0) for r in rows),
-        "unique_customers": len(set()),
-        "advertised_epc_total": sum(float(r.get("advertised_epc_total") or 0) for r in rows),
-        "calculated_total": sum(float(r.get("calculated_total") or 0) for r in rows),
-    }
 
 
 def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0,

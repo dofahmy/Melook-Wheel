@@ -6,6 +6,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -31,6 +32,16 @@ _products: list[CatalogProduct] | None = None
 _by_asin: dict[str, CatalogProduct] = {}
 _link_lock = threading.Lock()
 _last_link_timestamp = 0
+
+# Product-selection policy for the golden questions.
+MIN_MAIN_EPC = 1.0
+TEST_RAW_EPC = 22.0
+# Tests can run only in the first four of five slots. 12.5% there produces
+# an overall expected share of 10% across the full five-question round.
+TEST_SHARE = 0.125
+TEST_REWARD_EPC = 1.0
+TEST_BATCH_SIZE = 5
+BLACKLIST_ASINS = {"B004ISW5YY"}
 
 
 def _products_path() -> Path:
@@ -103,6 +114,39 @@ def get_product(asin: str) -> CatalogProduct | None:
     return _by_asin.get(asin.upper())
 
 
+def pool_type_for(product: CatalogProduct) -> str:
+    """Classify a product for reporting and reward safety."""
+    if product.asin in BLACKLIST_ASINS:
+        return "blacklist"
+    if abs(product.expected_revenue_per_click - TEST_RAW_EPC) < 1e-9:
+        return "epc22_test"
+    if product.expected_revenue_per_click >= MIN_MAIN_EPC:
+        return "main"
+    return "excluded_low_epc"
+
+
+def reward_epc_for(product: CatalogProduct) -> float:
+    """EPC used for rewards/round totals; raw EPC=22 is never trusted directly."""
+    if pool_type_for(product) == "epc22_test":
+        return TEST_REWARD_EPC
+    return product.expected_revenue_per_click
+
+
+def _active_test_products(products: list[CatalogProduct]) -> list[CatalogProduct]:
+    """Rotate a stable five-product EPC=22 test batch every ISO week."""
+    test_products = sorted(
+        (p for p in products if pool_type_for(p) == "epc22_test"),
+        key=lambda p: p.asin,
+    )
+    if len(test_products) <= TEST_BATCH_SIZE:
+        return test_products
+    iso = datetime.now(timezone.utc).isocalendar()
+    batch_count = (len(test_products) + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE
+    batch_index = ((iso.year * 53) + iso.week) % batch_count
+    start = batch_index * TEST_BATCH_SIZE
+    return test_products[start:start + TEST_BATCH_SIZE]
+
+
 def choose_product(
     excluded_asins: set[str] | None = None,
     question_index: int = 0,
@@ -121,16 +165,25 @@ def choose_product(
     EPC that completes the target. Previously seen products are used only when
     the unseen catalog cannot satisfy the constraint.
     """
-    products = load_products()
+    catalog = load_products()
+    main_products = [p for p in catalog if pool_type_for(p) == "main"]
+    test_products = _active_test_products(catalog)
+    if not main_products:
+        raise ValueError("لا توجد منتجات أساسية بقيمة EPC جنيه أو أكثر")
+
+    # Test products get 10% of non-final question slots. The final slot stays
+    # in the main pool so it can still close the configured round EPC target.
+    slot = int(question_index) % 5
+    use_test_pool = bool(test_products and slot < 4 and random.random() < TEST_SHARE)
+    products = test_products if use_test_pool else main_products
     excluded = set(excluded_asins or set())
     seen = set(all_seen_asins or set())
     target = float(bonus_target_epc if bonus_round and bonus_target_epc is not None else getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
-    slot = int(question_index) % 5
 
     # One-time welcome round: its first three questions are the three
     # highest-EPC products in the current catalog.
     if first_round_bonus and 0 <= int(question_index) < 3:
-        ranked = sorted(products, key=lambda p: p.expected_revenue_per_click, reverse=True)
+        ranked = sorted(products, key=reward_epc_for, reverse=True)
         top_three = ranked[:3]
         preferred = top_three[int(question_index)] if len(top_three) > int(question_index) else None
         if preferred and preferred.asin not in excluded:
@@ -162,34 +215,34 @@ def choose_product(
 
         if slots_after == 0:
             need = max(target - float(current_round_epc or 0), 0.0)
-            enough = [p for p in pool if p.expected_revenue_per_click + 1e-12 >= need]
+            enough = [p for p in pool if reward_epc_for(p) + 1e-12 >= need]
             if enough:
                 # Smallest EPC that safely closes the round; randomize ties.
-                enough.sort(key=lambda p: p.expected_revenue_per_click)
-                floor = enough[0].expected_revenue_per_click
-                near = [p for p in enough if p.expected_revenue_per_click <= floor + 0.05]
+                enough.sort(key=reward_epc_for)
+                floor = reward_epc_for(enough[0])
+                near = [p for p in enough if reward_epc_for(p) <= floor + 0.05]
                 return random.choice(near)
             continue
 
         feasible = []
         for candidate in pool:
             remaining = [
-                p.expected_revenue_per_click for p in pool
+                reward_epc_for(p) for p in pool
                 if p.asin != candidate.asin
             ]
             remaining.sort(reverse=True)
             best_future = sum(remaining[:slots_after])
-            if float(current_round_epc or 0) + candidate.expected_revenue_per_click + best_future + 1e-12 >= target:
+            if float(current_round_epc or 0) + reward_epc_for(candidate) + best_future + 1e-12 >= target:
                 feasible.append(candidate)
         if feasible:
             # Prefer lower EPC now, preserving high-EPC products to subsidize later rounds.
-            feasible.sort(key=lambda p: p.expected_revenue_per_click)
+            feasible.sort(key=reward_epc_for)
             window = feasible[:max(1, min(20, len(feasible)))]
             return random.choice(window)
 
     # Safety fallback if the catalog itself cannot meet the target.
     pool = available(True) or available(False) or products
-    return max(pool, key=lambda p: p.expected_revenue_per_click)
+    return max(pool, key=reward_epc_for)
 
 def _unique_timestamp_ms() -> int:
     global _last_link_timestamp
@@ -222,7 +275,10 @@ def customer_reward_for_epc(epc: float) -> float:
 
 def question_for(product: CatalogProduct) -> dict:
     """يبني سؤالًا عشوائيًا ويعيد الاختيارات مع رقم الإجابة الصحيحة."""
-    products = load_products()
+    products = [
+        p for p in load_products()
+        if pool_type_for(p) in {"main", "epc22_test"}
+    ]
     types = ["title"]
     if product.price > 0:
         types.append("price")

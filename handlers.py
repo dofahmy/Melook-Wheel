@@ -1203,9 +1203,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         )
         return
 
-    reward_value = product_catalog.customer_reward_for_epc(
-        product.expected_revenue_per_click
-    )
+    effective_epc = product_catalog.reward_epc_for(product)
+    pool_type = product_catalog.pool_type_for(product)
+    reward_value = product_catalog.customer_reward_for_epc(effective_epc)
     if round_kind == "bonus":
         reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     question_id = database.create_golden_question(
@@ -1213,8 +1213,10 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         asin=product.asin,
         question_type=question["type"],
         correct_index=question["correct_index"],
-        epc=product.expected_revenue_per_click,
+        epc=effective_epc,
         reward_value=reward_value,
+        raw_epc=product.expected_revenue_per_click,
+        pool_type=pool_type,
     )
     database.log_quiz_asked(user_id, product.asin)
     product_link = product_catalog.build_affiliate_link(product.asin)

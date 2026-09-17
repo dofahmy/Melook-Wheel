@@ -274,7 +274,9 @@ def _golden_question_payload(user_id: int, existing=None):
         bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
     )
     question = product_catalog.question_for(product)
-    reward_value = product_catalog.customer_reward_for_epc(product.expected_revenue_per_click)
+    effective_epc = product_catalog.reward_epc_for(product)
+    pool_type = product_catalog.pool_type_for(product)
+    reward_value = product_catalog.customer_reward_for_epc(effective_epc)
     if round_kind == "bonus":
         reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
     product_link = product_catalog.build_affiliate_link(product.asin)
@@ -283,11 +285,13 @@ def _golden_question_payload(user_id: int, existing=None):
         asin=product.asin,
         question_type=question["type"],
         correct_index=question["correct_index"],
-        epc=product.expected_revenue_per_click,
+        epc=effective_epc,
         reward_value=reward_value,
         prompt=question["prompt"],
         options=question["options"],
         product_link=product_link,
+        raw_epc=product.expected_revenue_per_click,
+        pool_type=pool_type,
     )
     database.log_quiz_asked(user_id, product.asin)
     return {
@@ -764,22 +768,6 @@ class Handler(BaseHTTPRequestHandler):
                 "customer_reward_rate": float(config.EGYPT_CUSTOMER_REWARD_RATE),
             })
             self._send_json(200, {"ok": True, "data": settings})
-            return
-        if parsed.path == "/api/admin/product-report":
-            rows = database.list_product_activity_report(period, date_from, date_to)
-            data = []
-            for row in rows:
-                item = dict(row)
-                if product_catalog is not None:
-                    try:
-                        product = product_catalog.get_product(str(item.get("asin") or ""))
-                    except Exception:
-                        product = None
-                    item["title"] = getattr(product, "title", "") if product else ""
-                else:
-                    item["title"] = ""
-                data.append(item)
-            self._send_json(200, {"ok": True, "data": data})
             return
         if parsed.path == "/api/admin/redemptions":
             rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
