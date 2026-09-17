@@ -1892,7 +1892,6 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         """, q_params).fetchone()
         spins = conn.execute(f"""
             SELECT COUNT(*) AS spin_count,
-                   COUNT(DISTINCT user_id) AS spin_customers,
                    COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
             FROM lucky_spins WHERE {s_where}
         """, s_params).fetchone()
@@ -1921,7 +1920,6 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             "products_shown": int(q["products_shown"] or 0),
             "correct_answers": int(q["correct_answers"] or 0),
             "spin_count": int(spins["spin_count"] or 0),
-            "spin_customers": int(spins["spin_customers"] or 0),
             "expected_revenue": expected_revenue,
             "product_rewards": product_rewards,
             "claimed_prizes": float(spins["claimed_prizes"] or 0),
