@@ -5,6 +5,7 @@ Defaults to the golden_questions table. Environment variables can override:
   DATABASE_URL / DATABASE_PUBLIC_URL  PostgreSQL connection string
   PGHOST, PGPORT, PGDATABASE,
   PGUSER, PGPASSWORD                  alternative Railway PostgreSQL variables
+  DATABASE_PATH                      Railway SQLite database file
   TABLE_NAME                          default: golden_questions
   EPC_COLUMN                          auto-detected if omitted
   DATE_COLUMN                         auto-detected if omitted
@@ -27,7 +28,48 @@ from typing import Iterable
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+class CursorAdapter:
+    def __init__(self, cursor, dialect: str):
+        self._cursor = cursor
+        self.dialect = dialect
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self._cursor.close()
+
+    def execute(self, sql, params=()):
+        if self.dialect == "sqlite":
+            sql = sql.replace("%s", "?")
+        return self._cursor.execute(sql, params)
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+
+class ConnectionAdapter:
+    def __init__(self, connection, dialect: str):
+        self._connection = connection
+        self.dialect = dialect
+
+    def cursor(self):
+        return CursorAdapter(self._connection.cursor(), self.dialect)
+
+    def close(self):
+        self._connection.close()
+
+
 def connect():
+    database_path = os.getenv("DATABASE_PATH")
+    if database_path:
+        import sqlite3
+
+        return ConnectionAdapter(sqlite3.connect(database_path), "sqlite")
+
     url = (
         os.getenv("DATABASE_URL")
         or os.getenv("DATABASE_PUBLIC_URL")
@@ -61,12 +103,14 @@ def connect():
     try:
         import psycopg  # type: ignore
 
-        return psycopg.connect(url) if url else psycopg.connect(**pg_kwargs)
+        connection = psycopg.connect(url) if url else psycopg.connect(**pg_kwargs)
+        return ConnectionAdapter(connection, "postgres")
     except ImportError:
         try:
             import psycopg2  # type: ignore
 
-            return psycopg2.connect(url) if url else psycopg2.connect(**pg_kwargs)
+            connection = psycopg2.connect(url) if url else psycopg2.connect(**pg_kwargs)
+            return ConnectionAdapter(connection, "postgres")
         except ImportError as exc:
             raise RuntimeError(
                 "PostgreSQL driver missing. Install psycopg[binary] or psycopg2-binary."
@@ -109,18 +153,23 @@ def main() -> int:
     conn = connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = %s
-                ORDER BY ordinal_position
-                """,
-                (table,),
-            )
-            columns = [row[0] for row in cur.fetchall()]
+            if conn.dialect == "sqlite":
+                cur.execute(f"PRAGMA table_info({quote(table)})")
+                columns = [row[1] for row in cur.fetchall()]
+            else:
+                cur.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = %s
+                    ORDER BY ordinal_position
+                    """,
+                    (table,),
+                )
+                columns = [row[0] for row in cur.fetchall()]
             if not columns:
-                raise RuntimeError(f"Table public.{table} was not found")
+                location = table if conn.dialect == "sqlite" else f"public.{table}"
+                raise RuntimeError(f"Table {location} was not found")
 
             epc_col = choose_column(
                 columns,
@@ -199,7 +248,8 @@ def main() -> int:
                 return output
 
             print("\nتقرير EPC من Railway")
-            print(f"Table: public.{table} | EPC column: {epc_col}")
+            table_label = table if conn.dialect == "sqlite" else f"public.{table}"
+            print(f"Database: {conn.dialect} | Table: {table_label} | EPC column: {epc_col}")
             if start_at or end_at:
                 print(
                     f"Period: {start_at or 'beginning'} inclusive -> "
