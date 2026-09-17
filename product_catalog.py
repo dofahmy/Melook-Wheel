@@ -156,6 +156,7 @@ def choose_product(
     first_round_bonus: bool = False,
     bonus_round: bool = False,
     bonus_target_epc: float | None = None,
+    required_reward_epc: float | None = None,
 ) -> CatalogProduct:
     """Dynamic selector: minimize repeats while guaranteeing the first 5 products
     in a round can reach EGYPT_MIN_ROUND_EPC.
@@ -179,6 +180,20 @@ def choose_product(
     excluded = set(excluded_asins or set())
     seen = set(all_seen_asins or set())
     target = float(bonus_target_epc if bonus_round and bonus_target_epc is not None else getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
+
+    # السؤالان الإضافيان بعد الإجابة الخاطئة يجب أن يحملا نفس EPC الفعلي
+    # للسؤال الخاطئ. نفضّل منتجًا جديدًا، ونسمح بالتكرار فقط عند الضرورة.
+    if required_reward_epc is not None:
+        wanted = float(required_reward_epc)
+        matching = [
+            p for p in (main_products + test_products)
+            if abs(reward_epc_for(p) - wanted) < 1e-9
+        ]
+        if not matching:
+            raise ValueError(f"لا يوجد منتج بنفس EPC المطلوب لسؤال العقوبة: {wanted}")
+        fresh = [p for p in matching if p.asin not in excluded and p.asin not in seen]
+        available_matching = [p for p in matching if p.asin not in excluded]
+        return random.choice(fresh or available_matching or matching)
 
     # One-time welcome round: its first three questions are the three
     # highest-EPC products in the current catalog.

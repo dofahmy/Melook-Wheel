@@ -262,6 +262,7 @@ def _golden_question_payload(user_id: int, existing=None):
     answered_count = int(row["golden_answered_count"] or 0)
     all_seen_asins = database.list_all_quizzed_asins(user_id)
     current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
+    penalty_epc = database.get_pending_penalty_epc(user_id)
     round_kind = database.ensure_current_round_kind(user_id)
     product = product_catalog.choose_product(
         asked_asins,
@@ -272,6 +273,7 @@ def _golden_question_payload(user_id: int, existing=None):
         first_round_bonus=(round_kind == "welcome"),
         bonus_round=(round_kind == "bonus"),
         bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
+        required_reward_epc=penalty_epc,
     )
     question = product_catalog.question_for(product)
     effective_epc = product_catalog.reward_epc_for(product)
@@ -293,6 +295,8 @@ def _golden_question_payload(user_id: int, existing=None):
         raw_epc=product.expected_revenue_per_click,
         pool_type=pool_type,
     )
+    if penalty_epc is not None:
+        database.consume_pending_penalty(user_id)
     database.log_quiz_asked(user_id, product.asin)
     return {
         "stage": "question",

@@ -143,6 +143,18 @@ CREATE TABLE IF NOT EXISTS lucky_spins (
     claimed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS golden_penalty_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    source_question_id INTEGER NOT NULL,
+    epc REAL NOT NULL,
+    remaining INTEGER NOT NULL DEFAULT 2,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_golden_penalty_queue_user
+    ON golden_penalty_queue(user_id, id);
+
 CREATE TABLE IF NOT EXISTS lucky_wheel_pool (
     prize_index INTEGER PRIMARY KEY,
     prize REAL NOT NULL,
@@ -1472,7 +1484,37 @@ def create_golden_question(
                 datetime.utcnow().isoformat(),
             ),
         )
-        return cur.lastrowid
+    return cur.lastrowid
+
+
+def get_pending_penalty_epc(user_id: int) -> float | None:
+    """قيمة EPC المطلوبة لأقدم سؤالَي عقوبة لم يُستهلكا بعد."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT epc FROM golden_penalty_queue
+               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
+            (int(user_id),),
+        ).fetchone()
+        return float(row["epc"]) if row else None
+
+
+def consume_pending_penalty(user_id: int) -> None:
+    """يستهلك سؤال عقوبة واحدًا بعد إنشاء السؤال المطابق بنجاح."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT id, remaining FROM golden_penalty_queue
+               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
+            (int(user_id),),
+        ).fetchone()
+        if not row:
+            return
+        if int(row["remaining"] or 0) <= 1:
+            conn.execute("DELETE FROM golden_penalty_queue WHERE id=?", (int(row["id"]),))
+        else:
+            conn.execute(
+                "UPDATE golden_penalty_queue SET remaining=remaining-1 WHERE id=?",
+                (int(row["id"]),),
+            )
 
 
 def get_pending_web_golden_question(user_id: int):
@@ -1524,6 +1566,13 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                WHERE user_id = ?""",
             (is_correct, contribution, is_correct, user_id),
         )
+        if not is_correct:
+            conn.execute(
+                """INSERT INTO golden_penalty_queue
+                   (user_id, source_question_id, epc, remaining, created_at)
+                   VALUES (?, ?, ?, 2, ?)""",
+                (int(user_id), int(question_id), float(question["epc"] or 0), datetime.utcnow().isoformat()),
+            )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
                golden_round_earnings, golden_target, first_round_bonus_used FROM users WHERE user_id = ?""",
