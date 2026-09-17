@@ -1874,6 +1874,7 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
     """ملخص مالي وتشغيلي للنظام كله، مع دعم فترة تاريخ مخصصة."""
     q_where, q_params = _period_where("created_at", period, date_from, date_to)
     s_where, s_params = _period_where("created_at", period, date_from, date_to)
+    claimed_where, claimed_params = _period_where("claimed_at", period, date_from, date_to)
     r_req_where, req_params = _period_where("requested_at", period, date_from, date_to)
     r_paid_where, paid_params = _period_where("paid_at", period, date_from, date_to)
     with get_conn() as conn:
@@ -1892,9 +1893,14 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         """, q_params).fetchone()
         spins = conn.execute(f"""
             SELECT COUNT(*) AS spin_count,
-                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
+                   COUNT(DISTINCT user_id) AS spin_customers
             FROM lucky_spins WHERE {s_where}
         """, s_params).fetchone()
+        claimed = conn.execute(f"""
+            SELECT COALESCE(SUM(prize),0) AS claimed_prizes
+            FROM lucky_spins
+            WHERE status='claimed' AND {claimed_where}
+        """, claimed_params).fetchone()
         requested = conn.execute(f"""
             SELECT COUNT(*) AS c, COALESCE(SUM(amount),0) AS total
             FROM redemption_requests WHERE {r_req_where}
@@ -1914,15 +1920,18 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
 
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
+        period_customer_rewards = float(claimed["claimed_prizes"] or 0)
         return {
             "users": int(users["c"] or 0),
             "active_users": int(active["c"] or 0),
             "products_shown": int(q["products_shown"] or 0),
             "correct_answers": int(q["correct_answers"] or 0),
             "spin_count": int(spins["spin_count"] or 0),
+            "spin_customers": int(spins["spin_customers"] or 0),
             "expected_revenue": expected_revenue,
             "product_rewards": product_rewards,
-            "claimed_prizes": float(spins["claimed_prizes"] or 0),
+            "claimed_prizes": period_customer_rewards,
+            "period_customer_rewards": period_customer_rewards,
             "requested_count": int(requested["c"] or 0),
             "requested_total": float(requested["total"] or 0),
             "paid_count": int(paid["c"] or 0),
@@ -1930,7 +1939,7 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
             "pending_count": int(pending["c"] or 0),
             "pending_total": float(pending["total"] or 0),
             "unrequested_balance": float(balances["total"] or 0),
-            "expected_net": expected_revenue - product_rewards,
+            "expected_net": expected_revenue - period_customer_rewards,
         }
 
 
@@ -2072,6 +2081,11 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
                    COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
             FROM lucky_spins WHERE user_id=? AND {s_where}
         """, (user_id, *s_params)).fetchone()
+        s_all = conn.execute("""
+            SELECT COUNT(*) AS spin_count,
+                   COALESCE(SUM(CASE WHEN status='claimed' THEN prize ELSE 0 END),0) AS claimed_prizes
+            FROM lucky_spins WHERE user_id=?
+        """, (user_id,)).fetchone()
         r = conn.execute("""
             SELECT COUNT(*) AS redemption_count,
                    COALESCE(SUM(CASE WHEN status='paid' THEN amount ELSE 0 END),0) AS paid_total,
@@ -2092,6 +2106,24 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
         ).fetchone()
         expected_revenue = float(q["expected_revenue"] or 0)
         product_rewards = float(q["product_rewards"] or 0)
+        period_spin_count = int(s["spin_count"] or 0)
+        lifetime_spin_count = int(s_all["spin_count"] or 0)
+        bonus_rounds_used = int(u["bonus_rounds_used"] or 0)
+        normal_rounds_since_bonus = int(u["normal_rounds_since_bonus"] or 0)
+        bonus_next_after = int(u["bonus_next_after"] or 0)
+        current_round_kind = str(u["current_round_kind"] or "")
+        first_round_bonus_used = int(u["first_round_bonus_used"] or 0)
+        bonus_enabled = _setting_value(conn, "bonus_enabled", "0") == "1"
+        bonus_max_per_account = int(_setting_value(conn, "bonus_max_per_account", "8"))
+        if current_round_kind:
+            next_round_kind = current_round_kind
+        elif first_round_bonus_used == 0:
+            next_round_kind = "welcome"
+        elif (bonus_enabled and bonus_rounds_used < bonus_max_per_account
+              and bonus_next_after > 0 and normal_rounds_since_bonus >= bonus_next_after):
+            next_round_kind = "bonus"
+        else:
+            next_round_kind = "normal"
         return {
             "user_id": int(u["user_id"]), "username": u["username"],
             "is_active": int(u["is_active"] or 0),
@@ -2101,8 +2133,19 @@ def get_customer_report(user_id: int, period: str = "all") -> dict | None:
             "correct_answers": int(q["correct_answers"] or 0),
             "expected_revenue": expected_revenue,
             "product_rewards": product_rewards,
-            "spin_count": int(s["spin_count"] or 0),
+            "spin_count": period_spin_count,
             "claimed_prizes": float(s["claimed_prizes"] or 0),
+            "lifetime_spin_count": lifetime_spin_count,
+            "lifetime_claimed_prizes": float(s_all["claimed_prizes"] or 0),
+            "bonus_rounds_used": bonus_rounds_used,
+            "non_bonus_rounds": max(0, lifetime_spin_count - bonus_rounds_used),
+            "normal_rounds_since_bonus": normal_rounds_since_bonus,
+            "bonus_next_after": bonus_next_after,
+            "bonus_max_per_account": bonus_max_per_account,
+            "bonus_enabled": bonus_enabled,
+            "first_round_bonus_used": first_round_bonus_used,
+            "current_round_kind": current_round_kind,
+            "next_round_kind": next_round_kind,
             "redemption_count": int(r["redemption_count"] or 0),
             "paid_total": float(r["paid_total"] or 0),
             "pending_total": float(r["pending_total"] or 0),
