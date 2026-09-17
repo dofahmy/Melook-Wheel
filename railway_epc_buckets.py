@@ -3,6 +3,8 @@
 
 Defaults to the golden_questions table. Environment variables can override:
   DATABASE_URL / DATABASE_PUBLIC_URL  PostgreSQL connection string
+  PGHOST, PGPORT, PGDATABASE,
+  PGUSER, PGPASSWORD                  alternative Railway PostgreSQL variables
   TABLE_NAME                          default: golden_questions
   EPC_COLUMN                          auto-detected if omitted
   DATE_COLUMN                         auto-detected if omitted
@@ -26,20 +28,45 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def connect():
-    url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
-    if not url:
-        raise RuntimeError("DATABASE_URL or DATABASE_PUBLIC_URL is missing")
+    url = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("DATABASE_PUBLIC_URL")
+        or os.getenv("POSTGRES_URL")
+        or os.getenv("POSTGRESQL_URL")
+    )
+
+    pg_kwargs = {
+        "host": os.getenv("PGHOST"),
+        "port": os.getenv("PGPORT", "5432"),
+        "dbname": os.getenv("PGDATABASE") or os.getenv("POSTGRES_DB"),
+        "user": os.getenv("PGUSER") or os.getenv("POSTGRES_USER"),
+        "password": os.getenv("PGPASSWORD") or os.getenv("POSTGRES_PASSWORD"),
+    }
+    required = ["host", "dbname", "user", "password"]
+    has_separate_pg_vars = all(pg_kwargs.get(key) for key in required)
+    if not url and not has_separate_pg_vars:
+        visible_names = sorted(
+            name
+            for name in os.environ
+            if any(token in name.upper() for token in ("DATABASE", "POSTGRES", "PGHOST"))
+        )
+        visible_text = ", ".join(visible_names) if visible_names else "none"
+        raise RuntimeError(
+            "PostgreSQL connection variables are missing. Link the PostgreSQL "
+            "service to this Railway service, or add DATABASE_URL. "
+            f"Related variable names currently visible: {visible_text}"
+        )
 
     # Railway projects commonly have one of these drivers already installed.
     try:
         import psycopg  # type: ignore
 
-        return psycopg.connect(url)
+        return psycopg.connect(url) if url else psycopg.connect(**pg_kwargs)
     except ImportError:
         try:
             import psycopg2  # type: ignore
 
-            return psycopg2.connect(url)
+            return psycopg2.connect(url) if url else psycopg2.connect(**pg_kwargs)
         except ImportError as exc:
             raise RuntimeError(
                 "PostgreSQL driver missing. Install psycopg[binary] or psycopg2-binary."
