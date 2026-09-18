@@ -716,6 +716,26 @@ async def redeem_email_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def redeem_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """واجهة آمنة لزر التأكيد: لا تترك الزر صامتًا عند حدوث أي خطأ."""
+    try:
+        await _redeem_confirm_callback_impl(update, context)
+    except Exception:
+        logger.exception("فشل تأكيد طلب الاستبدال للعميل %s", update.effective_user.id if update.effective_user else "unknown")
+        query = update.callback_query
+        if query:
+            try:
+                await query.answer("حصل خطأ أثناء إرسال الطلب", show_alert=True)
+            except Exception:
+                pass
+            try:
+                await query.edit_message_text(
+                    "حصل خطأ أثناء إرسال طلب الاستبدال، ولم يتم خصم الرصيد. جرّب مرة تانية."
+                )
+            except Exception:
+                pass
+
+
+async def _redeem_confirm_callback_impl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """أنشئ الطلب وخصم الرصيد فقط بعد ضغط العميل على التأكيد."""
     query = update.callback_query
     await query.answer()

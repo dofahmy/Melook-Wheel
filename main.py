@@ -148,7 +148,11 @@ def main():
     app.add_handler(CallbackQueryHandler(handlers.start_shopping_callback, pattern="^start_shopping$"))
     app.add_handler(CallbackQueryHandler(handlers.golden_wheel_entry, pattern="^golden_start$"))
     app.add_handler(CallbackQueryHandler(handlers.golden_answer_callback, pattern="^goldenans:"))
-    app.add_handler(CallbackQueryHandler(handlers.redeem_confirm_callback, pattern="^redeemconfirm:"))
+    # مجموعة مستقلة بأولوية أعلى حتى لا تلتقط أي Callback عامة زر تأكيد الاستبدال.
+    app.add_handler(
+        CallbackQueryHandler(handlers.redeem_confirm_callback, pattern=r"^redeemconfirm:(yes|no)$"),
+        group=-1,
+    )
     app.add_handler(CallbackQueryHandler(handlers.admin_callback, pattern="^admin:"))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handlers.handle_webapp_data))
     app.add_handler(MessageHandler(filters.Regex("^📊 حسابي$"), handlers.account_button))
