@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     paid_by INTEGER,
     gift_code TEXT,
     code_sent_at TEXT,
+    amazon_email TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
@@ -260,6 +261,7 @@ _MIGRATIONS = [
     "ALTER TABLE lucky_spins ADD COLUMN prize_index INTEGER DEFAULT 0",
     "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
+    "ALTER TABLE redemption_requests ADD COLUMN amazon_email TEXT",
     "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
     "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
@@ -973,7 +975,7 @@ def get_open_redemption_request(user_id: int):
         return dict(row) if row else None
 
 
-def create_redemption_request(user_id: int):
+def create_redemption_request(user_id: int, amazon_email: str):
     """ينشئ طلب استبدال جديد من كل الجنيهات الصحيحة في الرصيد الحالي.
 
     أي طلبات قديمة Pending لا تمنع إنشاء طلب جديد من رصيد جديد اتجمع بعدها.
@@ -981,6 +983,14 @@ def create_redemption_request(user_id: int):
     => يظل الطلب القديم 1 جنيه، ويتعمل طلب جديد 2 جنيه، ويتبقى 0.04 جنيه.
     """
     with get_conn() as conn:
+        # حماية ذاتية لقواعد Railway القديمة: بعض النسخ بدأت قبل إضافة الإيميل
+        # وقد لا تكون Migration اشتغلت عليها بعد. نضمن العمود هنا قبل بدء الحجز.
+        redemption_columns = {
+            r["name"] for r in conn.execute("PRAGMA table_info(redemption_requests)").fetchall()
+        }
+        if "amazon_email" not in redemption_columns:
+            conn.execute("ALTER TABLE redemption_requests ADD COLUMN amazon_email TEXT")
+            conn.commit()
         # BEGIN IMMEDIATE يمنع طلبين متزامنين من حجز نفس الرصيد.
         conn.execute("BEGIN IMMEDIATE")
 
@@ -997,11 +1007,14 @@ def create_redemption_request(user_id: int):
             return None
 
         now = datetime.utcnow().isoformat()
+        clean_email = str(amazon_email or "").strip().lower()
+        if not clean_email:
+            return None
         cur = conn.execute(
             """INSERT INTO redemption_requests
-               (user_id, amount, status, requested_at)
-               VALUES (?, ?, 'pending', ?)""",
-            (user_id, amount, now),
+               (user_id, amount, status, requested_at, amazon_email)
+               VALUES (?, ?, 'pending', ?, ?)""",
+            (user_id, amount, now, clean_email),
         )
         # نخصم فقط المبلغ الصحيح المحجوز للطلب، ونحتفظ بالباقي في رصيد العميل.
         conn.execute(
@@ -1015,6 +1028,7 @@ def create_redemption_request(user_id: int):
             "remainder": remainder,
             "status": "pending",
             "requested_at": now,
+            "amazon_email": clean_email,
             "paid_at": None,
             "paid_by": None,
             "created": True,
@@ -2285,6 +2299,7 @@ def list_pending_redemptions_for_web(limit: int = 500):
     with get_conn() as conn:
         return conn.execute("""
             SELECT r.id, r.user_id, r.amount, r.status, r.requested_at,
+                   r.amazon_email,
                    u.username, u.gift_balance
             FROM redemption_requests r
             JOIN users u ON u.user_id=r.user_id
@@ -2299,6 +2314,7 @@ def list_paid_redemptions_for_web(limit: int = 500):
     with get_conn() as conn:
         return conn.execute("""
             SELECT r.id, r.user_id, r.amount, r.status, r.requested_at,
+                   r.amazon_email,
                    r.paid_at, r.gift_code, r.code_sent_at,
                    u.username, u.gift_balance
             FROM redemption_requests r

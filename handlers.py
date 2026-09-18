@@ -719,8 +719,13 @@ async def redeem_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
     """واجهة آمنة لزر التأكيد: لا تترك الزر صامتًا عند حدوث أي خطأ."""
     try:
         await _redeem_confirm_callback_impl(update, context)
-    except Exception:
-        logger.exception("فشل تأكيد طلب الاستبدال للعميل %s", update.effective_user.id if update.effective_user else "unknown")
+    except Exception as exc:
+        logger.exception(
+            "فشل تأكيد طلب الاستبدال للعميل %s | %s: %s",
+            update.effective_user.id if update.effective_user else "unknown",
+            type(exc).__name__,
+            exc,
+        )
         query = update.callback_query
         if query:
             try:
