@@ -54,6 +54,7 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
 
 
 .redeem-box{max-width:650px;margin:0 auto;text-align:right}.redeem-balance{background:linear-gradient(135deg,#101828,#1d2939);color:#fff;border-radius:20px;padding:22px;margin:10px 0 16px}.redeem-balance .muted{color:#cbd5e1;font-size:14px}.redeem-amount{font-size:38px;font-weight:900;margin:5px 0}.redeem-amount small{font-size:16px}.redeem-note{background:#fffaeb;border:1px solid #fedf89;color:#7a2e0e;border-radius:14px;padding:12px;line-height:1.7;margin:12px 0}.redeem-request{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.status-pill{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.status-pending{background:#fff4e5;color:#b54708}.status-processing{background:#eef4ff;color:#3538cd}.status-paid{background:#ecfdf3;color:#027a48}.stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.stat-box{background:#fff;border:1px solid #e9ecef;border-radius:16px;padding:14px}.stat-box span{display:block;color:#667085;font-size:12px}.stat-box b{display:block;font-size:22px;margin-top:4px}.history-card{background:#fff;border:1px solid #e9ecef;border-radius:18px;padding:14px;margin:12px 0;text-align:right}.history-card h3{margin:0 0 8px}.history-row{padding:11px 0;border-bottom:1px solid #f0f0f0}.history-row:last-child{border-bottom:0}.gift-code-view{background:#f4f3ff;border:1px dashed #7f56d9;border-radius:10px;padding:12px;margin:10px 0 6px;font-family:monospace;font-weight:900;direction:ltr;text-align:center;user-select:all;cursor:pointer}.redeem-delivery{background:#fffaf0;border:1px solid #f2d59b;border-radius:14px;padding:14px;margin-top:10px;line-height:1.85}.redeem-delivery .redeem-success{font-weight:800;color:#027a48;margin-bottom:8px}.redeem-link{display:block;text-align:center;background:#101828;color:#fff;text-decoration:none;border-radius:12px;padding:12px 14px;margin-top:12px;font-weight:800}.copy-hint{text-align:center;color:#667085;font-size:13px;margin-top:4px}.empty-history{color:#667085;padding:14px;text-align:center}@media(max-width:520px){.stats-grid{grid-template-columns:1fr 1fr}.redeem-amount{font-size:32px}}
+.redeem-modal{position:fixed;inset:0;background:#10182899;display:flex;align-items:center;justify-content:center;padding:18px;z-index:2000}.redeem-modal.hide{display:none}.redeem-dialog{width:min(460px,100%);background:#fff;border-radius:22px;padding:20px;box-shadow:0 20px 60px #0004}.redeem-dialog h3{margin:0 0 8px}.redeem-dialog input{width:100%;margin:12px 0 6px;border:1px solid #d0d5dd;border-radius:13px;padding:13px;font:inherit;direction:ltr;text-align:left}.redeem-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}
 
 /* ===== Mobile App UI ===== */
 :root{--app-nav-h:74px}
@@ -129,6 +130,19 @@ label{display:block;font-weight:800;margin:0 0 8px}.input{width:100%;padding:14p
       <div class="golden-head"><h2>🎁 استبدال الرصيد</h2><button class="close-link" onclick="hideRedeem()">إغلاق</button></div>
       <div id="redeemContent" class="redeem-box"><div class="loading">جاري حساب الرصيد المتاح…</div></div>
     </section>
+
+    <div id="redeemEmailModal" class="redeem-modal hide" role="dialog" aria-modal="true" aria-labelledby="redeemEmailTitle">
+      <div class="redeem-dialog">
+        <h3 id="redeemEmailTitle">📧 إيميل حساب Amazon</h3>
+        <div class="note">اكتب الإيميل المرتبط بحساب Amazon. طلب الاستبدال هيتبعت ومعاه الإيميل ده.</div>
+        <input id="amazonRedeemEmail" type="email" autocomplete="email" inputmode="email" placeholder="name@example.com">
+        <div id="redeemEmailError" class="msg err hide"></div>
+        <div class="redeem-dialog-actions">
+          <button id="confirmRedeemBtn" class="btn" onclick="confirmRedeemRequest()">تأكيد طلب الاستبدال</button>
+          <button class="btn secondary" onclick="closeRedeemEmailDialog()">إلغاء</button>
+        </div>
+      </div>
+    </div>
 
     <section id="accountPanel" class="golden-panel hide">
       <div class="golden-head"><h2>👤 حسابي</h2><button class="close-link" onclick="hideAccount()">إغلاق</button></div>
@@ -468,14 +482,23 @@ async function loadRedeem(){
     const d=await api('/api/app/redemption-status'),x=d.data||{},open=x.open_requests||[];
     box.innerHTML=`<div class="redeem-balance"><div class="muted">رصيدك الحالي</div><div class="redeem-amount">${money(x.balance)} <small>جنيه</small></div><div class="muted">المتاح للاستبدال الآن: <b>${money(x.redeemable)} جنيه</b></div></div>
       <div class="redeem-note">بنستبدل الجنيهات الصحيحة فقط. لو رصيدك ${money(x.balance)} جنيه، هيتعمل طلب بـ ${money(x.redeemable)} جنيه ويتبقى ${money(x.remainder)} جنيه في حسابك.</div>
-      <button class="btn" id="redeemNowBtn" ${Number(x.redeemable)<=0?'disabled':''} onclick="redeemNow()">استبدل ${money(x.redeemable)} جنيه</button>
+      <button class="btn" id="redeemNowBtn" ${Number(x.redeemable)<=0?'disabled':''} onclick="openRedeemEmailDialog()">استبدل ${money(x.redeemable)} جنيه</button>
       <div class="history-card"><h3>طلبات قيد التنفيذ</h3>${open.length?open.map(r=>`<div class="redeem-request"><div><b>${money(r.amount)} جنيه</b><div class="note">${fmtDate(r.requested_at)}</div></div><span class="status-pill ${statusClass(r.status)}">${statusAr(r.status)}</span></div>`).join(''):'<div class="empty-history">مفيش طلبات مفتوحة حاليًا.</div>'}</div>`;
   }catch(e){box.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}
 }
-async function redeemNow(){
-  const b=document.getElementById('redeemNowBtn'); if(b)b.disabled=true;
-  try{const d=await api('/api/app/redeem',{method:'POST',body:'{}'});const x=d.data||{};alert('✅ تم إنشاء طلب استبدال بقيمة '+money(x.amount)+' جنيه. المتبقي في رصيدك '+money(x.remainder)+' جنيه.\n\n📧 مهم: '+(x.message||'ابعت لنا الإيميل المرتبط بحساب Amazon علشان كود Amazon يتبعت على الإيميل المستخدم في حسابك.'));await loadMe();await loadRedeem();}
-  catch(e){alert(e.message);await loadRedeem()}
+function openRedeemEmailDialog(){
+  const modal=document.getElementById('redeemEmailModal'),input=document.getElementById('amazonRedeemEmail'),err=document.getElementById('redeemEmailError');
+  if(err){err.textContent='';err.classList.add('hide')}modal.classList.remove('hide');setTimeout(()=>input?.focus(),50);
+}
+function closeRedeemEmailDialog(){document.getElementById('redeemEmailModal')?.classList.add('hide')}
+async function confirmRedeemRequest(){
+  const email=(document.getElementById('amazonRedeemEmail')?.value||'').trim().toLowerCase();
+  const err=document.getElementById('redeemEmailError');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err.textContent='اكتب إيميل Amazon صحيح.';err.classList.remove('hide');return}
+  const b=document.getElementById('confirmRedeemBtn');if(b)b.disabled=true;
+  try{const d=await api('/api/app/redeem',{method:'POST',body:JSON.stringify({amazon_email:email})});const x=d.data||{};closeRedeemEmailDialog();alert('✅ تم إرسال طلب الاستبدال بقيمة '+money(x.amount)+' جنيه ومعاه إيميل Amazon: '+email);await loadMe();await loadRedeem();}
+  catch(e){err.textContent=e.message;err.classList.remove('hide')}
+  finally{if(b)b.disabled=false}
 }
 async function showAccount(fromNav=false){
   closeMainPanels('accountPanel'); const panel=document.getElementById('accountPanel'); panel.classList.remove('hide'); panel.scrollIntoView({behavior:'smooth',block:'start'}); await loadAccountHistory();
