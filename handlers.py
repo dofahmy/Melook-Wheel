@@ -10,6 +10,7 @@
 import logging
 import json
 import os
+import re
 import hashlib
 import hmac
 from urllib.parse import urlencode, urlsplit
@@ -17,6 +18,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from telegram import (
+    ForceReply,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -658,7 +660,7 @@ async def join_egypt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """العميل يطلب استبدال الرصيد؛ الرصيد ينتقل لطلب مالي مستقل بدل تصفيره وقت الدفع."""
+    """ابدأ طلب الاستبدال بطلب إيميل Amazon داخل Telegram."""
     try:
         database.set_user_activity_now(update.effective_user.id)
     except Exception:
@@ -666,33 +668,84 @@ async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or row["program"] != "egypt":
-        await update.message.reply_text("الأمر ده متاح بس لبرنامج مصر.")
+        await update.effective_message.reply_text("الأمر ده متاح بس لبرنامج مصر.")
         return
-
-    # وجود طلب استبدال قديم Pending لا يمنع استبدال رصيد جديد.
-    # كل طلب جديد يأخذ كل الجنيهات الصحيحة الموجودة في الرصيد وقت الطلب فقط.
     balance = float(row["gift_balance"] or 0)
     if balance < config.EGYPT_REDEEM_MIN_BALANCE:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             f"محتاج توصل لرصيد {config.EGYPT_REDEEM_MIN_BALANCE} جنيه على الأقل عشان تقدر تستبدله.\n"
             f"رصيدك الحالي: {_format_egp(balance)} جنيه. كمّل تلف واكسب هدايا! 🎁"
         )
         return
+    context.user_data["awaiting_redemption_email"] = True
+    context.user_data.pop("pending_redemption_email", None)
+    await update.effective_message.reply_text(
+        "📧 اكتب دلوقتي الإيميل المرتبط بحساب Amazon اللي عايز تستلم عليه الكود:",
+        reply_markup=ForceReply(selective=True, input_field_placeholder="name@example.com"),
+    )
 
-    req = database.create_redemption_request(user.id)
-    if not req:
-        await update.message.reply_text("مقدرتش أنشئ طلب الاستبدال دلوقتي. جرّب تاني بعد شوية.")
+
+async def redeem_email_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """استقبل الإيميل ثم اعرض زر التأكيد قبل إنشاء الطلب."""
+    if not context.user_data.get("awaiting_redemption_email"):
         return
+    amazon_email = str(update.effective_message.text or "").strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", amazon_email):
+        await update.effective_message.reply_text(
+            "الإيميل مش صحيح. اكتبه تاني بالشكل ده: name@example.com",
+            reply_markup=ForceReply(selective=True, input_field_placeholder="name@example.com"),
+        )
+        return
+    row = database.get_user(update.effective_user.id)
+    balance = float(row["gift_balance"] or 0) if row else 0.0
+    amount = int(balance + 1e-9)
+    if amount < config.EGYPT_REDEEM_MIN_BALANCE:
+        context.user_data.pop("awaiting_redemption_email", None)
+        await update.effective_message.reply_text("رصيدك لم يعد كافيًا لطلب الاستبدال.")
+        return
+    context.user_data["awaiting_redemption_email"] = False
+    context.user_data["pending_redemption_email"] = amazon_email
+    await update.effective_message.reply_text(
+        f"راجع بيانات طلب الاستبدال:\n\n💰 المبلغ: {_format_egp(amount)} جنيه\n"
+        f"📧 إيميل Amazon: {amazon_email}\n\nهل تريد إرسال الطلب؟",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ تأكيد الطلب", callback_data="redeemconfirm:yes"),
+            InlineKeyboardButton("❌ إلغاء", callback_data="redeemconfirm:no"),
+        ]]),
+    )
 
+
+async def redeem_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """أنشئ الطلب وخصم الرصيد فقط بعد ضغط العميل على التأكيد."""
+    query = update.callback_query
+    await query.answer()
+    if query.data == "redeemconfirm:no":
+        context.user_data.pop("pending_redemption_email", None)
+        context.user_data.pop("awaiting_redemption_email", None)
+        await query.edit_message_text("تم إلغاء طلب الاستبدال، ولم يتم خصم أي رصيد.")
+        return
+    amazon_email = str(context.user_data.pop("pending_redemption_email", "")).strip().lower()
+    context.user_data.pop("awaiting_redemption_email", None)
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", amazon_email):
+        await query.edit_message_text("انتهت جلسة الطلب. اضغط /redeem وابدأ من جديد.")
+        return
+    user = update.effective_user
+    row = database.get_user(user.id)
+    balance = float(row["gift_balance"] or 0) if row else 0.0
+    if balance < config.EGYPT_REDEEM_MIN_BALANCE:
+        await query.edit_message_text("رصيدك لم يعد كافيًا، ولم يتم خصم أي مبلغ.")
+        return
+    req = database.create_redemption_request(user.id, amazon_email)
+    if not req:
+        await query.edit_message_text("مقدرتش أنشئ طلب الاستبدال دلوقتي. جرّب تاني بعد شوية.")
+        return
     amount = float(req["amount"])
     remaining_balance = float(database.get_gift_balance(user.id) or 0)
-    await update.message.reply_text(
+    await query.edit_message_text(
         f"✅ اتسجل طلب الاستبدال رقم #{req['id']} بقيمة {_format_egp(amount)} جنيه.\n"
+        f"📧 إيميل Amazon: {amazon_email}\n"
         f"💰 المتبقي في رصيدك: {_format_egp(remaining_balance)} جنيه.\n"
-        "بنستبدل الجنيهات الصحيحة فقط، وأي كسور أو جوايز جديدة تفضل محفوظة في حسابك.\n"
-        "📧 مهم: ابعت لنا الإيميل المرتبط بحساب Amazon، علشان كود Amazon يتبعت "
-        "على الإيميل المستخدم في حسابك.\n"
-        "فريق الدعم هيتابع الطلب وهيوصلك تأكيد هنا بعد الدفع."
+        "فريق الدعم هيتابع الطلب وهيوصلك تأكيد هنا بعد إرسال الكود."
     )
     username_line = f"@{user.username}" if user.username else "(مفيش يوزرنيم)"
     for admin_id in config.ADMIN_IDS:
@@ -702,6 +755,7 @@ async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=(
                     f"💰 طلب استبدال جديد #{req['id']}\n"
                     f"العميل: {user.id} {username_line}\n"
+                    f"إيميل Amazon: {amazon_email}\n"
                     f"المبلغ: {_format_egp(amount)} جنيه"
                 ),
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
