@@ -158,6 +158,20 @@ def _telegram_send_golden_answers(chat_id: int, question: dict) -> tuple[bool, s
         return False, str(exc)
 
 
+def _deliver_golden_answers_with_retry(chat_id: int, question: dict) -> None:
+    """Deliver outside the redirect request so Telegram outages never block Amazon."""
+    question_id = int(question["id"])
+    last_error = ""
+    for attempt, delay in enumerate((0, 1, 3), start=1):
+        if delay:
+            time.sleep(delay)
+        sent, last_error = _telegram_send_golden_answers(chat_id, question)
+        if sent:
+            return
+    # All Telegram attempts failed. Let another product-button click retry.
+    database.release_golden_answer_reveal(question_id, int(chat_id))
+
+
 def _personalize_customer_message(template: str, customer: dict) -> str:
     name = str(customer.get("first_name") or customer.get("username") or "").strip()
     text = str(template or "").replace("{first_name}", html.escape(name) if name else "بيك")
@@ -580,14 +594,14 @@ class Handler(BaseHTTPRequestHandler):
             qrow = database.mark_golden_link_opened(question_id, user_id)
             database.capture_telegram_user_ip(user_id, self._client_ip())
             database.set_user_activity_now(user_id)
-            # Reveal and deliver the answers before handing control to the
-            # native Amazon app. Some mobile clients stop the redirect request
-            # context as soon as the external app opens, so post-redirect work
-            # is not reliable enough here.
+            # Claim once, then deliver in a background thread. The Amazon
+            # redirect must stay immediate even when Telegram returns 502/Bad Gateway.
             if qrow and database.claim_golden_answer_reveal(question_id, user_id):
-                sent, _error = _telegram_send_golden_answers(user_id, qrow)
-                if not sent:
-                    database.release_golden_answer_reveal(question_id, user_id)
+                threading.Thread(
+                    target=_deliver_golden_answers_with_retry,
+                    args=(user_id, qrow),
+                    daemon=True,
+                ).start()
             self.send_response(302)
             self._security_headers()
             self.send_header("Cache-Control", "no-store")
