@@ -725,6 +725,14 @@ async def redeem_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("تم إلغاء طلب الاستبدال، ولم يتم خصم أي رصيد.")
         return
     amazon_email = str(context.user_data.pop("pending_redemption_email", "")).strip().lower()
+    # Railway قد يوزع رسالة التأكيد على process مختلف، وبالتالي user_data المؤقتة
+    # قد لا تكون موجودة. الإيميل ظاهر داخل رسالة المراجعة نفسها، فنستخرجه منها
+    # كمرجع دائم بدل اعتبار الجلسة منتهية.
+    if not amazon_email:
+        confirmation_text = str(query.message.text or "") if query.message else ""
+        email_match = re.search(r"إيميل Amazon:\s*([^\s]+)", confirmation_text)
+        if email_match:
+            amazon_email = email_match.group(1).strip().lower()
     context.user_data.pop("awaiting_redemption_email", None)
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", amazon_email):
         await query.edit_message_text("انتهت جلسة الطلب. اضغط /redeem وابدأ من جديد.")
