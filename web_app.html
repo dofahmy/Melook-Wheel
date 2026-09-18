@@ -474,7 +474,7 @@ async function loadRedeem(){
 }
 async function redeemNow(){
   const b=document.getElementById('redeemNowBtn'); if(b)b.disabled=true;
-  try{const d=await api('/api/app/redeem',{method:'POST',body:'{}'});const x=d.data||{};alert('✅ تم إنشاء طلب استبدال بقيمة '+money(x.amount)+' جنيه. المتبقي في رصيدك '+money(x.remainder)+' جنيه.');await loadMe();await loadRedeem();}
+  try{const d=await api('/api/app/redeem',{method:'POST',body:'{}'});const x=d.data||{};alert('✅ تم إنشاء طلب استبدال بقيمة '+money(x.amount)+' جنيه. المتبقي في رصيدك '+money(x.remainder)+' جنيه.\n\n📧 مهم: '+(x.message||'ابعت لنا الإيميل المرتبط بحساب Amazon علشان كود Amazon يتبعت على الإيميل المستخدم في حسابك.'));await loadMe();await loadRedeem();}
   catch(e){alert(e.message);await loadRedeem()}
 }
 async function showAccount(fromNav=false){

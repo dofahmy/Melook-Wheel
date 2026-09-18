@@ -836,7 +836,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "data": settings})
             return
         if parsed.path == "/api/admin/redemptions":
-            rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
+            status = (qs.get("status", ["pending"])[0] or "pending").strip().lower()
+            if status == "paid":
+                rows = [dict(x) for x in database.list_paid_redemptions_for_web()]
+            else:
+                rows = [dict(x) for x in database.list_pending_redemptions_for_web()]
             self._send_json(200, {"ok": True, "data": rows})
             return
         if parsed.path == "/api/admin/customers":
@@ -1116,6 +1120,10 @@ class Handler(BaseHTTPRequestHandler):
                 status = database.get_web_redemption_status(user_id)
                 self._send_json(409, {"ok": False, "error": "رصيدك الحالي مفيهوش جنيه كامل قابل للاستبدال", "data": status})
                 return
+            request["message"] = (
+                "تم إنشاء طلب الاستبدال. من فضلك ابعت لنا الإيميل المرتبط بحساب Amazon "
+                "علشان كود Amazon يتبعت على الإيميل المستخدم في حسابك."
+            )
             self._send_json(200, {"ok": True, "data": request})
             return
 

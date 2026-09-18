@@ -2293,6 +2293,21 @@ def list_pending_redemptions_for_web(limit: int = 500):
             LIMIT ?
         """, (int(limit),)).fetchall()
 
+
+def list_paid_redemptions_for_web(limit: int = 500):
+    """الاستبدالات المكتملة التي تم إرسال كودها، للأحدث أولاً في لوحة الإدارة."""
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT r.id, r.user_id, r.amount, r.status, r.requested_at,
+                   r.paid_at, r.gift_code, r.code_sent_at,
+                   u.username, u.gift_balance
+            FROM redemption_requests r
+            JOIN users u ON u.user_id=r.user_id
+            WHERE r.status = 'paid'
+            ORDER BY COALESCE(r.code_sent_at, r.paid_at, r.requested_at) DESC, r.id DESC
+            LIMIT ?
+        """, (int(limit),)).fetchall()
+
 # ---------- حساب وفر كاش المستقل (Web App / multi-platform) ----------
 
 WEB_ACCOUNT_SCHEMA = """

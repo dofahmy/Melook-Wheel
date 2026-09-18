@@ -690,6 +690,8 @@ async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ اتسجل طلب الاستبدال رقم #{req['id']} بقيمة {_format_egp(amount)} جنيه.\n"
         f"💰 المتبقي في رصيدك: {_format_egp(remaining_balance)} جنيه.\n"
         "بنستبدل الجنيهات الصحيحة فقط، وأي كسور أو جوايز جديدة تفضل محفوظة في حسابك.\n"
+        "📧 مهم: ابعت لنا الإيميل المرتبط بحساب Amazon، علشان كود Amazon يتبعت "
+        "على الإيميل المستخدم في حسابك.\n"
         "فريق الدعم هيتابع الطلب وهيوصلك تأكيد هنا بعد الدفع."
     )
     username_line = f"@{user.username}" if user.username else "(مفيش يوزرنيم)"
