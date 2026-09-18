@@ -1115,15 +1115,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
                 return
             user_id = int(account["user_id"])
-            request = database.create_redemption_request(user_id)
+            email = str(data.get("amazon_email") or "").strip().lower()
+            if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+                self._send_json(400, {"ok": False, "error": "اكتب إيميل Amazon صحيح علشان نقدر نسجل طلب الاستبدال"})
+                return
+            request = database.create_redemption_request(user_id, email)
             if not request:
                 status = database.get_web_redemption_status(user_id)
                 self._send_json(409, {"ok": False, "error": "رصيدك الحالي مفيهوش جنيه كامل قابل للاستبدال", "data": status})
                 return
-            request["message"] = (
-                "تم إنشاء طلب الاستبدال. من فضلك ابعت لنا الإيميل المرتبط بحساب Amazon "
-                "علشان كود Amazon يتبعت على الإيميل المستخدم في حسابك."
-            )
+            request["message"] = "تم إنشاء الطلب بالإيميل المرتبط بحساب Amazon: " + email
             self._send_json(200, {"ok": True, "data": request})
             return
 
