@@ -125,6 +125,39 @@ def _telegram_send_message(chat_id: int, text: str, button_text: str | None = No
         return False, str(exc)
 
 
+def _telegram_send_golden_answers(chat_id: int, question: dict) -> tuple[bool, str]:
+    """Send answer buttons only after our signed Amazon redirect was opened."""
+    options = list(question.get("options") or [])
+    if not options:
+        return False, "question options are missing"
+    question_id = int(question["id"])
+    payload = {
+        "chat_id": int(chat_id),
+        "text": "✅ ظهرت اختيارات الإجابة:\n\n" + html.escape(str(question.get("prompt") or "جاوب السؤال")),
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": str(option), "callback_data": f"goldenans:{question_id}:{index}"}]
+                for index, option in enumerate(options)
+            ]
+        },
+    }
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage",
+            json=payload,
+            timeout=20,
+        )
+        data = response.json()
+        if response.ok and data.get("ok"):
+            database.set_telegram_delivery_status(int(chat_id), "active")
+            return True, ""
+        return False, data.get("description") or f"HTTP {response.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def _personalize_customer_message(template: str, customer: dict) -> str:
     name = str(customer.get("first_name") or customer.get("username") or "").strip()
     text = str(template or "").replace("{first_name}", html.escape(name) if name else "بيك")
@@ -261,8 +294,9 @@ def _golden_question_payload(user_id: int, existing=None):
     asked_asins = database.list_todays_quizzed_asins(user_id)
     answered_count = int(row["golden_answered_count"] or 0)
     all_seen_asins = database.list_all_quizzed_asins(user_id)
+    used_question_types = database.list_used_product_question_types(user_id)
     current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
-    penalty_epc = database.get_pending_penalty_epc(user_id)
+    replacement_pool = database.get_pending_replacement_pool(user_id)
     round_kind = database.ensure_current_round_kind(user_id)
     product = product_catalog.choose_product(
         asked_asins,
@@ -273,9 +307,13 @@ def _golden_question_payload(user_id: int, existing=None):
         first_round_bonus=(round_kind == "welcome"),
         bonus_round=(round_kind == "bonus"),
         bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
-        required_reward_epc=penalty_epc,
+        used_question_types=used_question_types,
+        forced_pool_type=replacement_pool,
     )
-    question = product_catalog.question_for(product)
+    question = product_catalog.question_for(
+        product,
+        excluded_types=used_question_types.get(product.asin, set()),
+    )
     effective_epc = product_catalog.reward_epc_for(product)
     pool_type = product_catalog.pool_type_for(product)
     reward_value = product_catalog.customer_reward_for_epc(effective_epc)
@@ -294,9 +332,10 @@ def _golden_question_payload(user_id: int, existing=None):
         product_link=product_link,
         raw_epc=product.expected_revenue_per_click,
         pool_type=pool_type,
+        requires_link_open=False,
     )
-    if penalty_epc is not None:
-        database.consume_pending_penalty(user_id)
+    if replacement_pool:
+        database.consume_pending_replacement_pool(user_id)
     database.log_quiz_asked(user_id, product.asin)
     return {
         "stage": "question",
@@ -538,13 +577,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"ok": False, "error": "product not found"})
                 return
             target = product_catalog.build_affiliate_link(str(qrow["asin"]))
+            qrow = database.mark_golden_link_opened(question_id, user_id)
             database.capture_telegram_user_ip(user_id, self._client_ip())
             database.set_user_activity_now(user_id)
+            # Return the Amazon redirect immediately; Telegram delivery happens
+            # just after the response so opening the product is not delayed.
             self.send_response(302)
             self._security_headers()
             self.send_header("Cache-Control", "no-store")
             self.send_header("Location", target)
             self.end_headers()
+            if qrow and database.claim_golden_answer_reveal(question_id, user_id):
+                sent, _error = _telegram_send_golden_answers(user_id, qrow)
+                if not sent:
+                    database.release_golden_answer_reveal(question_id, user_id)
             return
 
         # Public web-account API authenticated by session cookie.
@@ -1002,6 +1048,9 @@ class Handler(BaseHTTPRequestHandler):
             result = database.answer_golden_question(user_id, question_id, chosen_index)
             if not result:
                 self._send_json(409, {"ok": False, "error": "الإجابة دي اتسجلت قبل كده"})
+                return
+            if result.get("error") == "open_product_first":
+                self._send_json(403, {"ok": False, "error": "افتح المنتج وشوف تفاصيله الأول"})
                 return
             data = dict(result)
             data["ready_for_prize"] = False

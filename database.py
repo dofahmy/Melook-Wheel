@@ -135,6 +135,9 @@ CREATE TABLE IF NOT EXISTS golden_questions (
     prompt TEXT,
     options_json TEXT,
     product_link TEXT,
+    requires_link_open INTEGER DEFAULT 0,
+    link_opened_at TEXT,
+    answers_revealed_at TEXT,
     answered INTEGER DEFAULT 0,
     was_correct INTEGER,
     created_at TEXT NOT NULL,
@@ -262,6 +265,9 @@ _MIGRATIONS = [
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
     "ALTER TABLE golden_questions ADD COLUMN raw_epc REAL",
     "ALTER TABLE golden_questions ADD COLUMN pool_type TEXT DEFAULT 'legacy'",
+    "ALTER TABLE golden_questions ADD COLUMN requires_link_open INTEGER DEFAULT 0",
+    "ALTER TABLE golden_questions ADD COLUMN link_opened_at TEXT",
+    "ALTER TABLE golden_questions ADD COLUMN answers_revealed_at TEXT",
     "ALTER TABLE users ADD COLUMN bonus_rounds_used INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN normal_rounds_since_bonus INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN bonus_next_after INTEGER DEFAULT 0",
@@ -513,10 +519,52 @@ def capture_telegram_user_ip(user_id: int, ip_address: str | None):
 def get_golden_question_for_redirect(question_id: int, user_id: int):
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id,user_id,asin FROM golden_questions WHERE id=? AND user_id=? LIMIT 1",
+            "SELECT * FROM golden_questions WHERE id=? AND user_id=? LIMIT 1",
             (int(question_id), int(user_id)),
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["options"] = json.loads(result.get("options_json") or "[]")
+        except Exception:
+            result["options"] = []
+        return result
+
+
+def mark_golden_link_opened(question_id: int, user_id: int):
+    """Record a verified redirect click and return the saved question."""
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE golden_questions
+               SET link_opened_at=COALESCE(link_opened_at, ?)
+               WHERE id=? AND user_id=? AND answered=0""",
+            (now, int(question_id), int(user_id)),
+        )
+    return get_golden_question_for_redirect(question_id, user_id)
+
+
+def claim_golden_answer_reveal(question_id: int, user_id: int) -> bool:
+    """Atomically allow only one Telegram answer-keyboard message per question."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            """UPDATE golden_questions SET answers_revealed_at=?
+               WHERE id=? AND user_id=? AND answered=0
+                 AND link_opened_at IS NOT NULL AND answers_revealed_at IS NULL""",
+            (datetime.utcnow().isoformat(), int(question_id), int(user_id)),
+        )
+        return int(cur.rowcount or 0) == 1
+
+
+def release_golden_answer_reveal(question_id: int, user_id: int) -> None:
+    """Allow retry when Telegram delivery failed after a valid product click."""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE golden_questions SET answers_revealed_at=NULL
+               WHERE id=? AND user_id=? AND answered=0""",
+            (int(question_id), int(user_id)),
+        )
 
 
 def deactivate_user(user_id: int):
@@ -1504,6 +1552,7 @@ def create_golden_question(
     product_link: str | None = None,
     raw_epc: float | None = None,
     pool_type: str = "main",
+    requires_link_open: bool = False,
 ) -> int:
     """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل.
 
@@ -1514,8 +1563,9 @@ def create_golden_question(
         cur = conn.execute(
             """INSERT INTO golden_questions
                (user_id, asin, question_type, correct_index, epc, reward_value,
-                prompt, options_json, product_link, raw_epc, pool_type, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                prompt, options_json, product_link, raw_epc, pool_type,
+                requires_link_open, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 asin,
@@ -1528,6 +1578,7 @@ def create_golden_question(
                 product_link,
                 float(raw_epc if raw_epc is not None else epc),
                 str(pool_type or "main"),
+                1 if requires_link_open else 0,
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -1563,6 +1614,9 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
         ).fetchone()
         if not question:
             return None
+
+        if int(question["requires_link_open"] or 0) == 1 and not question["link_opened_at"]:
+            return {"error": "open_product_first"}
 
         is_correct = int(chosen_index == question["correct_index"])
         contribution = question["reward_value"] if is_correct else 0.0

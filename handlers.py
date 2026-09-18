@@ -1224,6 +1224,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         reward_value=reward_value,
         raw_epc=product.expected_revenue_per_click,
         pool_type=pool_type,
+        prompt=question["prompt"],
+        options=question["options"],
+        requires_link_open=True,
     )
     if replacement_pool:
         database.consume_pending_replacement_pool(user_id)
@@ -1245,15 +1248,11 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         bonus_label = ""
     caption = (
         bonus_label + f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
-        f"👇 دوس على لينك المنتج وشوف تفاصيله كويس قبل ما تجاوب\n\n"
+        f"👇 افتح المنتج وشوف تفاصيله، وبعدها اختيارات الإجابة هتظهر هنا\n\n"
         f"{question['prompt']}"
     )
     buttons = [
-        [InlineKeyboardButton("🔗 شوف المنتج على أمازون", url=product_link)]
-    ]
-    buttons += [
-        [InlineKeyboardButton(opt, callback_data=f"goldenans:{question_id}:{index}")]
-        for index, opt in enumerate(question["options"])
+        [InlineKeyboardButton("🔗 افتح المنتج وشوف تفاصيله", url=product_link)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
 
@@ -1289,6 +1288,12 @@ async def golden_answer_callback(update: Update, context: ContextTypes.DEFAULT_T
             text="الإجابة دي اتسجلت قبل كده. هنكمّل من تقدمك الحالي.",
         )
         await _offer_golden_round(context, chat_id, user_id)
+        return
+    if result.get("error") == "open_product_first":
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="🔗 افتح المنتج وشوف تفاصيله الأول، وبعدها اختيارات الإجابة هتظهر لك.",
+        )
         return
 
     if result["correct"]:
