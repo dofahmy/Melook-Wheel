@@ -580,17 +580,19 @@ class Handler(BaseHTTPRequestHandler):
             qrow = database.mark_golden_link_opened(question_id, user_id)
             database.capture_telegram_user_ip(user_id, self._client_ip())
             database.set_user_activity_now(user_id)
-            # Return the Amazon redirect immediately; Telegram delivery happens
-            # just after the response so opening the product is not delayed.
+            # Reveal and deliver the answers before handing control to the
+            # native Amazon app. Some mobile clients stop the redirect request
+            # context as soon as the external app opens, so post-redirect work
+            # is not reliable enough here.
+            if qrow and database.claim_golden_answer_reveal(question_id, user_id):
+                sent, _error = _telegram_send_golden_answers(user_id, qrow)
+                if not sent:
+                    database.release_golden_answer_reveal(question_id, user_id)
             self.send_response(302)
             self._security_headers()
             self.send_header("Cache-Control", "no-store")
             self.send_header("Location", target)
             self.end_headers()
-            if qrow and database.claim_golden_answer_reveal(question_id, user_id):
-                sent, _error = _telegram_send_golden_answers(user_id, qrow)
-                if not sent:
-                    database.release_golden_answer_reveal(question_id, user_id)
             return
 
         # Public web-account API authenticated by session cookie.
