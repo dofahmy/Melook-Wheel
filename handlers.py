@@ -12,7 +12,7 @@ import json
 import os
 import hashlib
 import hmac
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -1131,14 +1131,18 @@ def _extract_asin(url: str) -> str | None:
 
 
 def _telegram_ip_capture_link(user_id: int, question_id: int, direct_url: str) -> str:
-    """Use Wafr redirect only while this Telegram online session still needs an IP capture."""
-    try:
-        if not database.user_needs_ip_capture(user_id):
-            return direct_url
-    except Exception:
-        return direct_url
+    """Route every quiz click through Wafr so answer choices can be revealed.
+
+    The redirect may also capture a fresh IP, but answer gating must never be
+    bypassed merely because the user's IP was captured by an earlier question.
+    """
     domain = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip().strip("/")
     if not domain:
+        explicit = (os.getenv("ADMIN_WEBAPP_URL") or "").strip()
+        parsed = urlsplit(explicit)
+        domain = parsed.netloc.strip().strip("/") if parsed.scheme in {"http", "https"} else ""
+    if not domain:
+        logger.error("Cannot build gated product link: RAILWAY_PUBLIC_DOMAIN/ADMIN_WEBAPP_URL missing")
         return direct_url
     payload = f"{int(user_id)}:{int(question_id)}"
     secret = str(getattr(config, "BOT_TOKEN", "") or "").encode("utf-8")
