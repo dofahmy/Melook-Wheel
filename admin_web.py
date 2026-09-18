@@ -1280,6 +1280,55 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        if parsed.path == "/api/admin/customer-balance-set":
+            try:
+                user_id = int(payload.get("user_id") or 0)
+                balance = float(payload.get("balance"))
+            except (TypeError, ValueError):
+                self._send_json(400, {"ok": False, "error": "اكتب رقم رصيد صحيح"})
+                return
+            if user_id <= 0 or balance < 0:
+                self._send_json(400, {"ok": False, "error": "بيانات العميل أو الرصيد غير صحيحة"})
+                return
+            operation_key = f"balance-set:{admin_id}:{user_id}:{int(time.time()*1000)}"
+            try:
+                new_balance = database.set_customer_balance_exact(
+                    user_id, balance, "تعديل إداري صامت للرصيد النهائي", admin_id, operation_key
+                )
+            except ValueError as exc:
+                self._send_json(409, {"ok": False, "error": str(exc)})
+                return
+            database.add_admin_audit(
+                admin_id, "balance_set_exact", "customer", 1,
+                {"user_id": user_id, "new_balance": new_balance, "silent": True},
+            )
+            self._send_json(200, {"ok": True, "data": {"user_id": user_id, "balance": new_balance}})
+            return
+
+        if parsed.path == "/api/admin/cancel-redemption":
+            try:
+                request_id = int(payload.get("request_id") or 0)
+            except (TypeError, ValueError):
+                request_id = 0
+            if request_id <= 0:
+                self._send_json(400, {"ok": False, "error": "رقم طلب الاستبدال غير صحيح"})
+                return
+            try:
+                cancelled = database.cancel_redemption_request(request_id, admin_id)
+            except ValueError as exc:
+                self._send_json(409, {"ok": False, "error": str(exc)})
+                return
+            if not cancelled:
+                self._send_json(409, {"ok": False, "error": "الطلب غير موجود أو لم يعد معلقًا"})
+                return
+            database.add_admin_audit(
+                admin_id, "redemption_cancel", "redemption", 1,
+                {"request_id": request_id, "user_id": int(cancelled["user_id"]),
+                 "amount": float(cancelled["amount"]), "silent": True},
+            )
+            self._send_json(200, {"ok": True, "data": cancelled})
+            return
+
         if parsed.path == "/api/admin/reactivate-customer":
             try:
                 account_id = int(payload.get("account_id") or 0)

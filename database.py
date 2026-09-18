@@ -172,6 +172,9 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     gift_code TEXT,
     code_sent_at TEXT,
     amazon_email TEXT,
+    cancelled_at TEXT,
+    cancelled_by INTEGER,
+    cancel_reason TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
@@ -262,6 +265,9 @@ _MIGRATIONS = [
     "ALTER TABLE redemption_requests ADD COLUMN gift_code TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN code_sent_at TEXT",
     "ALTER TABLE redemption_requests ADD COLUMN amazon_email TEXT",
+    "ALTER TABLE redemption_requests ADD COLUMN cancelled_at TEXT",
+    "ALTER TABLE redemption_requests ADD COLUMN cancelled_by INTEGER",
+    "ALTER TABLE redemption_requests ADD COLUMN cancel_reason TEXT",
     "ALTER TABLE golden_questions ADD COLUMN prompt TEXT",
     "ALTER TABLE golden_questions ADD COLUMN options_json TEXT",
     "ALTER TABLE golden_questions ADD COLUMN product_link TEXT",
@@ -1161,6 +1167,45 @@ def get_redemption_summary():
             "paid_count": int(paid["c"] or 0),
             "paid_total": float(paid["total"] or 0),
         }
+
+
+def cancel_redemption_request(request_id: int, admin_id: int, reason: str = "إلغاء إداري صامت"):
+    """يلغي طلبًا معلقًا ويعيد قيمته للرصيد، من غير إرسال أي رسالة للعميل."""
+    request_id = int(request_id)
+    admin_id = int(admin_id)
+    clean_reason = str(reason or "إلغاء إداري صامت").strip()[:250]
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM redemption_requests WHERE id=?", (request_id,)).fetchone()
+        if not row or row["status"] != "pending":
+            return None
+        user_id = int(row["user_id"])
+        amount = round(float(row["amount"] or 0), 2)
+        user = conn.execute(
+            "SELECT COALESCE(gift_balance,0) AS b FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        if not user:
+            raise ValueError("العميل غير موجود")
+        new_balance = round(float(user["b"] or 0) + amount, 2)
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            """UPDATE redemption_requests
+               SET status='cancelled', cancelled_at=?, cancelled_by=?, cancel_reason=?
+               WHERE id=? AND status='pending'""",
+            (now, admin_id, clean_reason, request_id),
+        )
+        conn.execute("UPDATE users SET gift_balance=? WHERE user_id=?", (new_balance, user_id))
+        conn.execute(
+            """INSERT OR IGNORE INTO balance_ledger
+               (user_id,amount,balance_after,reason,operation_key,admin_id,created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (user_id, amount, new_balance, f"إلغاء طلب الاستبدال #{request_id}: {clean_reason}",
+             f"redemption_cancel:{request_id}", admin_id, now),
+        )
+        result = dict(row)
+        result.update({"status": "cancelled", "cancelled_at": now,
+                       "cancelled_by": admin_id, "new_balance": new_balance})
+        return result
 
 
 # ---------- نظام الجولات التحفيزية ----------
@@ -3355,6 +3400,39 @@ def adjust_customer_balance(user_id: int, amount: float, reason: str, admin_id: 
                      VALUES (?,?,?,?,?,?,?)""",
                      (int(user_id), amount, new_balance, reason, operation_key,
                       int(admin_id) if admin_id else None, datetime.utcnow().isoformat()))
+        return new_balance
+
+
+def set_customer_balance_exact(user_id: int, new_balance: float, reason: str,
+                               admin_id: int | None, operation_key: str | None = None):
+    """يضبط الرصيد على قيمة نهائية محددة ويسجل الفرق في دفتر الحركة."""
+    new_balance = round(float(new_balance), 2)
+    if new_balance < 0:
+        raise ValueError("الرصيد لا يمكن أن يكون سالبًا")
+    reason = str(reason or "تعديل إداري صامت للرصيد النهائي").strip()[:250]
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if operation_key:
+            old_operation = conn.execute(
+                "SELECT balance_after FROM balance_ledger WHERE operation_key=?", (operation_key,)
+            ).fetchone()
+            if old_operation:
+                return float(old_operation["balance_after"])
+        row = conn.execute(
+            "SELECT COALESCE(gift_balance,0) AS b FROM users WHERE user_id=?", (int(user_id),)
+        ).fetchone()
+        if not row:
+            raise ValueError("العميل غير موجود")
+        old_balance = round(float(row["b"] or 0), 2)
+        difference = round(new_balance - old_balance, 2)
+        conn.execute("UPDATE users SET gift_balance=? WHERE user_id=?", (new_balance, int(user_id)))
+        conn.execute(
+            """INSERT INTO balance_ledger
+               (user_id,amount,balance_after,reason,operation_key,admin_id,created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (int(user_id), difference, new_balance, reason, operation_key,
+             int(admin_id) if admin_id else None, datetime.utcnow().isoformat()),
+        )
         return new_balance
 
 
