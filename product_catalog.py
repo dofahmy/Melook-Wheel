@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -33,15 +34,22 @@ _by_asin: dict[str, CatalogProduct] = {}
 _link_lock = threading.Lock()
 _last_link_timestamp = 0
 
-# Product-selection policy for the golden questions.
+# Product-selection policy for the five-question golden round.
 MIN_MAIN_EPC = 1.0
-TEST_RAW_EPC = 22.0
-# Tests can run only in the first four of five slots. 12.5% there produces
-# an overall expected share of 10% across the full five-question round.
-TEST_SHARE = 0.125
-TEST_REWARD_EPC = 1.0
-TEST_BATCH_SIZE = 5
-BLACKLIST_ASINS = {"B004ISW5YY"}
+TRUSTED_BRAND_EPC = 0.5
+TRUSTED_BRANDS = {"nivea", "pampers", "tide"}
+BLOCKED_BRANDS = {
+    "toppik", "ogx", "butterfly", "gillette", "pentel", "uniball", "tornado",
+}
+
+# Exactly the seven customer-visible facts agreed for product questions.
+QUESTION_TYPE_ORDER = (
+    "title", "price", "old_price", "discount", "rating", "brand", "reviews",
+)
+
+
+def _brand_key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
 
 
 def _products_path() -> Path:
@@ -115,36 +123,58 @@ def get_product(asin: str) -> CatalogProduct | None:
 
 
 def pool_type_for(product: CatalogProduct) -> str:
-    """Classify a product for reporting and reward safety."""
-    if product.asin in BLACKLIST_ASINS:
-        return "blacklist"
-    if abs(product.expected_revenue_per_click - TEST_RAW_EPC) < 1e-9:
-        return "epc22_test"
-    if product.expected_revenue_per_click >= MIN_MAIN_EPC:
-        return "main"
+    """Classify using raw Amazon EPC; operational EPC is handled separately."""
+    brand = _brand_key(product.brand)
+    if brand in BLOCKED_BRANDS:
+        return "blocked_brand"
+    if product.expected_revenue_per_click < MIN_MAIN_EPC:
+        return "excluded_low_epc"
+    if brand in TRUSTED_BRANDS:
+        return "trusted_brand"
+    epc = product.expected_revenue_per_click
+    if 2 <= epc < 5:
+        return "epc_2_to_5"
+    if (5 <= epc < 10) or epc >= 15:
+        return "epc_5_plus"
+    # EPC 1-<2 and 10-<15 remain valid reserve products. They are not used
+    # while either of the two configured price pools still has capacity.
+    if epc >= MIN_MAIN_EPC:
+        return "reserve"
     return "excluded_low_epc"
 
 
 def reward_epc_for(product: CatalogProduct) -> float:
-    """EPC used for rewards/round totals; raw EPC=22 is never trusted directly."""
-    if pool_type_for(product) == "epc22_test":
-        return TEST_REWARD_EPC
+    """Operational EPC used by rewards and reports; raw EPC remains stored."""
+    if pool_type_for(product) == "trusted_brand":
+        return TRUSTED_BRAND_EPC
     return product.expected_revenue_per_click
 
 
-def _active_test_products(products: list[CatalogProduct]) -> list[CatalogProduct]:
-    """Rotate a stable five-product EPC=22 test batch every ISO week."""
-    test_products = sorted(
-        (p for p in products if pool_type_for(p) == "epc22_test"),
-        key=lambda p: p.asin,
-    )
-    if len(test_products) <= TEST_BATCH_SIZE:
-        return test_products
-    iso = datetime.now(timezone.utc).isocalendar()
-    batch_count = (len(test_products) + TEST_BATCH_SIZE - 1) // TEST_BATCH_SIZE
-    batch_index = ((iso.year * 53) + iso.week) % batch_count
-    start = batch_index * TEST_BATCH_SIZE
-    return test_products[start:start + TEST_BATCH_SIZE]
+def available_question_types(product: CatalogProduct) -> list[str]:
+    """Return the usable subset of the seven agreed question types."""
+    result = ["title"]
+    if product.price > 0:
+        result.append("price")
+    if product.old_price:
+        result.append("old_price")
+    if product.discount_percent > 0:
+        result.append("discount")
+    if product.rating:
+        result.append("rating")
+    if product.brand:
+        result.append("brand")
+    if product.review_count is not None:
+        result.append("reviews")
+    return [kind for kind in QUESTION_TYPE_ORDER if kind in result]
+
+
+def _remaining_type_count(product: CatalogProduct, used_types: dict[str, set[str]]) -> int:
+    used = set(used_types.get(product.asin, set()))
+    return sum(kind not in used for kind in available_question_types(product))
+
+
+def _pool_capacity(products: list[CatalogProduct], used_types: dict[str, set[str]]) -> int:
+    return sum(_remaining_type_count(product, used_types) for product in products)
 
 
 def choose_product(
@@ -156,108 +186,66 @@ def choose_product(
     first_round_bonus: bool = False,
     bonus_round: bool = False,
     bonus_target_epc: float | None = None,
-    required_reward_epc: float | None = None,
+    used_question_types: dict[str, set[str]] | None = None,
+    forced_pool_type: str | None = None,
 ) -> CatalogProduct:
-    """Dynamic selector: minimize repeats while guaranteeing the first 5 products
-    in a round can reach EGYPT_MIN_ROUND_EPC.
+    """Choose by the configured 1 + 2 + 2 round distribution.
 
-    For slots 1-4 it only chooses a product if enough EPC remains in the catalog
-    to finish the 5-product target. On slot 5 it chooses the smallest available
-    EPC that completes the target. Previously seen products are used only when
-    the unseen catalog cannot satisfy the constraint.
+    Slot 1 uses Nivea/Pampers/Tide, slots 2-3 use EPC 2-<5, and slots
+    4-5 use EPC 5-<10 or >=15.  A wrong-answer replacement can force the
+    original pool. If a price pool has no unused product-question pairs, the
+    pool with more remaining pairs supplies the missing slot. Trusted brands
+    restart only after all their distinct product-question pairs are exhausted.
     """
     catalog = load_products()
-    main_products = [p for p in catalog if pool_type_for(p) == "main"]
-    test_products = _active_test_products(catalog)
-    if not main_products:
-        raise ValueError("لا توجد منتجات أساسية بقيمة EPC جنيه أو أكثر")
+    pools = {
+        name: [product for product in catalog if pool_type_for(product) == name]
+        for name in ("trusted_brand", "epc_2_to_5", "epc_5_plus", "reserve")
+    }
+    if not pools["trusted_brand"]:
+        raise ValueError("لا توجد منتجات من Nivea/Pampers/Tide")
+    if not pools["epc_2_to_5"] or not pools["epc_5_plus"]:
+        raise ValueError("إحدى شرائح EPC الأساسية فارغة")
 
-    # Test products get 10% of non-final question slots. The final slot stays
-    # in the main pool so it can still close the configured round EPC target.
+    used = used_question_types or {}
     slot = int(question_index) % 5
-    use_test_pool = bool(test_products and slot < 4 and random.random() < TEST_SHARE)
-    products = test_products if use_test_pool else main_products
+    desired = forced_pool_type or (
+        "trusted_brand" if slot == 0 else "epc_2_to_5" if slot in (1, 2) else "epc_5_plus"
+    )
+    if desired not in pools:
+        desired = "epc_2_to_5"
+
+    def unused_candidates(pool_name: str) -> list[CatalogProduct]:
+        return [p for p in pools[pool_name] if _remaining_type_count(p, used) > 0]
+
+    candidates = unused_candidates(desired)
+    if not candidates and desired == "trusted_brand":
+        # The trusted pool is explicitly repeatable after its question bank ends.
+        candidates = list(pools["trusted_brand"])
+    elif not candidates:
+        # Mid/high replace one another, choosing the side with more unused pairs.
+        alternatives = ["epc_2_to_5", "epc_5_plus"]
+        alternatives.sort(key=lambda name: _pool_capacity(pools[name], used), reverse=True)
+        for name in alternatives:
+            candidates = unused_candidates(name)
+            if candidates:
+                break
+        if not candidates:
+            # Reserve is used only after both configured price pools end.
+            candidates = unused_candidates("reserve")
+
+    if not candidates:
+        raise ValueError("لا توجد أسئلة منتجات متاحة في أي شريحة")
+
+    # Avoid the same ASIN inside one round when possible, without preventing
+    # its other question types from being used in later rounds.
     excluded = set(excluded_asins or set())
-    seen = set(all_seen_asins or set())
-    target = float(bonus_target_epc if bonus_round and bonus_target_epc is not None else getattr(config, "EGYPT_MIN_ROUND_EPC", 21.23))
-
-    # السؤالان الإضافيان بعد الإجابة الخاطئة يجب أن يحملا نفس EPC الفعلي
-    # للسؤال الخاطئ. نفضّل منتجًا جديدًا، ونسمح بالتكرار فقط عند الضرورة.
-    if required_reward_epc is not None:
-        wanted = float(required_reward_epc)
-        matching = [
-            p for p in (main_products + test_products)
-            if abs(reward_epc_for(p) - wanted) < 1e-9
-        ]
-        if not matching:
-            raise ValueError(f"لا يوجد منتج بنفس EPC المطلوب لسؤال العقوبة: {wanted}")
-        fresh = [p for p in matching if p.asin not in excluded and p.asin not in seen]
-        available_matching = [p for p in matching if p.asin not in excluded]
-        return random.choice(fresh or available_matching or matching)
-
-    # One-time welcome round: its first three questions are the three
-    # highest-EPC products in the current catalog.
-    if first_round_bonus and 0 <= int(question_index) < 3:
-        ranked = sorted(products, key=reward_epc_for, reverse=True)
-        top_three = ranked[:3]
-        preferred = top_three[int(question_index)] if len(top_three) > int(question_index) else None
-        if preferred and preferred.asin not in excluded:
-            return preferred
-        remaining_top = [p for p in top_three if p.asin not in excluded]
-        if remaining_top:
-            return remaining_top[0]
-
-
-    def available(prefer_unseen: bool) -> list[CatalogProduct]:
-        base = [p for p in products if p.asin not in excluded]
-        if prefer_unseen:
-            unseen = [p for p in base if p.asin not in seen]
-            if unseen:
-                return unseen
-        return base
-
-    # Wrong-answer penalty questions after the original 5 still avoid repeats,
-    # but they are outside the 5-product EPC guarantee.
-    if int(question_index) >= 5:
-        pool = available(True) or available(False) or products
-        return random.choice(pool)
-
-    slots_after = 4 - slot
-    for prefer_unseen in (True, False):
-        pool = available(prefer_unseen)
-        if not pool:
-            continue
-
-        if slots_after == 0:
-            need = max(target - float(current_round_epc or 0), 0.0)
-            enough = [p for p in pool if reward_epc_for(p) + 1e-12 >= need]
-            if enough:
-                # Smallest EPC that safely closes the round; randomize ties.
-                enough.sort(key=reward_epc_for)
-                floor = reward_epc_for(enough[0])
-                near = [p for p in enough if reward_epc_for(p) <= floor + 0.05]
-                return random.choice(near)
-            continue
-
-        feasible = []
-        for candidate in pool:
-            remaining = [
-                reward_epc_for(p) for p in pool
-                if p.asin != candidate.asin
-            ]
-            remaining.sort(reverse=True)
-            best_future = sum(remaining[:slots_after])
-            if float(current_round_epc or 0) + reward_epc_for(candidate) + best_future + 1e-12 >= target:
-                feasible.append(candidate)
-        if feasible:
-            # Prefer lower EPC now, preserving high-EPC products to subsidize later rounds.
-            feasible.sort(key=reward_epc_for)
-            window = feasible[:max(1, min(20, len(feasible)))]
-            return random.choice(window)
-
-    # Safety fallback if the catalog itself cannot meet the target.
-    pool = available(True) or available(False) or products
-    return max(pool, key=reward_epc_for)
+    fresh = [p for p in candidates if p.asin not in excluded]
+    if fresh:
+        candidates = fresh
+    max_remaining = max(_remaining_type_count(p, used) for p in candidates)
+    best = [p for p in candidates if _remaining_type_count(p, used) == max_remaining]
+    return random.choice(best)
 
 def _unique_timestamp_ms() -> int:
     global _last_link_timestamp
@@ -288,28 +276,17 @@ def customer_reward_for_epc(epc: float) -> float:
     )
 
 
-def question_for(product: CatalogProduct) -> dict:
-    """يبني سؤالًا عشوائيًا ويعيد الاختيارات مع رقم الإجابة الصحيحة."""
+def question_for(product: CatalogProduct, excluded_types: set[str] | None = None) -> dict:
+    """Build one of the seven facts, exhausting unused types before repeating."""
     products = [
         p for p in load_products()
-        if pool_type_for(p) in {"main", "epc22_test"}
+        if pool_type_for(p) in {"trusted_brand", "epc_2_to_5", "epc_5_plus", "reserve"}
     ]
-    types = ["title"]
-    if product.price > 0:
-        types.append("price")
-    if product.brand:
-        types.append("brand")
-    if product.category:
-        types.append("category")
-    if product.rating:
-        types.append("rating")
-    if product.review_count is not None:
-        types.append("reviews")
-    if product.discount_percent > 0:
-        types.append("discount")
-    if product.old_price:
-        types.append("old_price")
-
+    all_types = available_question_types(product)
+    excluded = set(excluded_types or set())
+    types = [kind for kind in all_types if kind not in excluded] or all_types
+    if not types:
+        raise ValueError(f"المنتج {product.asin} لا يحتوي على بيانات سؤال صالحة")
     qtype = random.choice(types)
     if qtype == "price":
         correct = f"{product.price:g} جنيه"
@@ -338,11 +315,15 @@ def question_for(product: CatalogProduct) -> dict:
         correct = str(original_correct)[:60]
         pool = list({str(getattr(p, field))[:60] for p in random.sample(products, min(len(products), 100)) if getattr(p, field) and getattr(p, field) != original_correct})
         wrong = pool[:3]
-        prompt = {"title": "إيه اسم المنتج؟", "brand": "إيه ماركة المنتج؟", "category": "المنتج تابع لأي قسم؟"}[qtype]
+        prompt = {"title": "إيه اسم المنتج؟", "brand": "إيه ماركة المنتج؟"}[qtype]
 
     options = list(dict.fromkeys([correct] + wrong))
     if len(options) < 4:
-        return question_for(product)
+        remaining = set(excluded)
+        remaining.add(qtype)
+        if any(kind not in remaining for kind in all_types):
+            return question_for(product, remaining)
+        raise ValueError(f"تعذر تكوين 4 اختيارات مختلفة للمنتج {product.asin}")
     options = options[:4]
     random.shuffle(options)
     return {

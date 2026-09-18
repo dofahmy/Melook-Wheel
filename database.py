@@ -114,6 +114,14 @@ CREATE TABLE IF NOT EXISTS golden_quiz_log (
     PRIMARY KEY (user_id, asin, quiz_date)
 );
 
+CREATE TABLE IF NOT EXISTS golden_replacement_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    pool_type TEXT NOT NULL,
+    remaining INTEGER NOT NULL DEFAULT 2,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS golden_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -142,18 +150,6 @@ CREATE TABLE IF NOT EXISTS lucky_spins (
     created_at TEXT NOT NULL,
     claimed_at TEXT
 );
-
-CREATE TABLE IF NOT EXISTS golden_penalty_queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    source_question_id INTEGER NOT NULL,
-    epc REAL NOT NULL,
-    remaining INTEGER NOT NULL DEFAULT 2,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_golden_penalty_queue_user
-    ON golden_penalty_queue(user_id, id);
 
 CREATE TABLE IF NOT EXISTS lucky_wheel_pool (
     prize_index INTEGER PRIMARY KEY,
@@ -1374,6 +1370,54 @@ def list_all_quizzed_asins(user_id: int) -> set[str]:
     return {str(row["asin"]).strip().upper() for row in rows if row["asin"]}
 
 
+def list_used_product_question_types(user_id: int) -> dict[str, set[str]]:
+    """All distinct (ASIN, question type) pairs used for this customer."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT asin, question_type FROM golden_questions
+               WHERE user_id=? AND asin IS NOT NULL AND TRIM(asin)<>''""",
+            (int(user_id),),
+        ).fetchall()
+    used: dict[str, set[str]] = {}
+    for row in rows:
+        asin = str(row["asin"] or "").strip().upper()
+        qtype = str(row["question_type"] or "").strip()
+        if asin and qtype:
+            used.setdefault(asin, set()).add(qtype)
+    return used
+
+
+def get_pending_replacement_pool(user_id: int) -> str | None:
+    """Oldest wrong-answer replacement pool still owed to the customer."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT pool_type FROM golden_replacement_queue
+               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
+            (int(user_id),),
+        ).fetchone()
+    return str(row["pool_type"]) if row else None
+
+
+def consume_pending_replacement_pool(user_id: int) -> None:
+    """Consume one replacement only after its new question was created."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT id, remaining FROM golden_replacement_queue
+               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
+            (int(user_id),),
+        ).fetchone()
+        if not row:
+            return
+        remaining = int(row["remaining"] or 0) - 1
+        if remaining > 0:
+            conn.execute(
+                "UPDATE golden_replacement_queue SET remaining=? WHERE id=?",
+                (remaining, int(row["id"])),
+            )
+        else:
+            conn.execute("DELETE FROM golden_replacement_queue WHERE id=?", (int(row["id"]),))
+
+
 def list_todays_quizzed_asins(user_id: int) -> set[str]:
     """كل الـ ASINs اللي العميل ده اتسأل عنها النهاردة بالفعل."""
     today = datetime.utcnow().date().isoformat()
@@ -1430,7 +1474,7 @@ def reset_golden_progress(user_id: int):
 
 
 def get_current_golden_round_epc(user_id: int, answered_count: int | None = None) -> float:
-    """مجموع EPC للأسئلة الحالية في الجولة."""
+    """Operational EPC of correct answers only; wrong questions contribute zero."""
     if answered_count is None:
         row = get_user(user_id)
         answered_count = int(row["golden_answered_count"] or 0) if row else 0
@@ -1439,10 +1483,13 @@ def get_current_golden_round_epc(user_id: int, answered_count: int | None = None
         return 0.0
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT epc FROM golden_questions WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            "SELECT epc, answered, was_correct FROM golden_questions WHERE user_id=? ORDER BY id DESC LIMIT ?",
             (int(user_id), n),
         ).fetchall()
-    return float(sum(float(row["epc"] or 0) for row in rows))
+    return float(sum(
+        float(row["epc"] or 0) for row in rows
+        if int(row["answered"] or 0) == 1 and int(row["was_correct"] or 0) == 1
+    ))
 
 
 def create_golden_question(
@@ -1484,37 +1531,7 @@ def create_golden_question(
                 datetime.utcnow().isoformat(),
             ),
         )
-    return cur.lastrowid
-
-
-def get_pending_penalty_epc(user_id: int) -> float | None:
-    """قيمة EPC المطلوبة لأقدم سؤالَي عقوبة لم يُستهلكا بعد."""
-    with get_conn() as conn:
-        row = conn.execute(
-            """SELECT epc FROM golden_penalty_queue
-               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
-            (int(user_id),),
-        ).fetchone()
-        return float(row["epc"]) if row else None
-
-
-def consume_pending_penalty(user_id: int) -> None:
-    """يستهلك سؤال عقوبة واحدًا بعد إنشاء السؤال المطابق بنجاح."""
-    with get_conn() as conn:
-        row = conn.execute(
-            """SELECT id, remaining FROM golden_penalty_queue
-               WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
-            (int(user_id),),
-        ).fetchone()
-        if not row:
-            return
-        if int(row["remaining"] or 0) <= 1:
-            conn.execute("DELETE FROM golden_penalty_queue WHERE id=?", (int(row["id"]),))
-        else:
-            conn.execute(
-                "UPDATE golden_penalty_queue SET remaining=remaining-1 WHERE id=?",
-                (int(row["id"]),),
-            )
+        return cur.lastrowid
 
 
 def get_pending_web_golden_question(user_id: int):
@@ -1554,6 +1571,18 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                WHERE id = ?""",
             (is_correct, datetime.utcnow().isoformat(), question_id),
         )
+        if not is_correct:
+            # Each wrong answer adds two questions from the same operational
+            # price pool. The question itself remains stored but earns nothing.
+            conn.execute(
+                """INSERT INTO golden_replacement_queue
+                   (user_id, pool_type, remaining, created_at) VALUES (?, ?, 2, ?)""",
+                (
+                    int(user_id),
+                    str(question["pool_type"] or "epc_2_to_5"),
+                    datetime.utcnow().isoformat(),
+                ),
+            )
         # golden_target = إجمالي عدد الأسئلة المطلوب إكمالها في الجولة.
         # يبدأ بـ 5، وكل إجابة غلط تضيف سؤالين كعقوبة.
         # عدد الإجابات الصح المطلوب لا يتغير؛ يظل الهدف الأساسي 5.
@@ -1566,13 +1595,6 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                WHERE user_id = ?""",
             (is_correct, contribution, is_correct, user_id),
         )
-        if not is_correct:
-            conn.execute(
-                """INSERT INTO golden_penalty_queue
-                   (user_id, source_question_id, epc, remaining, created_at)
-                   VALUES (?, ?, ?, 2, ?)""",
-                (int(user_id), int(question_id), float(question["epc"] or 0), datetime.utcnow().isoformat()),
-            )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
                golden_round_earnings, golden_target, first_round_bonus_used FROM users WHERE user_id = ?""",

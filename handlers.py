@@ -1182,8 +1182,9 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     try:
         asked_asins = database.list_todays_quizzed_asins(user_id)
         all_seen_asins = database.list_all_quizzed_asins(user_id)
+        used_question_types = database.list_used_product_question_types(user_id)
+        replacement_pool = database.get_pending_replacement_pool(user_id)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
-        penalty_epc = database.get_pending_penalty_epc(user_id)
         round_kind = database.ensure_current_round_kind(user_id)
         product = product_catalog.choose_product(
             asked_asins,
@@ -1194,9 +1195,13 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
             first_round_bonus=(round_kind == "welcome"),
             bonus_round=(round_kind == "bonus"),
             bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
-            required_reward_epc=penalty_epc,
+            used_question_types=used_question_types,
+            forced_pool_type=replacement_pool,
         )
-        question = product_catalog.question_for(product)
+        question = product_catalog.question_for(
+            product,
+            excluded_types=used_question_types.get(product.asin, set()),
+        )
     except Exception as exc:
         logger.exception("تعذر تجهيز سؤال من ملف المنتجات: %s", exc)
         await context.bot.send_message(
@@ -1220,8 +1225,8 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         raw_epc=product.expected_revenue_per_click,
         pool_type=pool_type,
     )
-    if penalty_epc is not None:
-        database.consume_pending_penalty(user_id)
+    if replacement_pool:
+        database.consume_pending_replacement_pool(user_id)
     database.log_quiz_asked(user_id, product.asin)
     product_link = product_catalog.build_affiliate_link(product.asin)
     # First Amazon click after an offline -> online return goes through Wafr once
