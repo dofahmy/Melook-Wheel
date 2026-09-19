@@ -2127,6 +2127,48 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         }
 
 
+def normalize_golden_question_epc(priority_asins: list[str], customer_reward_rate: float):
+    """Backfill operational EPC for old/new questions without changing rewards already earned."""
+    priority = sorted({str(x).strip().upper() for x in priority_asins if str(x).strip()})
+    placeholders = ",".join("?" for _ in priority) or "NULL"
+    epc_case = f"CASE WHEN asin IN ({placeholders}) THEN 0.10 ELSE 0.05 END"
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(f"UPDATE golden_questions SET epc={epc_case}", priority)
+        multiplier = float(_setting_value(conn, "bonus_multiplier", "2.0"))
+        conn.execute(
+            f"""UPDATE golden_questions
+                SET reward_value=({epc_case}) * ? *
+                    CASE WHEN COALESCE((SELECT current_round_kind FROM users
+                                        WHERE users.user_id=golden_questions.user_id),'')='bonus'
+                         THEN ? ELSE 1 END
+                WHERE answered=0""",
+            (*priority, float(customer_reward_rate), multiplier),
+        )
+
+
+def get_admin_product_report(period: str = "all", date_from: str | None = None,
+                             date_to: str | None = None) -> list[dict]:
+    """Correct-answer clicks grouped by ASIN; wrong answers never contribute."""
+    q_where, q_params = _period_where("created_at", period, date_from, date_to)
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT asin,
+                   COUNT(*) AS views,
+                   COUNT(DISTINCT user_id) AS customers,
+                   COALESCE(AVG(raw_epc),0) AS advertised_epc,
+                   COALESCE(SUM(raw_epc),0) AS advertised_epc_total,
+                   COALESCE(AVG(epc),0) AS calculated_epc,
+                   COALESCE(SUM(epc),0) AS calculated_total,
+                   MAX(created_at) AS last_seen_at
+            FROM golden_questions
+            WHERE answered=1 AND was_correct=1 AND {q_where}
+            GROUP BY asin
+            ORDER BY calculated_total DESC, asin
+        """, q_params).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0,
                           date_from: str | None = None, date_to: str | None = None,
                           sort_key: str = "online", sort_dir: str = "desc"):

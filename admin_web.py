@@ -824,7 +824,18 @@ class Handler(BaseHTTPRequestHandler):
         date_from = (qs.get("from", [""])[0] or "").strip()
         date_to = (qs.get("to", [""])[0] or "").strip()
         if parsed.path == "/api/admin/summary":
+            if product_catalog:
+                product_catalog.load_products()
             self._send_json(200, {"ok": True, "data": database.get_admin_report_summary(period, date_from, date_to)})
+            return
+        if parsed.path == "/api/admin/product-report":
+            if product_catalog:
+                product_catalog.load_products()
+            rows = database.get_admin_product_report(period, date_from, date_to)
+            for row in rows:
+                product = product_catalog.get_product(row["asin"]) if product_catalog else None
+                row["title"] = product.title if product else ""
+            self._send_json(200, {"ok": True, "data": rows})
             return
         if parsed.path == "/api/admin/bonus-settings":
             settings = database.get_bonus_settings()

@@ -26,6 +26,7 @@ class CatalogProduct:
     rating: float | None
     review_count: int | None
     expected_revenue_per_click: float
+    operational_epc: float
     image_url: str | None
 
 
@@ -33,10 +34,12 @@ _products: list[CatalogProduct] | None = None
 _by_asin: dict[str, CatalogProduct] = {}
 _link_lock = threading.Lock()
 _last_link_timestamp = 0
+_history_synced = False
 
 # Product-selection policy for the five-question golden round.
 MIN_MAIN_EPC = 1.0
-TRUSTED_BRAND_EPC = 0.5
+DEFAULT_OPERATIONAL_EPC = 0.05
+PAMPERS_TIDE_OPERATIONAL_EPC = 0.10
 TRUSTED_BRANDS = {"nivea", "pampers", "tide"}
 BLOCKED_BRANDS = {
     "toppik", "ogx", "butterfly", "gillette", "pentel", "uniball", "tornado",
@@ -50,6 +53,20 @@ QUESTION_TYPE_ORDER = (
 
 def _brand_key(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _is_pampers_or_tide(brand: str | None, title: str | None = None) -> bool:
+    english = _brand_key(brand)
+    brand_text = str(brand or "").casefold()
+    if english in {"pampers", "tide"} or any(
+        name in brand_text for name in ("بامبرز", "تايد")
+    ):
+        return True
+    # بعض سجلات Amazon لا تحتوي asinBrand؛ وقتها فقط نستخدم اسم المنتج.
+    if brand_text.strip():
+        return False
+    title_text = str(title or "").casefold()
+    return any(name in title_text for name in ("pampers", "tide", "بامبرز", "تايد"))
 
 
 def _products_path() -> Path:
@@ -67,7 +84,7 @@ def _number(value, default=0.0) -> float:
 
 
 def load_products(force: bool = False) -> list[CatalogProduct]:
-    global _products, _by_asin
+    global _products, _by_asin, _history_synced
     if _products is not None and not force:
         return _products
 
@@ -96,10 +113,16 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
         if not discount and old_price and old_price > price:
             discount = round((old_price - price) / old_price * 100, 2)
 
+        brand = str(item.get("asinBrand") or "").strip()
+        operational_epc = _number(
+            item.get("operationalEpc"),
+            PAMPERS_TIDE_OPERATIONAL_EPC if _is_pampers_or_tide(brand, title)
+            else DEFAULT_OPERATIONAL_EPC,
+        )
         loaded.append(CatalogProduct(
             asin=asin,
             title=title,
-            brand=str(item.get("asinBrand") or "").strip(),
+            brand=brand,
             category=str(item.get("category") or "").strip(),
             price=price,
             old_price=old_price,
@@ -107,6 +130,7 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             rating=_number(item.get("numberOfReviewStars")) or None,
             review_count=int(_number(item.get("reviewCount"))) if item.get("reviewCount") is not None else None,
             expected_revenue_per_click=epc,
+            operational_epc=operational_epc,
             image_url=item.get("imageUrl"),
         ))
 
@@ -114,6 +138,17 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
         raise ValueError("ملف المنتجات لا يحتوي على منتجات صالحة")
     _products = loaded
     _by_asin = {product.asin: product for product in loaded}
+    if not _history_synced:
+        try:
+            import database
+            database.normalize_golden_question_epc(
+                [p.asin for p in loaded if _is_pampers_or_tide(p.brand, p.title)],
+                float(config.EGYPT_CUSTOMER_REWARD_RATE),
+            )
+            _history_synced = True
+        except Exception:
+            # The catalog can be imported before database.init_db(); retry later.
+            pass
     return _products
 
 
@@ -145,9 +180,7 @@ def pool_type_for(product: CatalogProduct) -> str:
 
 def reward_epc_for(product: CatalogProduct) -> float:
     """Operational EPC used by rewards and reports; raw EPC remains stored."""
-    if pool_type_for(product) == "trusted_brand":
-        return TRUSTED_BRAND_EPC
-    return product.expected_revenue_per_click
+    return max(float(product.operational_epc), 0.0)
 
 
 def available_question_types(product: CatalogProduct) -> list[str]:
@@ -269,8 +302,6 @@ def build_affiliate_link(asin: str) -> str:
 def customer_reward_for_epc(epc: float) -> float:
     return round(
         max(epc, 0)
-        * config.EGYPT_APPROVED_CLICK_RATE
-        * config.EGYPT_REAL_CLICK_VALUE_RATE
         * config.EGYPT_CUSTOMER_REWARD_RATE,
         6,
     )
