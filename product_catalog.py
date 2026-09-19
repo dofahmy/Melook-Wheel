@@ -38,9 +38,11 @@ _history_synced = False
 
 # Product-selection policy for the five-question golden round.
 MIN_MAIN_EPC = 1.0
-DEFAULT_OPERATIONAL_EPC = 0.05
-PAMPERS_TIDE_OPERATIONAL_EPC = 0.10
-TRUSTED_BRANDS = {"nivea", "pampers", "tide"}
+DEFAULT_OPERATIONAL_EPC = 0.01
+PREFERRED_OPERATIONAL_EPC = 0.20
+# These products were admitted from the weekly Amazon report even though the
+# source catalog's advertised EPC was missing/below the original 1.00 filter.
+REPORT_VALIDATED_ASINS = {"B08WJJKHTZ", "B09J57WPHT"}
 BLOCKED_BRANDS = {
     "toppik", "ogx", "butterfly", "gillette", "pentel", "uniball", "tornado",
 }
@@ -67,6 +69,25 @@ def _is_pampers_or_tide(brand: str | None, title: str | None = None) -> bool:
         return False
     title_text = str(title or "").casefold()
     return any(name in title_text for name in ("pampers", "tide", "بامبرز", "تايد"))
+
+
+def _is_preferred_brand(brand: str | None, title: str | None = None) -> bool:
+    """Nivea, Pampers, Tide, or L'Oreal Professionnel only."""
+    brand_text = str(brand or "").casefold()
+    compact = _brand_key(brand)
+    if compact.startswith("nivea") or _is_pampers_or_tide(brand, title):
+        return True
+    if "professionnel" in brand_text and any(
+        name in brand_text for name in ("l'oréal", "l’oréal", "loreal", "لوريال")
+    ):
+        return True
+    if brand_text.strip():
+        return False
+    title_text = str(title or "").casefold()
+    return any(name in title_text for name in ("nivea", "نيفيا", "pampers", "بامبرز", "tide", "تايد")) or (
+        "professionnel" in title_text
+        and any(name in title_text for name in ("l'oréal", "l’oréal", "loreal", "لوريال"))
+    )
 
 
 def _products_path() -> Path:
@@ -100,9 +121,9 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
         price_block = item.get("buyingPrice") or {}
         price = _number(price_block.get("amount"))
         raw_epc = item.get("expectedRevenuePerClick")
-        if raw_epc is None:
+        if raw_epc is None and asin not in REPORT_VALIDATED_ASINS:
             continue
-        epc = _number(raw_epc, default=-1.0)
+        epc = _number(raw_epc, default=0.0)
         if len(asin) != 10 or not title or epc < 0:
             continue
 
@@ -114,10 +135,10 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             discount = round((old_price - price) / old_price * 100, 2)
 
         brand = str(item.get("asinBrand") or "").strip()
-        operational_epc = _number(
-            item.get("operationalEpc"),
-            PAMPERS_TIDE_OPERATIONAL_EPC if _is_pampers_or_tide(brand, title)
-            else DEFAULT_OPERATIONAL_EPC,
+        operational_epc = (
+            PREFERRED_OPERATIONAL_EPC
+            if _is_preferred_brand(brand, title)
+            else DEFAULT_OPERATIONAL_EPC
         )
         loaded.append(CatalogProduct(
             asin=asin,
@@ -142,7 +163,11 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
         try:
             import database
             database.normalize_golden_question_epc(
-                [p.asin for p in loaded if _is_pampers_or_tide(p.brand, p.title)],
+                {
+                    p.asin: p.operational_epc
+                    for p in loaded
+                    if abs(p.operational_epc - DEFAULT_OPERATIONAL_EPC) > 1e-9
+                },
                 float(config.EGYPT_CUSTOMER_REWARD_RATE),
             )
             _history_synced = True
@@ -158,24 +183,8 @@ def get_product(asin: str) -> CatalogProduct | None:
 
 
 def pool_type_for(product: CatalogProduct) -> str:
-    """Classify using raw Amazon EPC; operational EPC is handled separately."""
-    brand = _brand_key(product.brand)
-    if brand in BLOCKED_BRANDS:
-        return "blocked_brand"
-    if product.expected_revenue_per_click < MIN_MAIN_EPC:
-        return "excluded_low_epc"
-    if brand in TRUSTED_BRANDS:
-        return "trusted_brand"
-    epc = product.expected_revenue_per_click
-    if 2 <= epc < 5:
-        return "epc_2_to_5"
-    if (5 <= epc < 10) or epc >= 15:
-        return "epc_5_plus"
-    # EPC 1-<2 and 10-<15 remain valid reserve products. They are not used
-    # while either of the two configured price pools still has capacity.
-    if epc >= MIN_MAIN_EPC:
-        return "reserve"
-    return "excluded_low_epc"
+    """Two preferred-brand slots followed by three slots from everything else."""
+    return "preferred_brand" if _is_preferred_brand(product.brand, product.title) else "other"
 
 
 def reward_epc_for(product: CatalogProduct) -> float:
@@ -222,50 +231,38 @@ def choose_product(
     used_question_types: dict[str, set[str]] | None = None,
     forced_pool_type: str | None = None,
 ) -> CatalogProduct:
-    """Choose by the configured 1 + 2 + 2 round distribution.
+    """Choose two preferred-brand questions then three questions from the rest.
 
-    Slot 1 uses Nivea/Pampers/Tide, slots 2-3 use EPC 2-<5, and slots
-    4-5 use EPC 5-<10 or >=15.  A wrong-answer replacement can force the
-    original pool. If a price pool has no unused product-question pairs, the
-    pool with more remaining pairs supplies the missing slot. Trusted brands
-    restart only after all their distinct product-question pairs are exhausted.
+    Slots 1-2 use Nivea/Pampers/Tide/L'Oreal Professionnel at operational EPC
+    0.20. Slots 3-5 use all other products at operational EPC 0.01. A wrong
+    answer replacement always stays in its original pool.
     """
     catalog = load_products()
     pools = {
         name: [product for product in catalog if pool_type_for(product) == name]
-        for name in ("trusted_brand", "epc_2_to_5", "epc_5_plus", "reserve")
+        for name in ("preferred_brand", "other")
     }
-    if not pools["trusted_brand"]:
-        raise ValueError("لا توجد منتجات من Nivea/Pampers/Tide")
-    if not pools["epc_2_to_5"] or not pools["epc_5_plus"]:
-        raise ValueError("إحدى شرائح EPC الأساسية فارغة")
+    if not pools["preferred_brand"]:
+        raise ValueError("لا توجد منتجات من Nivea/Pampers/Tide/L'Oreal Professionnel")
+    if not pools["other"]:
+        raise ValueError("لا توجد منتجات في المجموعة العامة")
 
     used = used_question_types or {}
     slot = int(question_index) % 5
-    desired = forced_pool_type or (
-        "trusted_brand" if slot == 0 else "epc_2_to_5" if slot in (1, 2) else "epc_5_plus"
-    )
+    desired = forced_pool_type or ("preferred_brand" if slot in (0, 1) else "other")
     if desired not in pools:
-        desired = "epc_2_to_5"
+        desired = "other"
 
     def unused_candidates(pool_name: str) -> list[CatalogProduct]:
         return [p for p in pools[pool_name] if _remaining_type_count(p, used) > 0]
 
     candidates = unused_candidates(desired)
-    if not candidates and desired == "trusted_brand":
-        # The trusted pool is explicitly repeatable after its question bank ends.
-        candidates = list(pools["trusted_brand"])
+    if not candidates and desired == "preferred_brand":
+        # Preferred products are repeatable only after their available question
+        # types have been exhausted.
+        candidates = list(pools[desired])
     elif not candidates:
-        # Mid/high replace one another, choosing the side with more unused pairs.
-        alternatives = ["epc_2_to_5", "epc_5_plus"]
-        alternatives.sort(key=lambda name: _pool_capacity(pools[name], used), reverse=True)
-        for name in alternatives:
-            candidates = unused_candidates(name)
-            if candidates:
-                break
-        if not candidates:
-            # Reserve is used only after both configured price pools end.
-            candidates = unused_candidates("reserve")
+        candidates = list(pools["other"])
 
     if not candidates:
         raise ValueError("لا توجد أسئلة منتجات متاحة في أي شريحة")
@@ -311,7 +308,7 @@ def question_for(product: CatalogProduct, excluded_types: set[str] | None = None
     """Build one of the seven facts, exhausting unused types before repeating."""
     products = [
         p for p in load_products()
-        if pool_type_for(p) in {"trusted_brand", "epc_2_to_5", "epc_5_plus", "reserve"}
+        if pool_type_for(p) in {"preferred_brand", "other"}
     ]
     all_types = available_question_types(product)
     excluded = set(excluded_types or set())

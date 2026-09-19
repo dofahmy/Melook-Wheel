@@ -1692,7 +1692,7 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                    (user_id, pool_type, remaining, created_at) VALUES (?, ?, 2, ?)""",
                 (
                     int(user_id),
-                    str(question["pool_type"] or "epc_2_to_5"),
+                    str(question["pool_type"] or "other"),
                     datetime.utcnow().isoformat(),
                 ),
             )
@@ -2130,14 +2130,31 @@ def get_admin_report_summary(period: str = "all", date_from: str | None = None, 
         }
 
 
-def normalize_golden_question_epc(priority_asins: list[str], customer_reward_rate: float):
-    """Backfill operational EPC for old/new questions without changing rewards already earned."""
-    priority = sorted({str(x).strip().upper() for x in priority_asins if str(x).strip()})
-    placeholders = ",".join("?" for _ in priority) or "NULL"
-    epc_case = f"CASE WHEN asin IN ({placeholders}) THEN 0.10 ELSE 0.05 END"
+def normalize_golden_question_epc(priority_asins, customer_reward_rate: float):
+    """Sync per-ASIN operational EPC without changing rewards already earned.
+
+    New callers pass ``{asin: operational_epc}``.  A legacy ASIN list remains
+    supported and maps those ASINs to 0.10 EGP.
+    """
+    if isinstance(priority_asins, dict):
+        overrides = {
+            str(asin).strip().upper(): max(float(value), 0.0)
+            for asin, value in priority_asins.items()
+            if str(asin).strip()
+        }
+    else:
+        overrides = {
+            str(asin).strip().upper(): 0.10
+            for asin in (priority_asins or [])
+            if str(asin).strip()
+        }
+    ordered = sorted(overrides.items())
+    case_parts = " ".join("WHEN ? THEN ?" for _ in ordered)
+    epc_case = f"CASE asin {case_parts} ELSE 0.01 END"
+    epc_params = tuple(value for asin, epc in ordered for value in (asin, epc))
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute(f"UPDATE golden_questions SET epc={epc_case}", priority)
+        conn.execute(f"UPDATE golden_questions SET epc={epc_case}", epc_params)
         multiplier = float(_setting_value(conn, "bonus_multiplier", "2.0"))
         conn.execute(
             f"""UPDATE golden_questions
@@ -2146,7 +2163,7 @@ def normalize_golden_question_epc(priority_asins: list[str], customer_reward_rat
                                         WHERE users.user_id=golden_questions.user_id),'')='bonus'
                          THEN ? ELSE 1 END
                 WHERE answered=0""",
-            (*priority, float(customer_reward_rate), multiplier),
+            (*epc_params, float(customer_reward_rate), multiplier),
         )
 
 

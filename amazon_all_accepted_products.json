@@ -30,7 +30,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0017IMON0",
@@ -63,7 +64,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.899,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B001E976U8",
@@ -96,7 +98,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B001EJOFM0",
@@ -129,7 +132,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B001HH0SEI",
@@ -162,7 +166,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.268,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B001RYQN04",
@@ -195,7 +200,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.875,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0036V8EOO",
@@ -231,7 +237,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.835,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B003IHUMFK",
@@ -264,7 +271,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.004,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0042PY9VU",
@@ -300,7 +308,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 19.682,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B004OAY4U4",
@@ -333,7 +342,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B006RSCOEY",
@@ -366,7 +376,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B006TS9E0Y",
@@ -402,7 +413,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B007BAG7BI",
@@ -435,7 +447,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10.212,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B007CTYVRK",
@@ -468,7 +481,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.535,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B007GX5OY6",
@@ -504,7 +518,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.285,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B007Q427FY",
@@ -537,7 +552,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 13.092,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0088ZNVRS",
@@ -573,7 +589,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B009878BVG",
@@ -609,7 +626,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 13.717,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B009PEDGJ4",
@@ -642,7 +660,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15.361,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B009SYVTRC",
@@ -675,7 +694,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15.089,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00B073DAG",
@@ -708,7 +728,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.222,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00B1M1IUM",
@@ -741,7 +762,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00BBW18WK",
@@ -774,7 +796,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00BBXH5LW",
@@ -807,7 +830,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00BD9IQVM",
@@ -840,7 +864,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00BDC9V90",
@@ -873,7 +898,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.028,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00C4CIRYI",
@@ -906,7 +932,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.34,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00DS842HS",
@@ -939,7 +966,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.375,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00FBOT1PA",
@@ -972,7 +1000,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.538,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00INZWF5M",
@@ -1005,7 +1034,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00K32WRVA",
@@ -1038,7 +1068,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.763,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00L38LABG",
@@ -1071,7 +1102,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00LZO6PXQ",
@@ -1104,7 +1136,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B00OBBUBSU",
@@ -1137,7 +1170,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00TR2DXKQ",
@@ -1180,7 +1214,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B00UJKS2S8",
@@ -1213,7 +1248,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00V80H6F8",
@@ -1246,7 +1282,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.135,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00VG9ZQ6M",
@@ -1282,7 +1319,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B00YAHZF72",
@@ -1315,7 +1353,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 9.201,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0101SJ3P8",
@@ -1351,7 +1390,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 12.85,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B012AHZFDC",
@@ -1384,7 +1424,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.905,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B012AIU89C",
@@ -1420,7 +1461,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.579,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B012F88Z5G",
@@ -1453,7 +1495,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.122,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B012F8J15Y",
@@ -1489,7 +1532,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B013O0PT5S",
@@ -1522,7 +1566,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.094,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0144M0QGW",
@@ -1555,7 +1600,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.375,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01846Z7M2",
@@ -1588,7 +1634,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.252,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B018KJE3KU",
@@ -1628,7 +1675,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.063,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0194XAMPQ",
@@ -1661,7 +1709,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.391,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01BNRGWZA",
@@ -1701,7 +1750,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.063,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01C3W6HZY",
@@ -1737,7 +1787,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01F6S0YL0",
@@ -1773,7 +1824,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.145,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B01H1R0K68",
@@ -1806,7 +1858,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01JRY5FUE",
@@ -1842,7 +1895,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.283,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01KVAZPOO",
@@ -1878,7 +1932,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01L93HDUQ",
@@ -1911,7 +1966,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.009,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01LWZD649",
@@ -1944,7 +2000,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B01LX3IBD8",
@@ -1977,7 +2034,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.428,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01MSO4H35",
@@ -2010,7 +2068,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B01MSXH2BO",
@@ -2043,7 +2102,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B01N22W85N",
@@ -2076,7 +2136,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.875,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B06XH3ZRYX",
@@ -2112,7 +2173,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B06XYLG4KB",
@@ -2148,7 +2210,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.451,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B073P4323C",
@@ -2181,7 +2244,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0757SWJ8C",
@@ -2214,7 +2278,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.925,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B075RF7PMZ",
@@ -2247,7 +2312,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.395,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B075V9KQ78",
@@ -2280,7 +2346,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.65,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B076KX58XJ",
@@ -2313,7 +2380,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0777KCPGK",
@@ -2349,7 +2417,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.769,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B077G9NR3Q",
@@ -2385,7 +2454,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.345,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B077GZ4KRM",
@@ -2418,7 +2488,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B077SMG73C",
@@ -2454,7 +2525,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.685,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07881485K",
@@ -2487,7 +2559,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.053,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0788NZ7DP",
@@ -2520,7 +2593,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.375,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07B4JT3VS",
@@ -2553,7 +2627,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07BCCRWVT",
@@ -2589,7 +2664,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 17.667,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07BGZMKRH",
@@ -2622,7 +2698,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07BXVVN9Z",
@@ -2655,7 +2732,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 12.608,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07CN6PYQ1",
@@ -2688,7 +2766,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07D68RZBH",
@@ -2721,7 +2800,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.075,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07D6956C7",
@@ -2754,7 +2834,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07D69G8T8",
@@ -2787,7 +2868,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.503,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07F3M8CZ2",
@@ -2820,7 +2902,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 20.048,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07FNY8RPR",
@@ -2863,7 +2946,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.535,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07FPJTGSY",
@@ -2899,7 +2983,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07FPM7HZ5",
@@ -2935,7 +3020,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07FPQ9F4H",
@@ -2971,7 +3057,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07FZJV6BQ",
@@ -3004,7 +3091,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07G2B781Z",
@@ -3040,7 +3128,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 19.892,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07G878ZFV",
@@ -3073,7 +3162,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07HM75LN9",
@@ -3106,7 +3196,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07K35TJSB",
@@ -3149,7 +3240,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07L7QYKY2",
@@ -3185,7 +3277,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 16.017,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07L7RDCHT",
@@ -3218,7 +3311,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07LG24QPF",
@@ -3254,7 +3348,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.306,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07LH4FX2D",
@@ -3290,7 +3385,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.555,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07M6HN8MH",
@@ -3323,7 +3419,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.198,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07MTQ7BNT",
@@ -3359,7 +3456,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.064,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07MVWMR3G",
@@ -3392,7 +3490,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.928,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07MVWWL9S",
@@ -3425,7 +3524,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 9.816,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07MVY6123",
@@ -3461,7 +3561,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07MW1NPXJ",
@@ -3494,7 +3595,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07MW3GZRH",
@@ -3530,7 +3632,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07MWCTS1B",
@@ -3566,7 +3669,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10.082,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N5TXMLJ",
@@ -3599,7 +3703,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N5V3339",
@@ -3632,7 +3737,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.027,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N5WPWBY",
@@ -3668,7 +3774,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.959,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N6RYNXT",
@@ -3704,7 +3811,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.12,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N8R1C52",
@@ -3737,7 +3845,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 14.18,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07N8R3SPJ",
@@ -3773,7 +3882,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.78,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NDNVJGL",
@@ -3809,7 +3919,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15.165,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NF78FNG",
@@ -3842,7 +3953,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 11.164,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NF7BRTG",
@@ -3878,7 +3990,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.386,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NF7V5RM",
@@ -3911,7 +4024,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.44,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NF7YQG8",
@@ -3944,7 +4058,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.89,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NF8DRNK",
@@ -3977,7 +4092,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NGSTLHZ",
@@ -4010,7 +4126,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 11.988,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NGTPPM6",
@@ -4046,7 +4163,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.88,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07NJP4GTF",
@@ -4079,7 +4197,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.117,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NP1F31S",
@@ -4112,7 +4231,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NP92L9P",
@@ -4145,7 +4265,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07NQDJFJN",
@@ -4178,7 +4299,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.73,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07P6NLKY5",
@@ -4211,7 +4333,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.115,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07PBCJS3P",
@@ -4254,7 +4377,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.107,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07PJ9HMHC",
@@ -4287,7 +4411,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.556,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07PNLLPS7",
@@ -4323,7 +4448,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 11.821,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07PRZ8HXY",
@@ -4356,7 +4482,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.913,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07Q3WSVYV",
@@ -4392,7 +4519,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.63,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07Q794D9J",
@@ -4425,7 +4553,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.45,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07RXVMRB4",
@@ -4458,7 +4587,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.545,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07T3FDN3Q",
@@ -4491,7 +4621,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07Z979QWD",
@@ -4524,7 +4655,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07ZJC99KF",
@@ -4557,7 +4689,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.19,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07ZMNMT9M",
@@ -4590,7 +4723,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07ZMNN5CS",
@@ -4633,7 +4767,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B07ZYCC467",
@@ -4666,7 +4801,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.401,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B07ZYD7FLT",
@@ -4702,7 +4838,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.715,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0813VV1GZ",
@@ -4738,7 +4875,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.545,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B081SWKMB9",
@@ -4771,7 +4909,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.063,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08265Y4J1",
@@ -4804,7 +4943,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0839P6TPC",
@@ -4840,7 +4980,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.876,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0842HLJ3P",
@@ -4873,7 +5014,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0842HXXG5",
@@ -4906,7 +5048,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0846JN4WM",
@@ -4939,7 +5082,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0848Y82N8",
@@ -4975,7 +5119,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.69,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B084LBMKMT",
@@ -5008,7 +5153,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B084Q21RW6",
@@ -5041,7 +5187,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B084RGFGSZ",
@@ -5074,7 +5221,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B084RGPVTS",
@@ -5107,7 +5255,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0854HDBYB",
@@ -5143,7 +5292,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B085L7488G",
@@ -5176,7 +5326,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.857,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B085MY85FH",
@@ -5216,7 +5367,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.708,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B085XMNWQ8",
@@ -5252,7 +5404,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B085XMPMZ8",
@@ -5285,7 +5438,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.645,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B087CP1JFG",
@@ -5318,7 +5472,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B087CPD5WH",
@@ -5351,7 +5506,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.035,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0881VJPM9",
@@ -5387,7 +5543,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B088854ZWM",
@@ -5420,7 +5577,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B089DLCF3R",
@@ -5453,7 +5611,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B089GVTY2S",
@@ -5486,7 +5645,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08B8YJHGQ",
@@ -5519,7 +5679,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.476,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08BLMKGK1",
@@ -5552,7 +5713,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.813,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08C5BCJRG",
@@ -5585,7 +5747,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.535,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08L7HW3XZ",
@@ -5618,7 +5781,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.358,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08NTH12XM",
@@ -5651,7 +5815,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 9.874,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08R9YL1M3",
@@ -5687,7 +5852,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08R9ZB2LZ",
@@ -5723,7 +5889,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJ61WM",
@@ -5756,7 +5923,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.044,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJGMC1",
@@ -5789,7 +5957,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJK4H1",
@@ -5825,7 +5994,47 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B08WJJKHTZ",
+    "asinBrand": null,
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "Medium",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 64.99
+    },
+    "category": "Food",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 20,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "مربى التوت الأزرق من فيتراك، 430 جم",
+    "displayTitle": "مربى التوت الأزرق من فيتراك، 430 جم",
+    "expectedRevenuePerClick": null,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/316WDVUeIuL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": {
+      "currencyCode": "EGP",
+      "amount": 81
+    },
+    "ncaKey": null,
+    "numberOfReviewStars": 4.1,
+    "reviewCount": 539,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": null,
+    "operationalEpc": 0.01,
+    "observedAmazonEpc": 0.75,
+    "observedAmazonClicks": 30,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJMDRR",
@@ -5868,7 +6077,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.085,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJMYJC",
@@ -5901,7 +6111,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.398,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJP4LT",
@@ -5934,7 +6145,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJJPXPJ",
@@ -5970,7 +6182,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJKZ8C7",
@@ -6003,7 +6216,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJKZ8M3",
@@ -6036,7 +6250,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.992,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJL5379",
@@ -6069,7 +6284,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.188,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJL8FRF",
@@ -6105,7 +6321,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJLG52N",
@@ -6138,7 +6355,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 9.691,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJLG7SQ",
@@ -6174,7 +6392,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJM719Z",
@@ -6210,7 +6429,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJM9FRQ",
@@ -6246,7 +6466,10 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "observedAmazonEpc": 5.11,
+    "observedAmazonClicks": 16,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B08WJM9PD9",
@@ -6279,7 +6502,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.52,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJMJHD8",
@@ -6315,7 +6539,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJMNGQK",
@@ -6351,7 +6576,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJMTVLJ",
@@ -6384,7 +6610,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.009,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJMZM7W",
@@ -6420,7 +6647,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 9.39,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN2M9K",
@@ -6453,7 +6681,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN3RFS",
@@ -6486,7 +6715,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN4NFR",
@@ -6519,7 +6749,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.314,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN67TW",
@@ -6555,7 +6786,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN7TJW",
@@ -6588,7 +6820,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN8QG1",
@@ -6624,7 +6857,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.448,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJN939V",
@@ -6657,7 +6891,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJNCJ9V",
@@ -6693,7 +6928,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJNDD3W",
@@ -6726,7 +6962,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJNFTMM",
@@ -6759,7 +6996,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJNKZYP",
@@ -6792,7 +7030,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJNNRZ9",
@@ -6825,7 +7064,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJPTY93",
@@ -6858,7 +7098,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJPZJFH",
@@ -6894,7 +7135,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.465,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJQ2LM6",
@@ -6930,7 +7172,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.542,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WJSC72R",
@@ -6963,7 +7206,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.175,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WL9SYJC",
@@ -6996,7 +7240,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.76,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08WLCK9GX",
@@ -7032,7 +7277,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.436,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08X6263QN",
@@ -7068,7 +7314,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08X69CR6B",
@@ -7101,7 +7348,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.229,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08X6J1FRW",
@@ -7134,7 +7382,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08Y8ZCNC1",
@@ -7170,7 +7419,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.555,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08YY1N2D8",
@@ -7203,7 +7453,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08YY2R96C",
@@ -7239,7 +7490,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.495,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08YY3453Y",
@@ -7272,7 +7524,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.976,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08YY44HT2",
@@ -7305,7 +7558,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08Z42WY7T",
@@ -7341,7 +7595,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.378,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B08ZNSKCQB",
@@ -7374,7 +7629,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.76,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0918CHJQ5",
@@ -7410,7 +7666,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0918CJCW8",
@@ -7443,7 +7700,10 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 11.46,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "observedAmazonEpc": 0.34,
+    "observedAmazonClicks": 25,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0918FHY6P",
@@ -7479,7 +7739,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 19.294,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B091CM8PRN",
@@ -7512,7 +7773,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B091D9JGDV",
@@ -7545,7 +7807,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.566,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B091J3RSVW",
@@ -7578,7 +7841,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.252,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B091J4B7M8",
@@ -7611,7 +7875,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.252,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09234BNLJ",
@@ -7644,7 +7909,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09234F2RZ",
@@ -7677,7 +7943,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B092FPY9VF",
@@ -7713,7 +7980,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B092LR1JV9",
@@ -7746,7 +8014,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B092LRHMK6",
@@ -7782,7 +8051,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B092TQNZFJ",
@@ -7818,7 +8088,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0937HFNCF",
@@ -7851,7 +8122,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B094JVSBW8",
@@ -7884,7 +8156,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0959QJFD3",
@@ -7920,7 +8193,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B095PX6VC9",
@@ -7953,7 +8227,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.035,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0963ZP5JN",
@@ -7986,7 +8261,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B09685YYVZ",
@@ -8019,7 +8295,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.705,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0968VX473",
@@ -8052,7 +8329,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 16.147,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0968X67TQ",
@@ -8085,7 +8363,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0968ZDVNB",
@@ -8118,7 +8397,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B096L7853M",
@@ -8154,7 +8434,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B096NF7VQZ",
@@ -8197,7 +8478,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B096VMHCMM",
@@ -8230,7 +8512,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 12.919,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B09716YCGX",
@@ -8266,7 +8549,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B09717FJLL",
@@ -8302,7 +8586,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 16.514,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B09717S8L5",
@@ -8338,7 +8623,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15.361,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0971GB61S",
@@ -8374,7 +8660,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0971HJKQ1",
@@ -8410,7 +8697,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0976FNPK7",
@@ -8443,7 +8731,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.735,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0976G7QQV",
@@ -8479,7 +8768,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.721,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0976Z2D1G",
@@ -8522,7 +8812,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B097J8DRV1",
@@ -8558,7 +8849,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 21.306,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B098T8W1D6",
@@ -8598,7 +8890,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.03,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B098TWN3C8",
@@ -8634,7 +8927,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.503,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B099MYCCL5",
@@ -8667,7 +8961,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.358,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09B14RW7Q",
@@ -8700,7 +8995,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09B1NHCTG",
@@ -8733,7 +9029,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.018,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09BNH71P5",
@@ -8769,7 +9066,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09BNJ1K7B",
@@ -8805,7 +9103,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09DGQXY5S",
@@ -8841,7 +9140,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.383,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09FM1QCBB",
@@ -8874,7 +9174,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09G8L23CY",
@@ -8907,7 +9208,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.555,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09GVYZZST",
@@ -8940,7 +9242,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HCR9HK5",
@@ -8973,7 +9276,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HCT9W23",
@@ -9009,7 +9313,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HPTP8LT",
@@ -9042,7 +9347,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HPY936J",
@@ -9075,7 +9381,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HST56V5",
@@ -9108,7 +9415,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.133,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HVCJYVT",
@@ -9144,7 +9452,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.398,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HVCS4TM",
@@ -9180,7 +9489,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HVDYP4M",
@@ -9213,7 +9523,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09HZQ14K7",
@@ -9249,7 +9560,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.824,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09J417HPD",
@@ -9282,7 +9594,47 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.735,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B09J57WPHT",
+    "asinBrand": "WARITEX",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 55.48
+    },
+    "category": "Utility Sponge",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 34,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "إسفنج تنظيف مطبخ العمر الطويل – 2 قطعة من Waritex – متعددة الاستخدام – لتنظيف الأطباق والأسطح والبوتاجاز",
+    "displayTitle": "إسفنج تنظيف مطبخ العمر الطويل – 2 قطعة من Waritex – متعددة الاستخدام – لتنظيف الأطباق والأسطح والبوتاجاز",
+    "expectedRevenuePerClick": 0.125,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/412tyadC+zL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": {
+      "currencyCode": "EGP",
+      "amount": 83.94
+    },
+    "ncaKey": null,
+    "numberOfReviewStars": 4.8,
+    "reviewCount": 56,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 0.125,
+    "operationalEpc": 0.01,
+    "observedAmazonEpc": 2.8,
+    "observedAmazonClicks": 10,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09JMXW9NR",
@@ -9315,7 +9667,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.115,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09K6PG1FQ",
@@ -9348,7 +9701,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDBKGWC",
@@ -9381,7 +9735,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.52,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDCC68Z",
@@ -9414,7 +9769,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.83,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDD8SCH",
@@ -9447,7 +9803,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.629,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDDLW22",
@@ -9480,7 +9837,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.675,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDDYDSD",
@@ -9513,7 +9871,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDFBVTR",
@@ -9549,7 +9908,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDGBPGN",
@@ -9582,7 +9942,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.981,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09MDLTJKR",
@@ -9615,7 +9976,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09N9NFY24",
@@ -9648,7 +10010,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09NC5SCQ1",
@@ -9681,7 +10044,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.175,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09NMMPTFH",
@@ -9714,7 +10078,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.355,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09QJ5MBD4",
@@ -9747,7 +10112,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09RB6VJKD",
@@ -9780,7 +10146,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.754,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09RG7YVFT",
@@ -9816,7 +10183,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8.84,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09RQWZM23",
@@ -9859,7 +10227,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10.421,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09RQX8SPN",
@@ -9895,7 +10264,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 16.784,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09RX1THMH",
@@ -9928,7 +10298,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.456,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09SHZVGXZ",
@@ -9961,7 +10332,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.667,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09TB4D94J",
@@ -9994,7 +10366,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.902,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09TL6J3WP",
@@ -10027,7 +10400,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.304,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09TL6VCBQ",
@@ -10060,7 +10434,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.304,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09VFKCY35",
@@ -10096,7 +10471,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09VMWKRJ5",
@@ -10129,7 +10505,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.693,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09W365P77",
@@ -10162,7 +10539,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.755,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09WDQGWNB",
@@ -10195,7 +10573,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.035,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09X3TC147",
@@ -10228,7 +10607,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.583,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09X3TNCDJ",
@@ -10261,7 +10641,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.583,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B09X3TXYLG",
@@ -10294,7 +10675,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B133Y7TK",
@@ -10330,7 +10712,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.536,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B1F7PNCC",
@@ -10363,7 +10746,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B1QVMW9Y",
@@ -10396,7 +10780,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.47,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B1QXHM37",
@@ -10429,7 +10814,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.47,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B21J259D",
@@ -10462,7 +10848,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 15,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B31JT7RF",
@@ -10505,7 +10892,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B31Q6G6V",
@@ -10548,7 +10936,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.593,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B31VL7TB",
@@ -10581,7 +10970,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.626,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B3JVD521",
@@ -10614,7 +11004,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B4KCYRHY",
@@ -10647,7 +11038,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B4PNSTYK",
@@ -10680,7 +11072,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B4PPJPN1",
@@ -10713,7 +11106,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B4PTJYZS",
@@ -10749,7 +11143,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B5VDBVDC",
@@ -10785,7 +11180,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B5XGM32Z",
@@ -10821,7 +11217,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 8,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B5XHWN44",
@@ -10857,7 +11254,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.608,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B62K4X53",
@@ -10890,7 +11288,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.059,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6BXYVVQ",
@@ -10923,7 +11322,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6FNB898",
@@ -10956,7 +11356,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6FVFZP9",
@@ -10999,7 +11400,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.773,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6G3PGQ3",
@@ -11042,7 +11444,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.57,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6G8C188",
@@ -11075,7 +11478,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B6JKBDDD",
@@ -11108,7 +11512,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B77F85QH",
@@ -11141,7 +11546,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B7H15MJM",
@@ -11177,7 +11583,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.261,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B7Z1MX2S",
@@ -11213,7 +11620,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0B8NSQ26D",
@@ -11246,7 +11654,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.196,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BB399ZTS",
@@ -11279,7 +11688,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.304,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BBG5NL2J",
@@ -11312,7 +11722,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 11.528,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BBG7W98Z",
@@ -11345,7 +11756,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 13.865,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BCGGL6Q1",
@@ -11378,7 +11790,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.173,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BF591PWJ",
@@ -11414,7 +11827,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0BF5C2S2Y",
@@ -11450,7 +11864,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0BFBLW4HM",
@@ -11483,7 +11898,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.44,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BFBMFRX6",
@@ -11516,7 +11932,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.44,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BFNWKDR5",
@@ -11549,7 +11966,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.47,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BFRGQ6RL",
@@ -11585,7 +12003,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.05,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BFRGT11G",
@@ -11618,7 +12037,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.05,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH14JCQZ",
@@ -11651,7 +12071,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH4YZBD9",
@@ -11691,7 +12112,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.365,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH843X8P",
@@ -11727,7 +12149,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.813,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH866TB2",
@@ -11760,7 +12183,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.813,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH8DJ8J4",
@@ -11793,7 +12217,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.28,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH8GB6PC",
@@ -11826,7 +12251,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.28,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH8HVG6Z",
@@ -11859,7 +12285,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.709,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BH8K8DD1",
@@ -11892,7 +12319,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.28,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BJ9HMHBD",
@@ -11928,7 +12356,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.593,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BJ9L4SVK",
@@ -11968,7 +12397,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.547,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BK9KPX7W",
@@ -12001,7 +12431,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.025,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BL3XLWL8",
@@ -12034,7 +12465,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.025,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BLLVCC69",
@@ -12067,7 +12499,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BLVJSK1Y",
@@ -12100,7 +12533,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 12.85,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BLZMXKY3",
@@ -12136,7 +12570,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.1
+    "operationalEpc": 0.2,
+    "operationalEpcReason": "preferred brand slot"
   },
   {
     "asin": "B0BN6KDTJD",
@@ -12176,7 +12611,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.738,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BNYR8D1Y",
@@ -12209,7 +12645,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BPCS3FWN",
@@ -12242,7 +12679,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BPCXX5VN",
@@ -12282,7 +12720,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BPDZY47K",
@@ -12322,7 +12761,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.737,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BQFSQYVT",
@@ -12355,7 +12795,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BQQHGXZV",
@@ -12388,7 +12829,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.167,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BQWGRMFQ",
@@ -12428,7 +12870,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BQWTQ7N1",
@@ -12468,7 +12911,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.664,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BR1MBVRY",
@@ -12501,7 +12945,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BR8D5J6G",
@@ -12541,7 +12986,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BRBS6DHM",
@@ -12584,7 +13030,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BRY7XTH7",
@@ -12620,7 +13067,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BRYBX51S",
@@ -12653,7 +13101,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BSCHQXDR",
@@ -12689,7 +13138,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.518,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BSS6XXV6",
@@ -12722,7 +13172,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BSTF9VB1",
@@ -12762,7 +13213,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.75,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BSVD1192",
@@ -12795,7 +13247,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.025,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BT5VHKX1",
@@ -12828,7 +13281,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BTPYN2HW",
@@ -12861,7 +13315,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 3.861,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BTPYRGTY",
@@ -12894,7 +13349,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 12.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BV4ZXTWS",
@@ -12934,7 +13390,8 @@
     },
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.133,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BVZYZYX5",
@@ -12970,7 +13427,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BWYHG2F4",
@@ -13003,7 +13461,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BYX75XCZ",
@@ -13036,7 +13495,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 5.167,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BYX7PCHM",
@@ -13069,7 +13529,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 6.667,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BYX9CY2G",
@@ -13102,7 +13563,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0BZPJ9R6S",
@@ -13135,7 +13597,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 22,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C155LQMX",
@@ -13168,7 +13631,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 10.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C1GD1DR5",
@@ -13204,7 +13668,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 13.352,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C28JYT2L",
@@ -13237,7 +13702,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C28KZWYM",
@@ -13270,7 +13736,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C2STHHBL",
@@ -13303,7 +13770,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 7.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C2ZLYP2X",
@@ -13336,7 +13804,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.025,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C3PH3W1W",
@@ -13369,7 +13838,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.25,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C411WSMS",
@@ -13402,7 +13872,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.025,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C59LFZBW",
@@ -13435,7 +13906,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0C5VZ8BYF",
@@ -13468,7 +13940,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.85,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0D5YQWYKT",
@@ -13501,7 +13974,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 1.316,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0G39C97WQ",
@@ -13534,7 +14008,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.5,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   },
   {
     "asin": "B0GWFKHV43",
@@ -13570,6 +14045,7 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.864,
-    "operationalEpc": 0.05
+    "operationalEpc": 0.01,
+    "operationalEpcReason": "standard remaining-product slot"
   }
 ]
