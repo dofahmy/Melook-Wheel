@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import html
 import json
+import ipaddress
 import os
 import re
 import threading
@@ -33,6 +34,56 @@ APP_ICON_512_PATH = os.path.join(os.path.dirname(__file__), "app-icon-512.png")
 
 def _json_bytes(data):
     return json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
+
+
+def _lookup_ip_locations(ip_addresses: list[str]):
+    """Resolve public IPs away from the admin request, then cache the result."""
+    for ip_address in ip_addresses:
+        try:
+            response = requests.get(
+                f"https://ipwho.is/{ip_address}",
+                params={"fields": "success,message,country,region,city,connection"},
+                timeout=6,
+            )
+            data = response.json() if response.ok else {}
+            if response.ok and data.get("success") is not False:
+                connection = data.get("connection") or {}
+                database.save_ip_geolocation(
+                    ip_address,
+                    city=data.get("city") or "",
+                    region=data.get("region") or "",
+                    country=data.get("country") or "",
+                    isp=connection.get("isp") or connection.get("org") or "",
+                    status="ready",
+                )
+            else:
+                database.save_ip_geolocation(ip_address, status="failed")
+        except Exception:
+            database.save_ip_geolocation(ip_address, status="failed")
+
+
+def _schedule_ip_locations(rows: list[dict]):
+    pending = []
+    for row in rows:
+        raw_ip = str(row.get("last_ip") or "").strip()
+        if not raw_ip or len(pending) >= 20:
+            continue
+        try:
+            parsed_ip = ipaddress.ip_address(raw_ip)
+            if not parsed_ip.is_global:
+                continue
+        except ValueError:
+            continue
+        if database.claim_ip_geolocation(raw_ip):
+            row["ip_geo_status"] = "pending"
+            pending.append(raw_ip)
+    if pending:
+        threading.Thread(
+            target=_lookup_ip_locations,
+            args=(pending,),
+            name="ip-geolocation-cache",
+            daemon=True,
+        ).start()
 
 
 def _validate_init_data(init_data: str):
@@ -897,6 +948,7 @@ class Handler(BaseHTTPRequestHandler):
                 date_from=date_from, date_to=date_to,
                 sort_key=sort_key, sort_dir=sort_dir,
             )]
+            _schedule_ip_locations(rows)
             total = database.count_customer_reports(period, search, date_from, date_to)
             self._send_json(200, {"ok": True, "data": {
                 "rows": rows, "total": total, "limit": limit, "offset": offset,

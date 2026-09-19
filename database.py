@@ -227,6 +227,16 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
     details_json TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ip_geolocation_cache (
+    ip_address TEXT PRIMARY KEY,
+    city TEXT,
+    region TEXT,
+    country TEXT,
+    isp TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    updated_at TEXT NOT NULL
+);
 """
 
 _MIGRATIONS = [
@@ -408,6 +418,8 @@ def init_db():
             ON customer_campaign_recipients(campaign_id, status);
         CREATE INDEX IF NOT EXISTS idx_audit_created
             ON admin_audit_log(created_at);
+        CREATE INDEX IF NOT EXISTS idx_ip_geolocation_status
+            ON ip_geolocation_cache(status, updated_at);
         """)
         conn.execute("PRAGMA optimize")
 
@@ -417,6 +429,62 @@ def init_db():
 
 
 # ---------- المستخدمين ----------
+
+def claim_ip_geolocation(ip_address: str) -> bool:
+    """Reserve an uncached/stale IP for one background lookup."""
+    ip_address = str(ip_address or "").strip()[:64]
+    if not ip_address:
+        return False
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT status, updated_at FROM ip_geolocation_cache WHERE ip_address=?",
+            (ip_address,),
+        ).fetchone()
+        if row:
+            updated = str(row["updated_at"] or "")
+            retry_before = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+            abandoned_before = (datetime.utcnow() - timedelta(minutes=10)).isoformat()
+            can_retry = row["status"] == "failed" and updated < retry_before
+            abandoned = row["status"] == "pending" and updated < abandoned_before
+            if not (can_retry or abandoned):
+                return False
+            conn.execute(
+                "UPDATE ip_geolocation_cache SET status='pending', updated_at=? WHERE ip_address=?",
+                (now, ip_address),
+            )
+            return True
+        conn.execute(
+            "INSERT INTO ip_geolocation_cache(ip_address,status,updated_at) VALUES (?,'pending',?)",
+            (ip_address, now),
+        )
+        return True
+
+
+def save_ip_geolocation(ip_address: str, city: str = "", region: str = "",
+                        country: str = "", isp: str = "", status: str = "ready"):
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO ip_geolocation_cache
+               (ip_address,city,region,country,isp,status,updated_at)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(ip_address) DO UPDATE SET
+                 city=excluded.city, region=excluded.region, country=excluded.country,
+                 isp=excluded.isp, status=excluded.status, updated_at=excluded.updated_at""",
+            (str(ip_address or "").strip()[:64], str(city or "")[:120],
+             str(region or "")[:120], str(country or "")[:120], str(isp or "")[:200],
+             "ready" if status == "ready" else "failed", now),
+        )
+
+
+def get_ip_geolocation_status(ip_address: str) -> str:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT status FROM ip_geolocation_cache WHERE ip_address=?",
+            (str(ip_address or "").strip()[:64],),
+        ).fetchone()
+        return str(row["status"] or "") if row else ""
 
 def upsert_user(user_id: int, username: str | None, first_name: str | None = None):
     with get_conn() as conn:
@@ -2207,6 +2275,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
         "platform": "CASE WHEN wa.id IS NOT NULL AND wa.telegram_user_id IS NOT NULL THEN 2 WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END",
         "phone": "COALESCE(wa.phone_e164,'')",
         "ip": "COALESCE(wa.last_ip,u.last_ip,'')",
+        "city": "COALESCE(geo.city,'')",
         "source": "COALESCE(wa.source_last,wa.source_first,'')",
         "telegram": "CASE WHEN wa.telegram_user_id IS NOT NULL THEN 1 ELSE 0 END",
         "online": "CASE WHEN u.last_activity_at IS NOT NULL AND datetime(u.last_activity_at) >= datetime('now','-5 minutes') THEN 1 ELSE 0 END",
@@ -2225,6 +2294,8 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
         return conn.execute(f"""
             SELECT u.user_id, u.username, u.is_active, u.gift_balance, u.last_activity_at, u.joined_at,
                    wa.id AS web_account_id, wa.phone_e164, wa.source_first, wa.source_last, wa.telegram_user_id, COALESCE(wa.last_ip, u.last_ip) AS last_ip,
+                   geo.city AS ip_city, geo.region AS ip_region, geo.country AS ip_country,
+                   geo.isp AS ip_isp, geo.status AS ip_geo_status,
                    COALESCE(wa.is_suspended,0) AS is_suspended, wa.suspended_at, wa.suspended_reason,
                    CASE WHEN wa.id IS NOT NULL THEN 1 ELSE 0 END AS has_web_account,
                    COALESCE(q.products_shown,0) AS products_shown,
@@ -2237,6 +2308,7 @@ def list_customer_reports(period: str = "all", search: str = "", limit: int = 20
                    COALESCE(r.redemption_count,0) AS redemption_count
             FROM users u
             LEFT JOIN web_accounts wa ON wa.user_id=u.user_id
+            LEFT JOIN ip_geolocation_cache geo ON geo.ip_address=COALESCE(wa.last_ip,u.last_ip)
             LEFT JOIN (
                 SELECT user_id,
                        SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS products_shown,
