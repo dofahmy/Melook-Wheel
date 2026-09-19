@@ -8,6 +8,7 @@
 - admins: قائمة الأدمنز
 """
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -1710,7 +1711,8 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
         )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
-               golden_round_earnings, golden_target, first_round_bonus_used FROM users WHERE user_id = ?""",
+               golden_round_earnings, golden_target, first_round_bonus_used,
+               current_round_kind FROM users WHERE user_id = ?""",
             (user_id,),
         ).fetchone()
 
@@ -1727,13 +1729,38 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
             )
             progress = conn.execute(
                 """SELECT golden_answered_count, golden_opened_count,
-                   golden_round_earnings, golden_target, first_round_bonus_used
+                   golden_round_earnings, golden_target, first_round_bonus_used,
+                   current_round_kind
                    FROM users WHERE user_id = ?""",
                 (user_id,),
             ).fetchone()
-
-        # No minimum customer reward is enforced for normal rounds.
-        # The earned amount stays exactly as calculated from EPC and Railway reward-rate variables.
+        elif (
+            int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
+            and str(progress["current_round_kind"] or "normal") == "normal"
+        ):
+            # Keep ordinary rounds worthwhile for the customer even with the
+            # conservative 0.05/0.10 operational EPC policy.  The floor is
+            # applied once, only when the round is complete; wrong answers
+            # still contribute zero and only create same-pool replacements.
+            try:
+                min_normal_reward = max(
+                    0.0,
+                    float(os.getenv("EGYPT_MIN_NORMAL_ROUND_REWARD", "0.10") or "0.10"),
+                )
+            except (TypeError, ValueError):
+                min_normal_reward = 0.10
+            if float(progress["golden_round_earnings"] or 0) < min_normal_reward:
+                conn.execute(
+                    "UPDATE users SET golden_round_earnings = ? WHERE user_id = ?",
+                    (round(min_normal_reward, 6), user_id),
+                )
+                progress = conn.execute(
+                    """SELECT golden_answered_count, golden_opened_count,
+                       golden_round_earnings, golden_target, first_round_bonus_used,
+                       current_round_kind
+                       FROM users WHERE user_id = ?""",
+                    (user_id,),
+                ).fetchone()
 
         return {
             "correct": bool(is_correct),
