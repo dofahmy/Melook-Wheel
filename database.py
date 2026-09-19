@@ -340,29 +340,27 @@ def init_db():
         conn.execute(
             "INSERT OR IGNORE INTO notify_state (id, last_notified_deal_id) VALUES (1, 0)"
         )
-        row = conn.execute("SELECT COUNT(*) AS c FROM lucky_wheel_pool").fetchone()
-        if row["c"] == 0:
+        pool_rows = conn.execute(
+            "SELECT prize_index, prize, total FROM lucky_wheel_pool ORDER BY prize_index"
+        ).fetchall()
+        expected_pool = [
+            (idx, float(prize), int(LUCKY_WHEEL_POOL_SIZE * weight / 100))
+            for idx, (prize, weight) in enumerate(zip(LUCKY_WHEEL_PRIZES, LUCKY_WHEEL_WEIGHTS))
+        ]
+        current_pool = [
+            (int(r["prize_index"]), float(r["prize"]), int(r["total"]))
+            for r in pool_rows
+        ]
+        if current_pool != expected_pool:
+            # Rebuild only when the configured prize distribution changes.
+            conn.execute("DELETE FROM lucky_wheel_pool")
             for idx, (prize, weight) in enumerate(zip(LUCKY_WHEEL_PRIZES, LUCKY_WHEEL_WEIGHTS)):
                 count = int(LUCKY_WHEEL_POOL_SIZE * weight / 100)
                 conn.execute(
-                    """INSERT OR IGNORE INTO lucky_wheel_pool (prize_index, prize, remaining, total)
+                    """INSERT INTO lucky_wheel_pool (prize_index, prize, remaining, total)
                        VALUES (?, ?, ?, ?)""",
                     (idx, prize, count, count),
                 )
-        else:
-            # لو حجم المخزون المتفق عليه اتغيّر (زي 5000 -> 10000)، رجّعي
-            # المخزون كله للحجم الجديد من الأول (بداية دورة جديدة تمامًا)
-            existing_total = conn.execute(
-                "SELECT SUM(total) AS s FROM lucky_wheel_pool"
-            ).fetchone()["s"] or 0
-            if existing_total != LUCKY_WHEEL_POOL_SIZE:
-                for idx, (prize, weight) in enumerate(zip(LUCKY_WHEEL_PRIZES, LUCKY_WHEEL_WEIGHTS)):
-                    count = int(LUCKY_WHEEL_POOL_SIZE * weight / 100)
-                    conn.execute(
-                        """UPDATE lucky_wheel_pool SET prize = ?, remaining = ?, total = ?
-                           WHERE prize_index = ?""",
-                        (prize, count, count, idx),
-                    )
         row = conn.execute("SELECT COUNT(*) AS c FROM tags").fetchone()
         if row["c"] == 0:
             now = datetime.utcnow().isoformat()
@@ -1312,97 +1310,99 @@ MAX_CACHED_GOLDEN_DEALS = 50
 GOLDEN_TARGET_COUNT = config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
 
 # ---------- عجلة الحظ (Lucky Wheel) - اختيار الجايزة من الـ backend ----------
-# القيم والاحتمالات دي متفق عليها معاك: EV = 1.28 جنيه لكل لفة (RTP = 32%
-# من قيمة 4 جنيه لكل لفة = 5 أسئلة × 0.80 جنيه للسؤال)
-LUCKY_WHEEL_PRIZES = [0.50, 1, 2, 3, 5, 10]
-LUCKY_WHEEL_WEIGHTS = [46, 27, 16, 7, 3, 1]
-LUCKY_WHEEL_POOL_SIZE = 10000  # إجمالي المحاولات لكل دورة مخزون قبل ما يترجع من الأول
+# 20% of a 0.43 EGP operational round = exactly 0.086 EGP on average.
+# The 100-spin inventory makes that average deterministic, not merely likely.
+LUCKY_WHEEL_PRIZES = [0.04, 0.06, 0.08, 0.12, 0.20, 0.40]
+LUCKY_WHEEL_WEIGHTS = [30, 20, 25, 15, 8, 2]
+LUCKY_WHEEL_POOL_SIZE = 100
 
 
 def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, float, int]:
     """
-    بتختار جايزة عشوائية آمنة (Server-side) من "مخزون" محدود (5000 محاولة
-    موزّعة حسب النسب المتفق عليها). كل جايزة بتتاخد بتقل من مخزونها، فكل
-    ما حد ياخدها يقل احتمال حد تاني ياخدها لحد ما المخزون كله يخلص
-    ويترجع من الأول تلقائي. بتسجّل اللفة كـ"معلّقة" لحد ما العميل يأكّدها.
+    تختار جائزة Server-side من مخزون 100 جولة موزع بالنسب المتفق عليها.
+    أول جولة تظل 2 جنيه، والجولة التحفيزية تضرب الجائزة المسحوبة في المضاعف.
+    كل جائزة تقل من المخزون حتى ينتهي ثم يبدأ مخزون جديد تلقائيًا.
     بترجع (spin_id, prize, prize_index).
     """
-    if prize is not None:
-        prize = round(max(float(prize), 0), 6)
-        with get_conn() as conn:
-            existing = conn.execute(
-                """SELECT * FROM lucky_spins WHERE user_id = ? AND status = 'pending'
-                   ORDER BY id DESC LIMIT 1""",
-                (user_id,),
-            ).fetchone()
-            if existing:
-                return existing["id"], existing["prize"], existing["prize_index"]
-            cur = conn.execute(
-                """INSERT INTO lucky_spins
-                   (user_id, prize, prize_index, status, created_at)
-                   VALUES (?, ?, 0, 'pending', ?)""",
-                (user_id, prize, datetime.utcnow().isoformat()),
-            )
-            u = conn.execute("SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?", (user_id,)).fetchone()
-            kind = str(u["current_round_kind"] or "normal") if u else "normal"
-            if kind == "bonus":
-                import random
-                lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
-                hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
-                conn.execute("UPDATE users SET bonus_rounds_used=bonus_rounds_used+1, normal_rounds_since_bonus=0, bonus_next_after=? WHERE user_id=?", (random.randint(lo, hi), user_id))
-            elif kind == "normal":
-                conn.execute("UPDATE users SET normal_rounds_since_bonus=normal_rounds_since_bonus+1 WHERE user_id=?", (user_id,))
-            conn.execute(
-                """UPDATE users SET golden_opened_count = 0,
-                   golden_answered_count = 0, golden_round_earnings = 0,
-                   golden_target = ?, current_round_kind=NULL WHERE user_id = ?""",
-                (GOLDEN_TARGET_COUNT, user_id),
-            )
-            return cur.lastrowid, prize, 0
-
-    # المسار القديم محفوظ للتوافق فقط.
     import secrets
     with get_conn() as conn:
-        pool = conn.execute(
-            "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
-        ).fetchall()
-        total_remaining = sum(p["remaining"] for p in pool)
+        existing = conn.execute(
+            """SELECT * FROM lucky_spins WHERE user_id = ? AND status = 'pending'
+               ORDER BY id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        if existing:
+            return existing["id"], existing["prize"], existing["prize_index"]
 
-        if total_remaining <= 0:
-            # المخزون خلص خالص - نرجّعه للأول تلقائي
-            for p in pool:
-                conn.execute(
-                    "UPDATE lucky_wheel_pool SET remaining = total WHERE prize_index = ?",
-                    (p["prize_index"],),
-                )
+        u = conn.execute(
+            "SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        kind = str(u["current_round_kind"] or "normal") if u else "normal"
+
+        # The one-time welcome round remains exactly 2 EGP and does not consume
+        # the normal 100-spin inventory.
+        if kind == "welcome":
+            selected_prize = round(max(float(prize if prize is not None else 2.0), 0), 6)
+            prize_index = 0
+        else:
             pool = conn.execute(
                 "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
             ).fetchall()
-            total_remaining = sum(p["remaining"] for p in pool)
+            total_remaining = sum(int(p["remaining"] or 0) for p in pool)
 
-        r = secrets.randbelow(total_remaining)
-        cumulative = 0
-        chosen = pool[-1]
-        for p in pool:
-            cumulative += p["remaining"]
-            if r < cumulative:
-                chosen = p
-                break
+            if total_remaining <= 0:
+                conn.execute("UPDATE lucky_wheel_pool SET remaining = total")
+                pool = conn.execute(
+                    "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
+                ).fetchall()
+                total_remaining = sum(int(p["remaining"] or 0) for p in pool)
 
-        conn.execute(
-            "UPDATE lucky_wheel_pool SET remaining = remaining - 1 WHERE prize_index = ?",
-            (chosen["prize_index"],),
-        )
-        prize = chosen["prize"]
-        prize_index = chosen["prize_index"]
+            draw = secrets.randbelow(total_remaining)
+            cumulative = 0
+            chosen = pool[-1]
+            for pool_item in pool:
+                cumulative += int(pool_item["remaining"] or 0)
+                if draw < cumulative:
+                    chosen = pool_item
+                    break
+
+            conn.execute(
+                "UPDATE lucky_wheel_pool SET remaining = remaining - 1 WHERE prize_index = ?",
+                (chosen["prize_index"],),
+            )
+            base_prize = float(chosen["prize"] or 0)
+            selected_prize = round(
+                base_prize * (float(_setting_value(conn, "bonus_multiplier", "2.0")) if kind == "bonus" else 1.0),
+                6,
+            )
+            prize_index = int(chosen["prize_index"])
 
         cur = conn.execute(
             "INSERT INTO lucky_spins (user_id, prize, prize_index, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-            (user_id, prize, prize_index, datetime.utcnow().isoformat()),
+            (user_id, selected_prize, prize_index, datetime.utcnow().isoformat()),
         )
-        spin_id = cur.lastrowid
-    return spin_id, prize, prize_index
 
+        if kind == "bonus":
+            import random
+            lo = max(1, int(_setting_value(conn, "bonus_min_normal_rounds", "3")))
+            hi = max(lo, int(_setting_value(conn, "bonus_max_normal_rounds", "5")))
+            conn.execute(
+                "UPDATE users SET bonus_rounds_used=bonus_rounds_used+1, normal_rounds_since_bonus=0, bonus_next_after=? WHERE user_id=?",
+                (random.randint(lo, hi), user_id),
+            )
+        elif kind == "normal":
+            conn.execute(
+                "UPDATE users SET normal_rounds_since_bonus=normal_rounds_since_bonus+1 WHERE user_id=?",
+                (user_id,),
+            )
+        conn.execute(
+            """UPDATE users SET golden_opened_count = 0,
+               golden_answered_count = 0, golden_round_earnings = 0,
+               golden_target = ?, current_round_kind=NULL WHERE user_id = ?""",
+            (GOLDEN_TARGET_COUNT, user_id),
+        )
+        return cur.lastrowid, selected_prize, prize_index
 
 def get_lucky_wheel_pool_status():
     """بترجع حالة المخزون الحالية (كام فاضل من كل جايزة)."""
