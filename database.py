@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS users (
     normal_rounds_since_bonus INTEGER DEFAULT 0,
     bonus_next_after INTEGER DEFAULT 0,
     current_round_kind TEXT,
+    anchor_round_used INTEGER DEFAULT 0,
+    anchor_round_active INTEGER DEFAULT 0,
     pending_offer_to_id INTEGER,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
@@ -290,6 +292,8 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN normal_rounds_since_bonus INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN bonus_next_after INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN current_round_kind TEXT",
+    "ALTER TABLE users ADD COLUMN anchor_round_used INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN anchor_round_active INTEGER DEFAULT 0",
 ]
 @contextmanager
 def get_conn():
@@ -1366,6 +1370,26 @@ def ensure_current_round_kind(user_id: int) -> str:
         conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
         return kind
 
+def ensure_anchor_round(user_id: int) -> bool:
+    """Activates the one-time rollout round only at a clean round boundary."""
+    with get_conn() as conn:
+        u = conn.execute(
+            """SELECT golden_answered_count, anchor_round_used, anchor_round_active
+               FROM users WHERE user_id=?""",
+            (int(user_id),),
+        ).fetchone()
+        if not u or int(u["anchor_round_used"] or 0) == 1:
+            return False
+        if int(u["anchor_round_active"] or 0) == 1:
+            return True
+        if int(u["golden_answered_count"] or 0) != 0:
+            return False
+        conn.execute(
+            "UPDATE users SET anchor_round_active=1 WHERE user_id=?",
+            (int(user_id),),
+        )
+        return True
+
 def get_bonus_multiplier() -> float:
     return float(get_bonus_settings()["multiplier"])
 
@@ -1467,7 +1491,9 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
         conn.execute(
             """UPDATE users SET golden_opened_count = 0,
                golden_answered_count = 0, golden_round_earnings = 0,
-               golden_target = ?, current_round_kind=NULL WHERE user_id = ?""",
+               golden_target = ?, current_round_kind=NULL,
+               anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
+               anchor_round_active = 0 WHERE user_id = ?""",
             (GOLDEN_TARGET_COUNT, user_id),
         )
         return cur.lastrowid, selected_prize, prize_index
@@ -1643,7 +1669,9 @@ def reset_golden_progress(user_id: int):
     with get_conn() as conn:
         conn.execute(
             """UPDATE users SET golden_opened_count = 0, golden_answered_count = 0,
-               golden_round_earnings = 0, golden_target = ? WHERE user_id = ?""",
+               golden_round_earnings = 0, golden_target = ?,
+               anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
+               anchor_round_active = 0 WHERE user_id = ?""",
             (GOLDEN_TARGET_COUNT, user_id),
         )
 

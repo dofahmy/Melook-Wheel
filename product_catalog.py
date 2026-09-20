@@ -41,6 +41,7 @@ MIN_MAIN_EPC = 1.0
 DEFAULT_OPERATIONAL_EPC = 0.01
 PREFERRED_OPERATIONAL_EPC = 0.20
 GILLETTE_OPERATIONAL_EPC = 0.05
+WELCOME_ANCHOR_ASIN = "B0017IMON0"
 # These products were admitted from the weekly Amazon report even though the
 # source catalog's advertised EPC was missing/below the original 1.00 filter.
 REPORT_VALIDATED_ASINS = {"B08WJJKHTZ", "B09J57WPHT"}
@@ -242,6 +243,7 @@ def choose_product(
     current_round_epc: float = 0.0,
     all_seen_asins: set[str] | None = None,
     first_round_bonus: bool = False,
+    anchor_round: bool = False,
     bonus_round: bool = False,
     bonus_target_epc: float | None = None,
     used_question_types: dict[str, set[str]] | None = None,
@@ -249,9 +251,11 @@ def choose_product(
 ) -> CatalogProduct:
     """Choose two preferred-brand questions then three questions from the rest.
 
-    Slots 1-2 use Nivea/Pampers/Tide/Nescafe/Lipton/L'Oreal Professionnel at operational EPC
-    0.20. Slots 3-5 use all other products at operational EPC 0.01. A wrong
-    answer replacement always stays in its original pool.
+    For the one-time rollout round, slots 1-2 are two different question types
+    from B0017IMON0. Afterwards that ASIN returns to the normal preferred-brand
+    pool. Slots 1-2 otherwise use the preferred brands at operational EPC 0.20.
+    Slots 3-5 use the remaining products. A wrong-answer replacement always
+    stays in its original pool.
     """
     catalog = load_products()
     pools = {
@@ -265,6 +269,11 @@ def choose_product(
 
     used = used_question_types or {}
     slot = int(question_index) % 5
+    if anchor_round and int(question_index) in (0, 1):
+        anchor = _by_asin.get(WELCOME_ANCHOR_ASIN)
+        if anchor is None:
+            raise ValueError(f"منتج أول دورة {WELCOME_ANCHOR_ASIN} غير موجود في الملف")
+        return anchor
     desired = forced_pool_type or ("preferred_brand" if slot in (0, 1) else "other")
     if desired not in pools:
         desired = "other"

@@ -1279,6 +1279,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         replacement_pool = database.get_pending_replacement_pool(user_id)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
+        anchor_round = database.ensure_anchor_round(user_id)
         product = product_catalog.choose_product(
             asked_asins,
             question_index=answered_count,
@@ -1286,6 +1287,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
             first_round_bonus=(round_kind == "welcome"),
+            anchor_round=anchor_round,
             bonus_round=(round_kind == "bonus"),
             bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
             used_question_types=used_question_types,
