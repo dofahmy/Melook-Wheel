@@ -72,10 +72,10 @@ def _is_pampers_or_tide(brand: str | None, title: str | None = None) -> bool:
 
 
 def _is_preferred_brand(brand: str | None, title: str | None = None) -> bool:
-    """Nivea, Pampers, Tide, or L'Oreal Professionnel only."""
+    """Nivea, Pampers, Tide, Nescafe, Lipton, or L'Oreal Professionnel only."""
     brand_text = str(brand or "").casefold()
     compact = _brand_key(brand)
-    if compact.startswith("nivea") or _is_pampers_or_tide(brand, title):
+    if compact.startswith(("nivea", "nescafe", "lipton")) or _is_pampers_or_tide(brand, title):
         return True
     if "professionnel" in brand_text and any(
         name in brand_text for name in ("l'oréal", "l’oréal", "loreal", "لوريال")
@@ -84,7 +84,10 @@ def _is_preferred_brand(brand: str | None, title: str | None = None) -> bool:
     if brand_text.strip():
         return False
     title_text = str(title or "").casefold()
-    return any(name in title_text for name in ("nivea", "نيفيا", "pampers", "بامبرز", "tide", "تايد")) or (
+    return any(name in title_text for name in (
+        "nivea", "نيفيا", "pampers", "بامبرز", "tide", "تايد",
+        "nescafe", "نسكافيه", "lipton", "ليبتون"
+    )) or (
         "professionnel" in title_text
         and any(name in title_text for name in ("l'oréal", "l’oréal", "loreal", "لوريال"))
     )
@@ -233,7 +236,7 @@ def choose_product(
 ) -> CatalogProduct:
     """Choose two preferred-brand questions then three questions from the rest.
 
-    Slots 1-2 use Nivea/Pampers/Tide/L'Oreal Professionnel at operational EPC
+    Slots 1-2 use Nivea/Pampers/Tide/Nescafe/Lipton/L'Oreal Professionnel at operational EPC
     0.20. Slots 3-5 use all other products at operational EPC 0.01. A wrong
     answer replacement always stays in its original pool.
     """
