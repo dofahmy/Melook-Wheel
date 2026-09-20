@@ -2265,20 +2265,24 @@ def normalize_golden_question_epc(priority_asins, customer_reward_rate: float):
 
 def get_admin_product_report(period: str = "all", date_from: str | None = None,
                              date_to: str | None = None) -> list[dict]:
-    """Correct-answer clicks grouped by ASIN; wrong answers never contribute."""
+    """All product appearances grouped by ASIN; revenue still uses correct answers only."""
     q_where, q_params = _period_where("created_at", period, date_from, date_to)
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT asin,
-                   COUNT(*) AS views,
+                   COUNT(*) AS appearances,
+                   SUM(CASE WHEN link_opened_at IS NOT NULL THEN 1 ELSE 0 END) AS link_opens,
+                   SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS views,
+                   SUM(CASE WHEN answered=1 AND COALESCE(was_correct,0)=0 THEN 1 ELSE 0 END) AS wrong_views,
+                   SUM(CASE WHEN answered=0 THEN 1 ELSE 0 END) AS unanswered_views,
                    COUNT(DISTINCT user_id) AS customers,
-                   COALESCE(AVG(raw_epc),0) AS advertised_epc,
-                   COALESCE(SUM(raw_epc),0) AS advertised_epc_total,
-                   COALESCE(AVG(epc),0) AS calculated_epc,
-                   COALESCE(SUM(epc),0) AS calculated_total,
+                   COALESCE(AVG(CASE WHEN answered=1 AND was_correct=1 THEN raw_epc END),0) AS advertised_epc,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN raw_epc ELSE 0 END),0) AS advertised_epc_total,
+                   COALESCE(AVG(CASE WHEN answered=1 AND was_correct=1 THEN epc END),0) AS calculated_epc,
+                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN epc ELSE 0 END),0) AS calculated_total,
                    MAX(created_at) AS last_seen_at
             FROM golden_questions
-            WHERE answered=1 AND was_correct=1 AND {q_where}
+            WHERE {q_where}
             GROUP BY asin
             ORDER BY calculated_total DESC, asin
         """, q_params).fetchall()
