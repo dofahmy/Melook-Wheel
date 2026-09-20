@@ -1401,9 +1401,10 @@ def get_bonus_target_epc() -> float:
 MAX_CACHED_GOLDEN_DEALS = 50
 GOLDEN_TARGET_COUNT = config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
 
-# ---------- عجلة الحظ (Lucky Wheel) - اختيار الجايزة من الـ backend ----------
-# 20% of a 0.43 EGP operational round = exactly 0.086 EGP on average.
-# The 100-spin inventory makes that average deterministic, not merely likely.
+# ---------- عجلة الحظ (Lucky Wheel) - تثبيت جائزة الجولة المحسوبة ----------
+# القيم القديمة أدناه متروكة للتوافق مع جدول المخزون القديم فقط. الجائزة الجديدة
+# تؤخذ مباشرة من golden_round_earnings، والتي تُحسب باستخدام
+# EGYPT_CUSTOMER_REWARD_RATE ومن الإجابات الصحيحة فقط.
 LUCKY_WHEEL_PRIZES = [0.04, 0.06, 0.08, 0.12, 0.20, 0.40]
 LUCKY_WHEEL_WEIGHTS = [30, 20, 25, 15, 8, 2]
 LUCKY_WHEEL_POOL_SIZE = 100
@@ -1411,12 +1412,12 @@ LUCKY_WHEEL_POOL_SIZE = 100
 
 def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, float, int]:
     """
-    تختار جائزة Server-side من مخزون 100 جولة موزع بالنسب المتفق عليها.
-    أول جولة تظل 2 جنيه، والجولة التحفيزية تضرب الجائزة المسحوبة في المضاعف.
-    كل جائزة تقل من المخزون حتى ينتهي ثم يبدأ مخزون جديد تلقائيًا.
+    تثبت جائزة العجلة على مكسب الجولة المحسوب فعليًا.
+    أول جولة تظل 2 جنيه لأن complete_golden_question يثبتها قبل إنشاء اللفة.
+    الجولة التحفيزية تصل هنا بعد تطبيق المضاعف على مكافآت أسئلتها، لذلك لا
+    نضربها مرة ثانية.
     بترجع (spin_id, prize, prize_index).
     """
-    import secrets
     with get_conn() as conn:
         existing = conn.execute(
             """SELECT * FROM lucky_spins WHERE user_id = ? AND status = 'pending'
@@ -1427,48 +1428,19 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
             return existing["id"], existing["prize"], existing["prize_index"]
 
         u = conn.execute(
-            "SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?",
+            """SELECT current_round_kind, normal_rounds_since_bonus,
+                      golden_round_earnings
+               FROM users WHERE user_id=?""",
             (user_id,),
         ).fetchone()
         kind = str(u["current_round_kind"] or "normal") if u else "normal"
-
-        # The one-time welcome round remains exactly 2 EGP and does not consume
-        # the normal 100-spin inventory.
-        if kind == "welcome":
-            selected_prize = round(max(float(prize if prize is not None else 2.0), 0), 6)
-            prize_index = 0
-        else:
-            pool = conn.execute(
-                "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
-            ).fetchall()
-            total_remaining = sum(int(p["remaining"] or 0) for p in pool)
-
-            if total_remaining <= 0:
-                conn.execute("UPDATE lucky_wheel_pool SET remaining = total")
-                pool = conn.execute(
-                    "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
-                ).fetchall()
-                total_remaining = sum(int(p["remaining"] or 0) for p in pool)
-
-            draw = secrets.randbelow(total_remaining)
-            cumulative = 0
-            chosen = pool[-1]
-            for pool_item in pool:
-                cumulative += int(pool_item["remaining"] or 0)
-                if draw < cumulative:
-                    chosen = pool_item
-                    break
-
-            conn.execute(
-                "UPDATE lucky_wheel_pool SET remaining = remaining - 1 WHERE prize_index = ?",
-                (chosen["prize_index"],),
-            )
-            base_prize = float(chosen["prize"] or 0)
-            selected_prize = round(
-                base_prize * (float(_setting_value(conn, "bonus_multiplier", "2.0")) if kind == "bonus" else 1.0),
-                6,
-            )
-            prize_index = int(chosen["prize_index"])
+        calculated_prize = (
+            prize
+            if prize is not None
+            else (u["golden_round_earnings"] if u else 0.0)
+        )
+        selected_prize = round(max(float(calculated_prize or 0), 0.0), 6)
+        prize_index = 0
 
         cur = conn.execute(
             "INSERT INTO lucky_spins (user_id, prize, prize_index, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
