@@ -40,11 +40,12 @@ _history_synced = False
 MIN_MAIN_EPC = 1.0
 DEFAULT_OPERATIONAL_EPC = 0.01
 PREFERRED_OPERATIONAL_EPC = 0.20
+GILLETTE_OPERATIONAL_EPC = 0.05
 # These products were admitted from the weekly Amazon report even though the
 # source catalog's advertised EPC was missing/below the original 1.00 filter.
 REPORT_VALIDATED_ASINS = {"B08WJJKHTZ", "B09J57WPHT"}
 BLOCKED_BRANDS = {
-    "toppik", "ogx", "butterfly", "gillette", "pentel", "uniball", "tornado",
+    "toppik", "ogx", "butterfly", "pentel", "uniball", "tornado",
 }
 
 # Exactly the seven customer-visible facts agreed for product questions.
@@ -69,6 +70,17 @@ def _is_pampers_or_tide(brand: str | None, title: str | None = None) -> bool:
         return False
     title_text = str(title or "").casefold()
     return any(name in title_text for name in ("pampers", "tide", "بامبرز", "تايد"))
+
+
+def _is_gillette(brand: str | None, title: str | None = None) -> bool:
+    """All Gillette lines, including Gillette Venus."""
+    brand_text = str(brand or "").casefold()
+    if "gillette" in brand_text or "جيليت" in brand_text or "جيلايت" in brand_text:
+        return True
+    if brand_text.strip():
+        return False
+    title_text = str(title or "").casefold()
+    return any(name in title_text for name in ("gillette", "جيليت", "جيلايت"))
 
 
 def _is_preferred_brand(brand: str | None, title: str | None = None) -> bool:
@@ -138,11 +150,12 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             discount = round((old_price - price) / old_price * 100, 2)
 
         brand = str(item.get("asinBrand") or "").strip()
-        operational_epc = (
-            PREFERRED_OPERATIONAL_EPC
-            if _is_preferred_brand(brand, title)
-            else DEFAULT_OPERATIONAL_EPC
-        )
+        if _is_gillette(brand, title):
+            operational_epc = GILLETTE_OPERATIONAL_EPC
+        elif _is_preferred_brand(brand, title):
+            operational_epc = PREFERRED_OPERATIONAL_EPC
+        else:
+            operational_epc = DEFAULT_OPERATIONAL_EPC
         loaded.append(CatalogProduct(
             asin=asin,
             title=title,

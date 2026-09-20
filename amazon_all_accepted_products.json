@@ -1196,6 +1196,40 @@
     "operationalEpcReason": "standard remaining-product slot"
   },
   {
+    "asin": "B00DRDZZT8",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 249
+    },
+    "category": "Shaving Agent",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 8,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "رغوة حلاقة عادية للرجال من جيليت، 200 مل",
+    "displayTitle": "رغوة حلاقة عادية للرجال من جيليت، 200 مل",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/31pLasFCXrL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.4,
+    "reviewCount": 649,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B00DS842HS",
     "asinBrand": "Viva Naturals",
     "availability": "IN_STOCK_SCARCE",
@@ -1904,6 +1938,40 @@
     "operationalEpcReason": "standard remaining-product slot"
   },
   {
+    "asin": "B013YBAA60",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 763
+    },
+    "category": "Razor Blade Cartridge",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "مجموعة شفرات حلاقة جيليت فيوجن باور",
+    "displayTitle": "مجموعة شفرات حلاقة جيليت فيوجن باور",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41BfGBv2ZQL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.6,
+    "reviewCount": 4922,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B0144M0QGW",
     "asinBrand": "Carefree",
     "availability": "IN_STOCK",
@@ -2162,6 +2230,43 @@
     "operationalEpcReason": "standard remaining-product slot"
   },
   {
+    "asin": "B01CT3FRXK",
+    "asinBrand": "Gillette Venus",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 694.94
+    },
+    "category": "Razor Blade Cartridge",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 6,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرات حلاقة فينوس اند اولاي للنساء من جيليت، 4 قطع",
+    "displayTitle": "شفرات حلاقة فينوس اند اولاي للنساء من جيليت، 4 قطع",
+    "expectedRevenuePerClick": 0.815,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41rRK-MVC-L._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": {
+      "currencyCode": "EGP",
+      "amount": 739
+    },
+    "ncaKey": null,
+    "numberOfReviewStars": 4.6,
+    "reviewCount": 533,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 0.815,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B01F6S0YL0",
     "asinBrand": "NIVEA",
     "availability": "OUT_OF_STOCK",
@@ -2263,8 +2368,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.176,
-    "operationalEpc": 0.01,
-    "operationalEpcReason": "standard remaining-product slot"
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B01KVAZPOO",
@@ -2578,8 +2683,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 2.35,
-    "operationalEpc": 0.01,
-    "operationalEpcReason": "standard remaining-product slot"
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B07122RFG8",
@@ -3340,6 +3445,40 @@
     "rawExpectedRevenuePerClick": 8.931,
     "operationalEpc": 0.2,
     "operationalEpcReason": "preferred brand slot"
+  },
+  {
+    "asin": "B07F3G5GVV",
+    "asinBrand": "Gillette",
+    "availability": "OUT_OF_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 206
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرات حلاقة فينوس بلو 2 بلس للاستعمال مرة واحدة من جيليت، 2 شفرة، 5 قطع",
+    "displayTitle": "شفرات حلاقة فينوس بلو 2 بلس للاستعمال مرة واحدة من جيليت، 2 شفرة، 5 قطع",
+    "expectedRevenuePerClick": 0.117,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/414IpodnALL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.4,
+    "reviewCount": 413,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 0.117,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B07F3M8CZ2",
@@ -4999,6 +5138,40 @@
     "operationalEpcReason": "preferred brand slot"
   },
   {
+    "asin": "B07PXPWG2D",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 282
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرات حلاقة جيليت بلو 3 للاستعمال مرة واحدة مع جل مريح للرجال - 8 قطع",
+    "displayTitle": "شفرات حلاقة جيليت بلو 3 للاستعمال مرة واحدة مع جل مريح للرجال - 8 قطع",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41eV82VgIVL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.4,
+    "reviewCount": 2225,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B07Q3WSVYV",
     "asinBrand": "Starbucks",
     "availability": "IN_STOCK",
@@ -5170,6 +5343,40 @@
     "rawExpectedRevenuePerClick": 1,
     "operationalEpc": 0.01,
     "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B07ZG7T3YY",
+    "asinBrand": "Gillette",
+    "availability": "OUT_OF_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 421
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "ماكينة حلاقة للاستخدام مرة واحدة للرجال بلو 3 كمفورت من جيليت، 12 قطعة",
+    "displayTitle": "ماكينة حلاقة للاستخدام مرة واحدة للرجال بلو 3 كمفورت من جيليت، 12 قطعة",
+    "expectedRevenuePerClick": 0.087,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41PXW+bF39L._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.2,
+    "reviewCount": 181,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 0.087,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B07ZJC99KF",
@@ -6336,6 +6543,43 @@
     "rawExpectedRevenuePerClick": 1.064,
     "operationalEpc": 0.01,
     "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B08L5ZDTGM",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 290
+    },
+    "category": "Razor Blade Cartridge",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 6,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرات إعادة تعبئة 3D لماكينة حلاقة ماك 3 تربو من جيليت، عبوة تحتوي على قطعتين",
+    "displayTitle": "شفرات إعادة تعبئة 3D لماكينة حلاقة ماك 3 تربو من جيليت، عبوة تحتوي على قطعتين",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41WAsSeMUjL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": {
+      "currencyCode": "EGP",
+      "amount": 307
+    },
+    "ncaKey": null,
+    "numberOfReviewStars": 4.2,
+    "reviewCount": 37,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B08L7HW3XZ",
@@ -7696,6 +7940,40 @@
     "rawExpectedRevenuePerClick": 2.754,
     "operationalEpc": 0.01,
     "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B08WJPP6WN",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 279
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرات حلاقة جيليت بلو 3 الحساسة للاستعمال مرة واحدة 3 شفرات 6+2 مجانا",
+    "displayTitle": "شفرات حلاقة جيليت بلو 3 الحساسة للاستعمال مرة واحدة 3 شفرات 6+2 مجانا",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41ZHVMkC50L._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.5,
+    "reviewCount": 1157,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B08WJPTY93",
@@ -9723,6 +10001,40 @@
     "operationalEpcReason": "standard remaining-product slot"
   },
   {
+    "asin": "B09BG56RDP",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 60.82
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "شفرة حلاقة يدوية من جيليت بتصميم قابل للتصرف مصنوعة من البلاستيك للرجال باللون الأزرق، عبوة من قطعتين",
+    "displayTitle": "شفرة حلاقة يدوية من جيليت بتصميم قابل للتصرف مصنوعة من البلاستيك للرجال باللون الأزرق، عبوة من قطعتين",
+    "expectedRevenuePerClick": 0.08,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41wKTx7iFBL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.5,
+    "reviewCount": 23,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 0.08,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B09BNH71P5",
     "asinBrand": "Lavazza",
     "availability": "PREORDER",
@@ -9830,8 +10142,8 @@
     "dealBadge": null,
     "optInSource": null,
     "rawExpectedRevenuePerClick": 4.211,
-    "operationalEpc": 0.01,
-    "operationalEpcReason": "standard remaining-product slot"
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B09FM1QCBB",
@@ -10668,6 +10980,74 @@
     "operationalEpcReason": "standard remaining-product slot"
   },
   {
+    "asin": "B09MLPPYV6",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 381
+    },
+    "category": "Razor Blade Cartridge",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": null,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "عبوات إعادة تعبئة شفرات لماكينة الحلاقة ماك 3 بلس من جيليت، 3 قطع",
+    "displayTitle": "عبوات إعادة تعبئة شفرات لماكينة الحلاقة ماك 3 بلس من جيليت، 3 قطع",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41M1r3w2P7L._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.4,
+    "reviewCount": 150,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
+    "asin": "B09MLPT8BD",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 655.22
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 5,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "مقبض ماكينة حلاقة ماش 3 مع 7 شفرات للرجال من جيليت - قابلة لإعادة التعبئة - عبوة العرض الخاص",
+    "displayTitle": "مقبض ماكينة حلاقة ماش 3 مع 7 شفرات للرجال من جيليت - قابلة لإعادة التعبئة - عبوة العرض الخاص",
+    "expectedRevenuePerClick": 22,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/41OLLtVoErL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": null,
+    "ncaKey": null,
+    "numberOfReviewStars": 4.5,
+    "reviewCount": 171,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 22,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
+  },
+  {
     "asin": "B09N9NFY24",
     "asinBrand": "Spaceshoop",
     "availability": "IN_STOCK",
@@ -10802,6 +11182,43 @@
     "rawExpectedRevenuePerClick": 1.355,
     "operationalEpc": 0.01,
     "operationalEpcReason": "standard remaining-product slot"
+  },
+  {
+    "asin": "B09NSWPGNP",
+    "asinBrand": "Gillette",
+    "availability": "IN_STOCK",
+    "budgetAvailabilityScore": "High",
+    "buyingPrice": {
+      "currencyCode": "EGP",
+      "amount": 266.48
+    },
+    "category": "Manual Shaving Razor",
+    "dealMetadata": {
+      "dealTags": null,
+      "discountPercentage": 3,
+      "startDate": null,
+      "endDate": null,
+      "promotionPrice": null
+    },
+    "dedupeString": "ماكينة حلاقة جيليت للبشرة الحساسة للاستعمال مرة واحدة من فينوس - 3 قطع",
+    "displayTitle": "ماكينة حلاقة جيليت للبشرة الحساسة للاستعمال مرة واحدة من فينوس - 3 قطع",
+    "expectedRevenuePerClick": 4.211,
+    "imageHeight": 500,
+    "imageUrl": "https://m.media-amazon.com/images/I/31PRgN6S7RL._SS500_.jpg",
+    "imageWidth": 500,
+    "listPrice": {
+      "currencyCode": "EGP",
+      "amount": 274
+    },
+    "ncaKey": null,
+    "numberOfReviewStars": 4.5,
+    "reviewCount": 343,
+    "optedIn": null,
+    "dealBadge": null,
+    "optInSource": null,
+    "rawExpectedRevenuePerClick": 4.211,
+    "operationalEpc": 0.05,
+    "operationalEpcReason": "gillette fixed operational EPC"
   },
   {
     "asin": "B09PYM9CQZ",
