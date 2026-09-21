@@ -1380,7 +1380,7 @@ def ensure_current_round_kind(user_id: int) -> str:
         conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
         return kind
 
-ANCHOR_CAMPAIGN_VERSION = 3
+ANCHOR_CAMPAIGN_VERSION = 4
 
 
 def ensure_anchor_round(user_id: int) -> bool:
