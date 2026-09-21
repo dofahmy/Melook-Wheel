@@ -348,6 +348,8 @@ def choose_product(
     bonus_target_epc: float | None = None,
     used_question_types: dict[str, set[str]] | None = None,
     forced_pool_type: str | None = None,
+    forced_operational_epc: float | None = None,
+    forced_asin: str | None = None,
 ) -> CatalogProduct:
     """Choose the one-time evidence-based rollout, then proven products.
 
@@ -378,6 +380,36 @@ def choose_product(
         if product is None:
             raise ValueError(f"منتج الجولة الافتتاحية {asin} غير موجود في الملف")
         return product
+
+    # During the fixed rollout, a wrong answer is retried with a different
+    # question about the very same ASIN. This guarantees that all five named
+    # products are opened and answered correctly, not merely any five products.
+    if forced_asin:
+        product = _by_asin.get(str(forced_asin).strip().upper())
+        if product is None:
+            raise ValueError(f"منتج السؤال البديل {forced_asin} غير موجود في الملف")
+        return product
+
+    # Fallback for non-rollout/legacy replacements: require exactly the same
+    # operational value; broad brand/pool labels are not precise enough.
+    if forced_operational_epc is not None:
+        wanted_epc = max(float(forced_operational_epc), 0.0)
+        same_value = [
+            p for p in catalog
+            if abs(reward_epc_for(p) - wanted_epc) < 1e-9
+        ]
+        candidates = [p for p in same_value if _remaining_type_count(p, used) > 0]
+        if not candidates:
+            candidates = same_value
+        if not candidates:
+            raise ValueError(f"لا توجد منتجات بديلة بقيمة EPC تشغيلية {wanted_epc:g}")
+        excluded = set(excluded_asins or set())
+        fresh = [p for p in candidates if p.asin not in excluded]
+        if fresh:
+            candidates = fresh
+        max_remaining = max(_remaining_type_count(p, used) for p in candidates)
+        best = [p for p in candidates if _remaining_type_count(p, used) == max_remaining]
+        return random.choice(best)
 
     # Permanent post-rollout policy: maximize expected total using only ASINs
     # with observed results. Exhaust distinct question types before recycling.
