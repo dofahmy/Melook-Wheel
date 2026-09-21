@@ -42,6 +42,75 @@ DEFAULT_OPERATIONAL_EPC = 0.01
 PREFERRED_OPERATIONAL_EPC = 0.20
 GILLETTE_OPERATIONAL_EPC = 0.05
 WELCOME_ANCHOR_ASIN = "B0017IMON0"
+NESCAFE_PRIORITY_ASINS = ("B08Z42WY7T", "B08WJPZJFH")
+NESCAFE_DENSE_ASINS = {
+    "B08Z42WY7T", "B0B5XHWN44", "B08WJPZJFH", "B0B5XGM32Z",
+    "B08WJJ61WM", "B08WJKZ8M3", "B07Q3WSVYV",
+}
+# One new rollout round for every account, old or new.  Keep the order because
+# it is based on observed Amazon EPC rather than the catalog's advertised EPC.
+FIRST_ROUND_ASINS = (
+    "B08Z42WY7T",  # Nescafe Mix 2-in-1: 1.55 actual EPC
+    "B08WJPZJFH",  # Nescafe Gold 3-in-1: 1.40 actual EPC
+    "B0017IMON0",  # Nivea 3-in-1 shower gel: 1.00 historical actual EPC
+    "B0B2DPPLMW",  # Tide automatic gel: 0.30 actual EPC
+    "B09VFKCY35",  # Fairy liquid: 0.15 actual EPC
+)
+
+# Product-level evidence only: no brand is promoted as a whole.  Base questions
+# after the rollout round are drawn from this pool in descending observed EPC.
+PROVEN_ACTUAL_EPC = {
+    "B08Z42WY7T": 1.55,
+    "B08WJPZJFH": 1.40,
+    "B0017IMON0": 1.00,
+    "B0B2DPPLMW": 0.30,
+    "B09VFKCY35": 0.15,
+    "B08WJMZM7W": 0.14,
+    "B0BVZYZYX5": 0.13,
+    "B0854HDBYB": 0.13,
+    "B085XMNWQ8": 0.10,
+    "B08R9ZB2LZ": 0.10,
+    "B0BF591PWJ": 0.07,
+    "B09RQX8SPN": 0.06,
+    "B08R9YL1M3": 0.06,
+    "B0BF5C2S2Y": 0.05,
+    "B09RG7YVFT": 0.05,
+    "B07FNY8RPR": 0.05,
+}
+
+# Conservative operational values used for customer rewards and admin reports.
+# They intentionally stay below volatile observed EPCs.
+PRODUCT_OPERATIONAL_EPC = {
+    "B08Z42WY7T": 0.20,
+    "B08WJPZJFH": 0.20,
+    "B0017IMON0": 0.20,
+    "B0B2DPPLMW": 0.20,
+    "B09VFKCY35": 0.10,
+    "B08WJMZM7W": 0.10,
+    "B0BVZYZYX5": 0.10,
+    "B0854HDBYB": 0.10,
+    "B085XMNWQ8": 0.10,
+    "B08R9ZB2LZ": 0.10,
+    "B0BF591PWJ": 0.05,
+    "B09RQX8SPN": 0.05,
+    "B08R9YL1M3": 0.05,
+    "B0BF5C2S2Y": 0.05,
+    "B09RG7YVFT": 0.05,
+    "B07FNY8RPR": 0.05,
+}
+
+# The latest daily catalog temporarily omitted this still-performing ASIN.
+# Keep only stable facts here (title/brand); volatile price/rating facts stay
+# disabled until Amazon includes it in the live catalog again.
+MANUAL_VALIDATED_PRODUCTS = {
+    "B0B2DPPLMW": {
+        "title": "مسحوق غسيل جل للغسالات الاوتوماتيك من تايد، رائحة اللافندر، 2.35 كجم",
+        "brand": "Tide",
+        "category": "Laundry Detergent",
+        "image_url": "https://m.media-amazon.com/images/I/41qR8zVwMeL._SS500_.jpg",
+        "actual_epc": 0.30,
+    },
+}
 # These products were admitted from the weekly Amazon report even though the
 # source catalog's advertised EPC was missing/below the original 1.00 filter.
 REPORT_VALIDATED_ASINS = {"B08WJJKHTZ", "B09J57WPHT"}
@@ -82,6 +151,18 @@ def _is_gillette(brand: str | None, title: str | None = None) -> bool:
         return False
     title_text = str(title or "").casefold()
     return any(name in title_text for name in ("gillette", "جيليت", "جيلايت"))
+
+
+def _is_nescafe(brand: str | None, title: str | None = None) -> bool:
+    """Nescafe products, including titles whose Amazon brand field is empty."""
+    brand_text = str(brand or "").casefold()
+    title_text = str(title or "").casefold()
+    return any(name in brand_text or name in title_text for name in ("nescafe", "نسكافيه"))
+
+
+def _is_starbucks_nescafe(product: CatalogProduct) -> bool:
+    text = f"{product.brand} {product.title}".casefold()
+    return "starbucks" in text or "ستاربكس" in text
 
 
 def _is_preferred_brand(brand: str | None, title: str | None = None) -> bool:
@@ -151,10 +232,10 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             discount = round((old_price - price) / old_price * 100, 2)
 
         brand = str(item.get("asinBrand") or "").strip()
-        if _is_gillette(brand, title):
+        if asin in PRODUCT_OPERATIONAL_EPC:
+            operational_epc = PRODUCT_OPERATIONAL_EPC[asin]
+        elif _is_gillette(brand, title):
             operational_epc = GILLETTE_OPERATIONAL_EPC
-        elif _is_preferred_brand(brand, title):
-            operational_epc = PREFERRED_OPERATIONAL_EPC
         else:
             operational_epc = DEFAULT_OPERATIONAL_EPC
         loaded.append(CatalogProduct(
@@ -170,6 +251,25 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             expected_revenue_per_click=epc,
             operational_epc=operational_epc,
             image_url=item.get("imageUrl"),
+        ))
+
+    loaded_asins = {product.asin for product in loaded}
+    for asin, item in MANUAL_VALIDATED_PRODUCTS.items():
+        if asin in loaded_asins:
+            continue
+        loaded.append(CatalogProduct(
+            asin=asin,
+            title=item["title"],
+            brand=item["brand"],
+            category=item["category"],
+            price=0.0,
+            old_price=None,
+            discount_percent=0.0,
+            rating=None,
+            review_count=None,
+            expected_revenue_per_click=float(item["actual_epc"]),
+            operational_epc=PRODUCT_OPERATIONAL_EPC[asin],
+            image_url=item["image_url"],
         ))
 
     if not loaded:
@@ -249,13 +349,12 @@ def choose_product(
     used_question_types: dict[str, set[str]] | None = None,
     forced_pool_type: str | None = None,
 ) -> CatalogProduct:
-    """Choose two preferred-brand questions then three questions from the rest.
+    """Choose the one-time evidence-based rollout, then proven products.
 
-    For the one-time rollout round, slots 1-2 are two different question types
-    from B0017IMON0. Afterwards that ASIN returns to the normal preferred-brand
-    pool. Slots 1-2 otherwise use the preferred brands at operational EPC 0.20.
-    Slots 3-5 use the remaining products. A wrong-answer replacement always
-    stays in its original pool.
+    The rollout round has five fixed, different ASINs ordered by observed EPC.
+    Every later base slot draws from the proven product-level pool, preferring
+    the highest observed EPC that still has an unused question type. A
+    wrong-answer replacement always stays in its original price pool.
     """
     catalog = load_products()
     pools = {
@@ -267,13 +366,33 @@ def choose_product(
     if not pools["other"]:
         raise ValueError("لا توجد منتجات في المجموعة العامة")
 
+    proven_products = [p for p in catalog if p.asin in PROVEN_ACTUAL_EPC]
+    if not proven_products:
+        raise ValueError("لا توجد منتجات مثبتة بالأداء الفعلي في ملف المنتجات")
+
     used = used_question_types or {}
     slot = int(question_index) % 5
-    if anchor_round and int(question_index) in (0, 1):
-        anchor = _by_asin.get(WELCOME_ANCHOR_ASIN)
-        if anchor is None:
-            raise ValueError(f"منتج أول دورة {WELCOME_ANCHOR_ASIN} غير موجود في الملف")
-        return anchor
+    if anchor_round and forced_pool_type is None and int(question_index) < len(FIRST_ROUND_ASINS):
+        asin = FIRST_ROUND_ASINS[int(question_index)]
+        product = _by_asin.get(asin)
+        if product is None:
+            raise ValueError(f"منتج الجولة الافتتاحية {asin} غير موجود في الملف")
+        return product
+
+    # Permanent post-rollout policy: maximize expected total using only ASINs
+    # with observed results. Exhaust distinct question types before recycling.
+    if forced_pool_type is None:
+        candidates = [p for p in proven_products if _remaining_type_count(p, used) > 0]
+        if not candidates:
+            candidates = list(proven_products)
+        excluded = set(excluded_asins or set())
+        fresh = [p for p in candidates if p.asin not in excluded]
+        if fresh:
+            candidates = fresh
+        best_epc = max(PROVEN_ACTUAL_EPC[p.asin] for p in candidates)
+        best = [p for p in candidates if PROVEN_ACTUAL_EPC[p.asin] == best_epc]
+        return random.choice(best)
+
     desired = forced_pool_type or ("preferred_brand" if slot in (0, 1) else "other")
     if desired not in pools:
         desired = "other"
