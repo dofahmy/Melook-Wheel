@@ -311,6 +311,47 @@ def _parse_first_number(text: str | None) -> float:
     return _number(match.group(0).replace(",", ".")) if match else 0.0
 
 
+UNAVAILABLE_MARKERS = tuple(normalize(value) for value in (
+    "غير متوفر حالياً",
+    "غير متوفر حاليا",
+    "غير متاح حالياً",
+    "غير متاح حاليا",
+    "نفد من المخزون",
+    "غير متاح من هؤلاء البائعين",
+    "Currently unavailable",
+    "Temporarily out of stock",
+    "Out of stock",
+    "Unavailable",
+))
+
+
+def _page_is_buyable(soup: BeautifulSoup) -> bool:
+    """Return True only when Amazon currently offers this exact ASIN for sale.
+
+    A historical catalog title or even a visible price is not sufficient: an
+    unavailable variation can retain both. Requiring a live purchase control
+    prevents stale size/colour variants from being sent to customers.
+    """
+    availability_node = (
+        soup.select_one("#availability")
+        or soup.select_one("#outOfStock")
+        or soup.select_one("#availability_feature_div")
+    )
+    availability_text = normalize(
+        availability_node.get_text(" ", strip=True) if availability_node else ""
+    )
+    if availability_text and any(marker in availability_text for marker in UNAVAILABLE_MARKERS):
+        return False
+
+    purchase_control = (
+        soup.select_one("#add-to-cart-button")
+        or soup.select_one("#buy-now-button")
+        or soup.select_one("#addToCart input[name='submit.add-to-cart']")
+        or soup.select_one("#newAccordionRow_1")
+    )
+    return purchase_control is not None
+
+
 def _amazon_search_page(query: str, page: int) -> list[Product]:
     headers = {
         "User-Agent": (
@@ -368,7 +409,7 @@ def _amazon_search_page(query: str, page: int) -> list[Product]:
 
 
 def _amazon_product_page(seed: Product) -> Product | None:
-    """Refresh volatile fields for one locally matched ASIN."""
+    """Verify availability and refresh volatile fields for one exact ASIN."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
@@ -383,6 +424,9 @@ def _amazon_product_page(seed: Product) -> Product | None:
     if "captcha" in response.text.lower() or "أدخل الأحرف" in response.text:
         raise RuntimeError("Amazon طلب تحققًا مؤقتًا")
     soup = BeautifulSoup(response.text, "html.parser")
+    if not _page_is_buyable(soup):
+        logger.info("Amazon reports ASIN %s unavailable or not buyable", seed.asin)
+        return None
     price_node = (
         soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen")
         or soup.select_one("#corePrice_feature_div .a-price .a-offscreen")
@@ -443,9 +487,18 @@ def search_products(query: str, budget: float | None) -> list[Product]:
             return within_budget[:RESULT_LIMIT]
         available.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
         return available[:RESULT_LIMIT]
+    # A search-result card is only a lead. Verify the exact product page before
+    # exposing it, because Amazon search can retain unavailable variations.
     found: dict[str, Product] = {}
     for page in range(1, 4):
-        for product in _amazon_search_page(query, page):
+        for seed in _amazon_search_page(query, page):
+            try:
+                product = _amazon_product_page(seed)
+            except (requests.RequestException, RuntimeError) as exc:
+                logger.info("Could not verify %s: %s", seed.asin, exc)
+                continue
+            if not product:
+                continue
             if budget and product.price > budget * (1 + BUDGET_TOLERANCE):
                 continue
             found.setdefault(product.asin, product)
@@ -645,7 +698,11 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CallbackQueryHandler(callbacks, pattern=r"^(open|save|cheap):"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
-    logger.info("Shopping pilot loaded %s allowed ASINs", len(ALLOWED_ASINS))
+    logger.info(
+        "Shopping pilot loaded %s allowed ASINs (%s searchable titles)",
+        len(ALLOWED_ASINS),
+        len(PRODUCTS),
+    )
     # Keep messages sent during a short deployment/restart instead of silently
     # deleting them when the bot comes back online.
     app.run_polling(drop_pending_updates=False)
