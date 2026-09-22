@@ -8,6 +8,8 @@ refreshes the current price from Amazon only after a local name match.
 Required environment variables:
     TELEGRAM_API_ID
     TELEGRAM_API_HASH
+    TELEGRAM_SOURCES       comma/space-separated channel usernames
+    TELEGRAM_SESSION_STRING (recommended on Railway)
 
 Outputs:
     amazon_egypt_product_catalog.json
@@ -29,12 +31,16 @@ from pathlib import Path
 
 import requests
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-API_ID = int(os.getenv("TELEGRAM_API_ID", "0") or 0)
-API_HASH = os.getenv("TELEGRAM_API_HASH", "").strip()
-SESSION = os.getenv("TELEGRAM_COLLECTOR_SESSION", "collect_products_session")
+API_ID = int(os.getenv("TELEGRAM_API_ID") or os.getenv("API_ID") or 0)
+API_HASH = (os.getenv("TELEGRAM_API_HASH") or os.getenv("API_HASH") or "").strip()
+# Reuse the old collector session name when a .session file is deployed.
+SESSION = os.getenv("TELEGRAM_COLLECTOR_SESSION", "collect_asins_session")
+SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "").strip()
+SOURCES_ENV = os.getenv("TELEGRAM_SOURCES", "").strip()
 
 CATALOG_FILE = Path(os.getenv("AMAZON_PRODUCT_CATALOG", "amazon_egypt_product_catalog.json"))
 ASIN_FILE = Path("collected_asins_eg.txt")
@@ -251,7 +257,13 @@ async def collect(client: TelegramClient, sources: list[str]) -> None:
 
 
 def ask_sources() -> list[str]:
-    raw = input("📡 القنوات (مفصولة بمسافة): ").strip().replace(",", " ")
+    if SOURCES_ENV:
+        raw = SOURCES_ENV.replace(",", " ")
+        print(f"📡 القنوات من TELEGRAM_SOURCES: {raw}")
+    elif sys.stdin.isatty():
+        raw = input("📡 القنوات (مفصولة بمسافة): ").strip().replace(",", " ")
+    else:
+        raise RuntimeError("ضعي أسماء القنوات في متغير Railway باسم TELEGRAM_SOURCES")
     sources = []
     for item in raw.split():
         name = item.split("t.me/")[-1].strip("/") if "t.me/" in item else item.lstrip("@")
@@ -266,8 +278,20 @@ async def main() -> None:
     sources = ask_sources()
     if not sources:
         return
-    client = TelegramClient(SESSION, API_ID, API_HASH)
-    await client.start()
+    session = StringSession(SESSION_STRING) if SESSION_STRING else SESSION
+    client = TelegramClient(session, API_ID, API_HASH)
+    if SESSION_STRING:
+        await client.start()
+    else:
+        # This works with an existing collect_asins_session.session file. A new
+        # Railway service cannot complete an interactive phone-code login.
+        await client.connect()
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            raise RuntimeError(
+                "جلسة Telegram غير موجودة. ارفعي collect_asins_session.session "
+                "أو ضعي TELEGRAM_SESSION_STRING في Railway"
+            )
     try:
         await collect(client, sources)
     finally:
