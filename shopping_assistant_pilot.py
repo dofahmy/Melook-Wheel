@@ -827,8 +827,17 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "استخدمي /saved لمشاهدة قائمتك. عند تحديث ملف المنتجات نقدر نكتشف انخفاض السعر."
         )
     elif action == "cheap":
+        # Keep the customer's original product intent. Searching again with
+        # the full returned title can drift to sibling grocery products that
+        # merely share brand, weight, or words such as "مصري" (for example,
+        # rice -> sugar -> flour). The original query keeps alternatives in
+        # the same requested product family.
+        original_text = str(context.user_data.get("last_query") or "").strip()
+        original_query, _ = parse_request(original_text)
+        if not original_query:
+            original_query = product.category or product.title
         alternatives = [
-            p for p in search_products(f"{product.title} {product.brand}", product.price - 0.01)
+            p for p in search_products(original_query, product.price - 0.01)
             if p.asin != asin and p.price < product.price
         ]
         if not alternatives:
