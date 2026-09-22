@@ -52,6 +52,7 @@ CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_egypt_asin_catal
 DB_PATH = Path(os.getenv("SHOPPING_PILOT_DB", "shopping_pilot.db"))
 RESULT_LIMIT = 3
 BUDGET_TOLERANCE = 0.05
+AMAZON_MAX_CANDIDATES = int(os.getenv("AMAZON_MAX_CANDIDATES", "50"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("shopping-pilot")
@@ -686,10 +687,18 @@ def search_products(query: str, budget: float | None) -> list[Product]:
     # source of current price and availability; Railway never scrapes pages.
     within_budget: list[Product] = []
     available: list[Product] = []
-    candidates = _search_local_products(query, None, limit=100)
+    candidates = _search_local_products(query, None, limit=AMAZON_MAX_CANDIDATES)
     logger.info("Catalog matched %s candidates for query %r", len(candidates), query)
     for start in range(0, len(candidates), 10):
         verified = _amazon_api_verify(candidates[start:start + 10])
+        # Catalog titles/aliases are discovery hints only. Some collected rows
+        # can point at an ASIN whose current Amazon title belongs to another
+        # product. Re-check relevance using the live API title before showing
+        # it (for example, never return a Casio watch for an Adidas search).
+        verified = [
+            product for product in verified
+            if _text_score(query, product)[1] >= 0.5
+        ]
         logger.info(
             "Amazon API verified %s available products in candidate batch %s",
             len(verified),
@@ -700,11 +709,16 @@ def search_products(query: str, budget: float | None) -> list[Product]:
             product for product in verified
             if not budget or product.price <= budget * (1 + BUDGET_TOLERANCE)
         )
-        if len(within_budget) >= RESULT_LIMIT:
-            break
 
     if within_budget:
-        within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
+        if budget:
+            # "في حدود 1800" means useful choices near 1800, not the three
+            # cheapest brand items such as shower gel or deodorant.
+            within_budget.sort(
+                key=lambda p: (abs(p.price - budget), -(p.rating or 0), -p.reviews)
+            )
+        else:
+            within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
         return within_budget[:RESULT_LIMIT]
 
     # If nothing fits the requested budget, show only the cheapest verified
