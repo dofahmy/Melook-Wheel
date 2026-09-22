@@ -82,6 +82,7 @@ class Product:
     reviews: int
     discount: float
     image_url: str | None
+    aliases: str = ""
 
 
 def _number(value, default=0.0) -> float:
@@ -130,6 +131,7 @@ def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
                         reviews=0,
                         discount=0.0,
                         image_url=row.get("imageUrl") or row.get("image_url"),
+                        aliases=aliases,
                     ))
         if not allowed:
             raise RuntimeError(f"No ASINs found in {CATALOG_PATH}")
@@ -164,6 +166,10 @@ def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
                 reviews=int(_number(row.get("reviewCount"))),
                 discount=discount,
                 image_url=row.get("imageUrl") or row.get("image_url"),
+                aliases=" ".join(
+                    value for value in (row.get("aliases") or [])
+                    if isinstance(value, str)
+                ),
             )
         )
     if not products:
@@ -223,6 +229,8 @@ QUERY_ALIASES = {
     "مكنسه روبوت": ("مكنسه كهربائيه روبوتيه", "روبوت تنظيف"),
     "وايرلس": ("لاسلكي",),
     "هيدفون": ("سماعه راس",),
+    "كوتشي": ("حذاء رياضي", "سنيكر"),
+    "جزمه": ("حذاء",),
 }
 
 
@@ -262,8 +270,13 @@ def _query_variants(query: str) -> list[set[str]]:
     normalized = normalize(query)
     variants = [{w for w in normalized.split() if w}]
     for phrase, aliases in QUERY_ALIASES.items():
-        if normalize(phrase) in normalized:
-            variants.extend({w for w in normalize(alias).split() if w} for alias in aliases)
+        normalized_phrase = normalize(phrase)
+        if normalized_phrase in normalized:
+            # Replace only the colloquial phrase and preserve the rest of the
+            # customer's constraints (brand, gender, size, etc.).
+            for alias in aliases:
+                expanded = normalized.replace(normalized_phrase, normalize(alias))
+                variants.append({w for w in expanded.split() if w})
     return [variant for variant in variants if variant]
 
 
@@ -288,12 +301,20 @@ def _variant_score(query_words: set[str], tokens: set[str]) -> tuple[float, floa
 
 
 def _text_score(query: str, product: Product) -> tuple[float, float]:
-    tokens = set(normalize(f"{product.title} {product.brand} {product.category}").split())
+    tokens = set(normalize(f"{product.title} {product.brand} {product.aliases}").split())
+    return max((_variant_score(words, tokens) for words in _query_variants(query)), default=(0.0, 0.0))
+
+
+def _title_score(query: str, product: Product) -> tuple[float, float]:
+    """Score only the canonical/live title and brand, excluding aliases."""
+    tokens = set(normalize(f"{product.title} {product.brand}").split())
     return max((_variant_score(words, tokens) for words in _query_variants(query)), default=(0.0, 0.0))
 
 
 def _search_local_products(query: str, budget: float | None, limit: int = RESULT_LIMIT) -> list[Product]:
-    ranked: list[tuple[float, Product]] = []
+    title_exact: list[tuple[float, Product]] = []
+    alias_exact: list[tuple[float, Product]] = []
+    partial: list[tuple[float, Product]] = []
     for p in PRODUCTS:
         relevance, coverage = _text_score(query, p)
         if relevance <= 0 or coverage < 0.5:
@@ -310,8 +331,22 @@ def _search_local_products(query: str, budget: float | None, limit: int = RESULT
                 budget_score = -2
         quality = min((p.rating or 0) / 5, 1) + min(p.reviews / 1000, 1)
         saving = min(p.discount / 20, 2)
-        ranked.append((relevance * 10 + budget_score + quality + saving, p))
-    ranked.sort(key=lambda item: (item[0], item[1].rating or 0, item[1].reviews), reverse=True)
+        ranked_item = (relevance * 10 + budget_score + quality + saving, p)
+        _, title_coverage = _title_score(query, p)
+        if title_coverage == 1.0:
+            title_exact.append(ranked_item)
+        elif coverage == 1.0:
+            alias_exact.append(ranked_item)
+        else:
+            partial.append(ranked_item)
+    sort_key = lambda item: (item[0], item[1].rating or 0, item[1].reviews)
+    title_exact.sort(key=sort_key, reverse=True)
+    alias_exact.sort(key=sort_key, reverse=True)
+    partial.sort(key=sort_key, reverse=True)
+    # AND search first: every requested word must occur in the canonical title
+    # or an alias. Canonical-title matches outrank alias-only matches. Partial
+    # matching is only a last fallback when exact candidates do not fill limit.
+    ranked = title_exact + alias_exact + partial
     return [p for _, p in ranked[:limit]]
 
 
@@ -697,7 +732,7 @@ def search_products(query: str, budget: float | None) -> list[Product]:
         # it (for example, never return a Casio watch for an Adidas search).
         verified = [
             product for product in verified
-            if _text_score(query, product)[1] >= 0.5
+            if _title_score(query, product)[1] == 1.0
         ]
         logger.info(
             "Amazon API verified %s available products in candidate batch %s",
@@ -719,12 +754,12 @@ def search_products(query: str, budget: float | None) -> list[Product]:
             )
         else:
             within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
-        return within_budget[:RESULT_LIMIT]
+        return within_budget
 
     # If nothing fits the requested budget, show only the cheapest verified
     # available alternatives—never an unchecked catalog row.
     available.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
-    return available[:RESULT_LIMIT]
+    return available
 
 
 def amazon_url(asin: str) -> str:
@@ -754,6 +789,32 @@ def product_keyboard(product: Product) -> InlineKeyboardMarkup:
             InlineKeyboardButton("💰 بديل أرخص", callback_data=f"cheap:{product.asin}"),
         ],
     ])
+
+
+async def _send_result_page(message, context: ContextTypes.DEFAULT_TYPE, start: int = 0) -> None:
+    """Send the next three already-verified results without repeating a search."""
+    result_asins = list(context.user_data.get("last_results") or [])
+    page_asins = result_asins[start:start + RESULT_LIMIT]
+    for position, asin in enumerate(page_asins):
+        product = BY_ASIN.get(asin)
+        if product:
+            await message.reply_text(
+                format_product(product, position), reply_markup=product_keyboard(product)
+            )
+    next_start = start + len(page_asins)
+    context.user_data["result_offset"] = next_start
+    if next_start < len(result_asins):
+        remaining = len(result_asins) - next_start
+        await message.reply_text(
+            f"مش مناسبين؟ عندي {remaining} اختيار تاني من نفس البحث.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "عرض 3 منتجات تانية ⬇️", callback_data=f"more:{next_start}"
+                )
+            ]]),
+        )
+    elif start > 0:
+        await message.reply_text("دي كانت آخر المنتجات المطابقة المتاحة حاليًا ✅")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -794,6 +855,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     context.user_data["last_query"] = text
     context.user_data["last_results"] = [p.asin for p in results]
+    context.user_data["result_offset"] = 0
     BY_ASIN.update({p.asin: p for p in results})
     over_budget = bool(budget and results and all(p.price > budget * (1 + BUDGET_TOLERANCE) for p in results))
     if over_budget:
@@ -804,15 +866,24 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         budget_line = f" في حدود {budget:,.0f} جنيه" if budget else ""
         await update.effective_message.reply_text(f"لقيت لك {len(results)} اختيارات{budget_line} 👇")
-    for index, product in enumerate(results):
-        await update.effective_message.reply_text(
-            format_product(product, index), reply_markup=product_keyboard(product)
-        )
+    await _send_result_page(update.effective_message, context, 0)
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
+    if q.data.startswith("more:"):
+        try:
+            requested_start = int(q.data.split(":", 1)[1])
+        except (TypeError, ValueError):
+            await q.message.reply_text("تعذر فتح باقي النتائج. اعملي بحثًا جديدًا.")
+            return
+        current_start = int(context.user_data.get("result_offset") or 0)
+        # Old buttons cannot rewind the list and repeat products.
+        start = max(requested_start, current_start)
+        await q.edit_message_reply_markup(reply_markup=None)
+        await _send_result_page(q.message, context, start)
+        return
     try:
         action, asin = q.data.split(":", 1)
         product = BY_ASIN[asin]
@@ -915,7 +986,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("saved", saved))
     app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CallbackQueryHandler(callbacks, pattern=r"^(open|save|cheap):"))
+    app.add_handler(CallbackQueryHandler(callbacks, pattern=r"^(open|save|cheap|more):"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
     logger.info(
         "Shopping pilot loaded %s allowed ASINs (%s searchable titles)",
