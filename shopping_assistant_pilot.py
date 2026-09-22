@@ -35,6 +35,7 @@ ASSOCIATE_TAG = os.getenv("AMAZON_ASSOCIATE_TAG", "").strip()
 CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_all_accepted_products.json"))
 DB_PATH = Path(os.getenv("SHOPPING_PILOT_DB", "shopping_pilot.db"))
 RESULT_LIMIT = 3
+BUDGET_TOLERANCE = 0.05
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("shopping-pilot")
@@ -142,8 +143,19 @@ def init_db() -> None:
 
 
 ARABIC_STOPWORDS = {
-    "عايز", "عايزة", "محتاج", "محتاجة", "منتج", "سعر", "في", "من", "الى",
-    "حدود", "حوالي", "جنيه", "ج", "لي", "لو", "هات", "وريني", "افضل", "أحسن",
+    "عايز", "عايزه", "عايزة", "محتاج", "محتاجه", "محتاجة", "منتج", "سعر", "في", "من", "الى",
+    "حدود", "حوالي", "جنيه", "ج", "لي", "لو", "هات", "وريني", "افضل", "احسن", "أحسن",
+}
+
+# Common Egyptian shopping expressions that may not appear literally in the
+# Amazon Arabic title.  Each phrase is treated as an alternative query, not as
+# extra mandatory words.
+QUERY_ALIASES = {
+    "اير فراير": ("قلايه هوائيه", "قلايه بدون زيت"),
+    "air fryer": ("قلايه هوائيه", "قلايه بدون زيت"),
+    "مكنسه روبوت": ("مكنسه كهربائيه روبوتيه", "روبوت تنظيف"),
+    "وايرلس": ("لاسلكي",),
+    "هيدفون": ("سماعه راس",),
 }
 
 
@@ -175,37 +187,60 @@ def parse_request(text: str) -> tuple[str, float | None]:
     for start, end in budget_spans:
         chars[start:end] = " " * (end - start)
     query = "".join(chars)
-    words = [w for w in query.split() if len(w) > 1 and w not in ARABIC_STOPWORDS]
+    words = [w for w in query.split() if (len(w) > 1 or w.isdigit()) and w not in ARABIC_STOPWORDS]
     return " ".join(words), budget
 
 
-def _text_score(query_words: set[str], product: Product) -> float:
-    title = normalize(f"{product.title} {product.brand} {product.category}")
-    tokens = set(title.split())
+def _query_variants(query: str) -> list[set[str]]:
+    normalized = normalize(query)
+    variants = [{w for w in normalized.split() if w}]
+    for phrase, aliases in QUERY_ALIASES.items():
+        if normalize(phrase) in normalized:
+            variants.extend({w for w in normalize(alias).split() if w} for alias in aliases)
+    return [variant for variant in variants if variant]
+
+
+def _variant_score(query_words: set[str], tokens: set[str]) -> tuple[float, float]:
+    """Return (score, coverage) using whole-token matching only.
+
+    This intentionally prevents short words such as "اير" from matching the
+    middle of an unrelated word such as "ستاير".
+    """
+    matched = 0
     score = 0.0
     for word in query_words:
         if word in tokens:
+            matched += 1
             score += 6
-        elif word in title:
-            score += 3
-        elif len(word) >= 4 and any(tok.startswith(word[:4]) for tok in tokens):
-            score += 1.5
-    return score
+            continue
+        # Limited stemming tolerance for Arabic suffix/plural differences.
+        if len(word) >= 5 and any(len(tok) >= 5 and tok[:5] == word[:5] for tok in tokens):
+            matched += 1
+            score += 2
+    return score, matched / max(len(query_words), 1)
+
+
+def _text_score(query: str, product: Product) -> tuple[float, float]:
+    tokens = set(normalize(f"{product.title} {product.brand} {product.category}").split())
+    return max((_variant_score(words, tokens) for words in _query_variants(query)), default=(0.0, 0.0))
 
 
 def search_products(query: str, budget: float | None) -> list[Product]:
-    words = set(normalize(query).split())
     ranked: list[tuple[float, Product]] = []
     for p in PRODUCTS:
-        relevance = _text_score(words, p)
-        if words and relevance <= 0:
+        relevance, coverage = _text_score(query, p)
+        if relevance <= 0 or coverage < 0.5:
+            continue
+        # A stated budget is a real customer constraint. Never fill empty
+        # results with unrelated or noticeably over-budget products.
+        if budget and p.price > budget * (1 + BUDGET_TOLERANCE):
             continue
         budget_score = 0.0
         if budget:
             if p.price <= budget:
                 budget_score = 3 + min(p.price / budget, 1)
             else:
-                budget_score = -min((p.price - budget) / budget * 8, 8)
+                budget_score = -2
         quality = min((p.rating or 0) / 5, 1) + min(p.reviews / 1000, 1)
         saving = min(p.discount / 20, 2)
         ranked.append((relevance * 10 + budget_score + quality + saving, p))
@@ -260,8 +295,10 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     results = search_products(query, budget)
     if not results:
+        budget_text = f" في حدود {budget:,.0f} جنيه" if budget else ""
         await update.effective_message.reply_text(
-            "ملقتش اختيار مناسب في المنتجات المتاحة حاليًا. جرّبي اسمًا أبسط أو اسم البراند."
+            f"ملقتش «{query}» مناسب{budget_text} في المنتجات المتاحة حاليًا.\n\n"
+            "جرّبي ميزانية أعلى، أو اكتبي اسم المنتج من غير ميزانية علشان أعرض أقرب المتاح."
         )
         return
     with sqlite3.connect(DB_PATH) as db:
