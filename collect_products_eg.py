@@ -46,6 +46,7 @@ CATALOG_FILE = Path(os.getenv("AMAZON_PRODUCT_CATALOG", "amazon_egypt_product_ca
 ASIN_FILE = Path("collected_asins_eg.txt")
 CACHE_FILE = Path("asin_link_cache.json")
 STATE_FILE = Path("collect_products_state.json")
+PENDING_FILE = Path("collect_products_pending.json")
 
 SHORT_DOMAINS = (
     "amzn.to", "amzn.eu", "a.co", "shorturl.at", "tinyurl.com", "bit.ly",
@@ -196,7 +197,10 @@ async def collect(client: TelegramClient, sources: list[str]) -> None:
     catalog = load_catalog()
     cache = read_json(CACHE_FILE, {})
     state = read_json(STATE_FILE, {})
-    pending: list[tuple[str, str, str, str]] = []
+    pending: list[tuple[str, str, str, str]] = [
+        tuple(row) for row in read_json(PENDING_FILE, [])
+        if isinstance(row, list) and len(row) == 4
+    ]
     added_before = len(catalog)
 
     for source in sources:
@@ -206,7 +210,8 @@ async def collect(client: TelegramClient, sources: list[str]) -> None:
         messages = 0
         print(f"\n📡 بقرا الجديد من {source}...")
         try:
-            async for message in client.iter_messages(source, min_id=last_id):
+            # Oldest to newest makes the saved message ID a safe resume point.
+            async for message in client.iter_messages(source, min_id=last_id, reverse=True):
                 max_id = max(max_id, message.id)
                 text = message.message or ""
                 links = amazon_links(text)
@@ -219,12 +224,30 @@ async def collect(client: TelegramClient, sources: list[str]) -> None:
                     asin = quick_asin(link)
                     if asin:
                         merge_product(catalog, asin, title, link, source, observed)
+                    elif link in cache and cache[link]:
+                        merge_product(catalog, cache[link], title, link, source, observed)
                     else:
                         pending.append((link, title, source, observed))
+                if messages % 200 == 0:
+                    state[key] = max_id
+                    atomic_json(PENDING_FILE, pending)
+                    save_all(catalog, cache, state)
+                    print(f"   💾 حفظت التقدم حتى الرسالة {max_id} ({messages} بوست منتجات)")
+        except asyncio.CancelledError:
+            state[key] = max_id
+            atomic_json(PENDING_FILE, pending)
+            save_all(catalog, cache, state)
+            print(f"⏸️ Railway أوقف التشغيل مؤقتًا — تم حفظ التقدم عند الرسالة {max_id}")
+            raise
         except Exception as exc:
+            state[key] = max_id
+            atomic_json(PENDING_FILE, pending)
+            save_all(catalog, cache, state)
             print(f"⚠️ تعذر قراءة {source}: {str(exc)[:120]}")
             continue
         state[key] = max_id
+        atomic_json(PENDING_FILE, pending)
+        save_all(catalog, cache, state)
         print(f"✅ {messages} بوست فيه منتجات")
 
     unique_pending = list(dict.fromkeys(pending))
@@ -244,10 +267,12 @@ async def collect(client: TelegramClient, sources: list[str]) -> None:
                 cache[link] = asin
                 if asin:
                     merge_product(catalog, asin, title, link, source, observed)
+            atomic_json(PENDING_FILE, unique_pending[offset + len(batch):])
             save_all(catalog, cache, state)
             print(f"   {min(offset + 40, len(unique_pending))}/{len(unique_pending)}")
 
     save_all(catalog, cache, state)
+    atomic_json(PENDING_FILE, [])
     searchable = sum(bool(row.get("title")) for row in catalog.values())
     print("\n" + "=" * 55)
     print(f"✅ إجمالي المنتجات: {len(catalog):,}")
@@ -303,3 +328,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 تم الإيقاف")
+    except asyncio.CancelledError:
+        print("\n⏸️ تم إيقاف التشغيل بعد حفظ التقدم؛ سيكمل من نفس المكان في التشغيل القادم")
