@@ -324,6 +324,14 @@ UNAVAILABLE_MARKERS = tuple(normalize(value) for value in (
     "Unavailable",
 ))
 
+AVAILABLE_MARKERS = tuple(normalize(value) for value in (
+    "متوفر",
+    "متاح",
+    "متبقي في المخزون",
+    "In stock",
+    "Available",
+))
+
 
 def _page_is_buyable(soup: BeautifulSoup) -> bool:
     """Return True only when Amazon currently offers this exact ASIN for sale.
@@ -347,9 +355,20 @@ def _page_is_buyable(soup: BeautifulSoup) -> bool:
         soup.select_one("#add-to-cart-button")
         or soup.select_one("#buy-now-button")
         or soup.select_one("#addToCart input[name='submit.add-to-cart']")
+        or soup.select_one("input[name='submit.add-to-cart']")
+        or soup.select_one("input[name='submit.buy-now']")
+        or soup.select_one("form#addToCart")
         or soup.select_one("#newAccordionRow_1")
     )
-    return purchase_control is not None
+    if purchase_control is not None:
+        return True
+
+    # Amazon sometimes omits purchase controls from the lightweight/mobile
+    # HTML returned to Railway, while still returning a positive stock state.
+    return bool(
+        availability_text
+        and any(marker in availability_text for marker in AVAILABLE_MARKERS)
+    )
 
 
 def _amazon_search_page(query: str, page: int) -> list[Product]:
@@ -458,63 +477,60 @@ def _amazon_product_page(seed: Product) -> Product | None:
 
 
 def search_products(query: str, budget: float | None) -> list[Product]:
-    # Match names locally first, then request current prices only for the small
-    # shortlist. The stored catalog price is never used as the current price.
-    if PRODUCTS:
-        candidates = _search_local_products(query, None, limit=30)
-        within_budget: list[Product] = []
-        available: list[Product] = []
-        for candidate in candidates:
-            try:
-                current = _amazon_product_page(candidate)
-            except (requests.RequestException, RuntimeError) as exc:
-                logger.info("Could not refresh %s: %s", candidate.asin, exc)
-                continue
-            if not current:
-                continue
-            available.append(current)
-            if not budget or current.price <= budget * (1 + BUDGET_TOLERANCE):
-                within_budget.append(current)
-            # With no budget, three relevant live products are enough. With a
-            # budget we keep checking if nothing fits, so we can return the
-            # cheapest real alternatives instead of an empty result.
-            if (not budget and len(within_budget) >= RESULT_LIMIT) or (
-                budget and len(within_budget) >= RESULT_LIMIT
-            ):
-                break
-        if within_budget:
-            within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
-            return within_budget[:RESULT_LIMIT]
-        available.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
-        return available[:RESULT_LIMIT]
-    # A search-result card is only a lead. Verify the exact product page before
-    # exposing it, because Amazon search can retain unavailable variations.
-    found: dict[str, Product] = {}
+    # The catalog defines the allowed pool, but Amazon's current search decides
+    # which products to check first. Stored prices/availability are never used.
+    within_budget: list[Product] = []
+    available: list[Product] = []
+    verified_asins: set[str] = set()
+
+    def verify(candidate: Product) -> None:
+        if candidate.asin in verified_asins:
+            return
+        verified_asins.add(candidate.asin)
+        try:
+            current = _amazon_product_page(candidate)
+        except (requests.RequestException, RuntimeError) as exc:
+            logger.info("Could not verify %s: %s", candidate.asin, exc)
+            return
+        if not current:
+            return
+        available.append(current)
+        if not budget or current.price <= budget * (1 + BUDGET_TOLERANCE):
+            within_budget.append(current)
+
+    # Current Amazon search comes first, avoiding dozens of expired historical
+    # catalog rows. _amazon_search_page already keeps only allowed ASINs.
     for page in range(1, 4):
-        for seed in _amazon_search_page(query, page):
-            try:
-                product = _amazon_product_page(seed)
-            except (requests.RequestException, RuntimeError) as exc:
-                logger.info("Could not verify %s: %s", seed.asin, exc)
-                continue
-            if not product:
-                continue
-            if budget and product.price > budget * (1 + BUDGET_TOLERANCE):
-                continue
-            found.setdefault(product.asin, product)
-        if len(found) >= RESULT_LIMIT:
+        try:
+            live_seeds = _amazon_search_page(query, page)
+        except (requests.RequestException, RuntimeError) as exc:
+            logger.info("Amazon live search page %s failed: %s", page, exc)
             break
-    results = list(found.values())
-    results.sort(
-        key=lambda p: (
-            1 if not budget or p.price <= budget else 0,
-            p.rating or 0,
-            p.reviews,
-            -p.price,
-        ),
-        reverse=True,
-    )
-    return results[:RESULT_LIMIT]
+        for seed in live_seeds:
+            verify(seed)
+            if len(within_budget) >= RESULT_LIMIT:
+                break
+        if len(within_budget) >= RESULT_LIMIT:
+            break
+
+    # If live search did not supply three results (for example because Amazon
+    # throttled a page), supplement it from the best local title matches. Every
+    # exact ASIN is still verified live before being exposed.
+    if len(within_budget) < RESULT_LIMIT and PRODUCTS:
+        candidates = _search_local_products(query, None, limit=100)
+        for candidate in candidates:
+            verify(candidate)
+            if len(within_budget) >= RESULT_LIMIT:
+                break
+
+    if within_budget:
+        within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
+        return within_budget[:RESULT_LIMIT]
+
+    # If nothing fits the requested budget, show only the cheapest verified
+    # available alternatives—never an unchecked catalog row.
+    available.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
+    return available[:RESULT_LIMIT]
 
 
 def amazon_url(asin: str) -> str:
