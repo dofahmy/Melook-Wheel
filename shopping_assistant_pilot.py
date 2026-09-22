@@ -36,13 +36,18 @@ from telegram.ext import (
 
 
 BOT_TOKEN = os.getenv("SHOPPING_TEST_BOT_TOKEN", "").strip()
-ASSOCIATE_TAG = os.getenv(
-    "AMAZON_ASSOCIATE_TAG", os.getenv("AMAZON_PARTNER_TAG", "")
+AMAZON_CLIENT_ID = os.getenv("AMAZON_CLIENT_ID", os.getenv("CLIENT_ID", "")).strip()
+AMAZON_CLIENT_SECRET = os.getenv(
+    "AMAZON_CLIENT_SECRET", os.getenv("CLIENT_SECRET", "")
 ).strip()
-AMAZON_CLIENT_ID = os.getenv("AMAZON_CLIENT_ID", "").strip()
-AMAZON_CLIENT_SECRET = os.getenv("AMAZON_CLIENT_SECRET", "").strip()
-AMAZON_PARTNER_TAG = os.getenv("AMAZON_PARTNER_TAG", ASSOCIATE_TAG).strip()
-AMAZON_MARKETPLACE = os.getenv("AMAZON_MARKETPLACE", "www.amazon.eg").strip()
+AMAZON_PARTNER_TAG = os.getenv(
+    "AMAZON_PARTNER_TAG",
+    os.getenv("PARTNER_TAG", os.getenv("AMAZON_ASSOCIATE_TAG", "")),
+).strip()
+ASSOCIATE_TAG = os.getenv("AMAZON_ASSOCIATE_TAG", AMAZON_PARTNER_TAG).strip()
+AMAZON_MARKETPLACE = os.getenv(
+    "AMAZON_MARKETPLACE", os.getenv("MARKETPLACE", "www.amazon.eg")
+).strip()
 CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_egypt_asin_catalog.json"))
 DB_PATH = Path(os.getenv("SHOPPING_PILOT_DB", "shopping_pilot.db"))
 RESULT_LIMIT = 3
@@ -856,6 +861,14 @@ def main() -> None:
         "Shopping pilot loaded %s allowed ASINs (%s searchable titles)",
         len(ALLOWED_ASINS),
         len(PRODUCTS),
+    )
+    logger.info(
+        "Amazon API configuration detected: client_id=%s client_secret=%s "
+        "partner_tag=%s marketplace=%s",
+        bool(AMAZON_CLIENT_ID),
+        bool(AMAZON_CLIENT_SECRET),
+        bool(AMAZON_PARTNER_TAG),
+        AMAZON_MARKETPLACE,
     )
     # Keep messages sent during a short deployment/restart instead of silently
     # deleting them when the bot comes back online.
