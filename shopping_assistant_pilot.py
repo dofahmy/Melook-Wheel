@@ -62,6 +62,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 _AMAZON_TOKEN = ""
 _AMAZON_TOKEN_EXPIRES_AT = 0.0
 _AMAZON_TOKEN_LOCK = threading.Lock()
+_AMAZON_API_LOCK = threading.Lock()
+_AMAZON_LAST_REQUEST_AT = 0.0
+_AMAZON_RESULT_CACHE: dict[str, tuple[float, Product | None]] = {}
+AMAZON_MIN_REQUEST_INTERVAL = float(os.getenv("AMAZON_MIN_REQUEST_INTERVAL", "1.1"))
+AMAZON_RESULT_CACHE_SECONDS = int(os.getenv("AMAZON_RESULT_CACHE_SECONDS", "900"))
 
 
 @dataclass(frozen=True)
@@ -597,42 +602,70 @@ def _product_from_api_item(item: dict, seed: Product) -> Product | None:
 
 def _amazon_api_verify(seeds: list[Product]) -> list[Product]:
     """Verify up to ten candidate ASINs in one Creators API request."""
+    global _AMAZON_LAST_REQUEST_AT
     if not seeds:
         return []
     seeds = seeds[:10]
-    seed_by_asin = {seed.asin: seed for seed in seeds}
-    response = requests.post(
-        "https://creatorsapi.amazon/catalog/v1/getItems",
-        headers={
-            "Authorization": f"Bearer {_amazon_access_token()}",
-            "Content-Type": "application/json",
-            "x-marketplace": AMAZON_MARKETPLACE,
-        },
-        json={
-            "itemIds": list(seed_by_asin),
-            "itemIdType": "ASIN",
-            "partnerTag": AMAZON_PARTNER_TAG,
-            "partnerType": "Associates",
-            "marketplace": AMAZON_MARKETPLACE,
-            "languagesOfPreference": ["ar_AE"],
-            "resources": [
-                "itemInfo.title",
-                "offersV2.listings.price",
-                "offersV2.listings.availability",
-                "offersV2.listings.merchantInfo",
-                "offersV2.listings.type",
-                "offersV2.listings.condition",
-                "offersV2.listings.dealDetails",
-            ],
-        },
-        timeout=30,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Amazon Creators API failed {response.status_code}: {response.text[:400]}"
-        )
-    items = (response.json().get("itemsResult") or {}).get("items") or []
+    now = time.time()
     verified: list[Product] = []
+    uncached: list[Product] = []
+    for seed in seeds:
+        cached = _AMAZON_RESULT_CACHE.get(seed.asin)
+        if cached and cached[0] > now:
+            if cached[1] is not None:
+                verified.append(cached[1])
+        else:
+            uncached.append(seed)
+    if not uncached:
+        return verified
+
+    seed_by_asin = {seed.asin: seed for seed in uncached}
+    payload = {
+        "itemIds": list(seed_by_asin),
+        "itemIdType": "ASIN",
+        "partnerTag": AMAZON_PARTNER_TAG,
+        "partnerType": "Associates",
+        "marketplace": AMAZON_MARKETPLACE,
+        "languagesOfPreference": ["ar_AE"],
+        "resources": [
+            "itemInfo.title",
+            "offersV2.listings.price",
+            "offersV2.listings.availability",
+            "offersV2.listings.merchantInfo",
+            "offersV2.listings.type",
+            "offersV2.listings.condition",
+            "offersV2.listings.dealDetails",
+        ],
+    }
+    with _AMAZON_API_LOCK:
+        response = None
+        for attempt in range(3):
+            wait_for = AMAZON_MIN_REQUEST_INTERVAL - (time.time() - _AMAZON_LAST_REQUEST_AT)
+            if wait_for > 0:
+                time.sleep(wait_for)
+            response = requests.post(
+                "https://creatorsapi.amazon/catalog/v1/getItems",
+                headers={
+                    "Authorization": f"Bearer {_amazon_access_token()}",
+                    "Content-Type": "application/json",
+                    "x-marketplace": AMAZON_MARKETPLACE,
+                },
+                json=payload,
+                timeout=30,
+            )
+            _AMAZON_LAST_REQUEST_AT = time.time()
+            if response.status_code != 429:
+                break
+            retry_after = response.headers.get("Retry-After")
+            delay = float(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1)
+            logger.warning("Amazon API throttled; retrying in %.1f seconds", delay)
+            time.sleep(delay)
+    if response is None or response.status_code != 200:
+        status = response.status_code if response is not None else "no-response"
+        body = response.text[:400] if response is not None else ""
+        raise RuntimeError(f"Amazon Creators API failed {status}: {body}")
+    items = (response.json().get("itemsResult") or {}).get("items") or []
+    fresh_results: dict[str, Product] = {}
     for item in items:
         asin = str(item.get("asin") or "").upper()
         seed = seed_by_asin.get(asin)
@@ -640,7 +673,11 @@ def _amazon_api_verify(seeds: list[Product]) -> list[Product]:
             continue
         product = _product_from_api_item(item, seed)
         if product:
+            fresh_results[asin] = product
             verified.append(product)
+    expires_at = time.time() + AMAZON_RESULT_CACHE_SECONDS
+    for asin in seed_by_asin:
+        _AMAZON_RESULT_CACHE[asin] = (expires_at, fresh_results.get(asin))
     return verified
 
 
