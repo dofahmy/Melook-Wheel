@@ -42,6 +42,9 @@ BUDGET_TOLERANCE = 0.05
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("shopping-pilot")
+# httpx logs Telegram Bot API URLs at INFO level; those URLs contain the bot
+# token. Keep request details out of Railway logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @dataclass(frozen=True)
@@ -191,6 +194,9 @@ ARABIC_STOPWORDS = {
 QUERY_ALIASES = {
     "اير فراير": ("قلايه هوائيه", "قلايه بدون زيت"),
     "air fryer": ("قلايه هوائيه", "قلايه بدون زيت"),
+    "ميكروويف": ("ميكرووييف", "مايكروويف", "فرن ميكروويف"),
+    "ميكرووييف": ("ميكروويف", "مايكروويف", "فرن ميكروويف"),
+    "مايكروويف": ("ميكروويف", "ميكرووييف", "فرن ميكروويف"),
     "مكنسه روبوت": ("مكنسه كهربائيه روبوتيه", "روبوت تنظيف"),
     "وايرلس": ("لاسلكي",),
     "هيدفون": ("سماعه راس",),
@@ -411,8 +417,9 @@ def search_products(query: str, budget: float | None) -> list[Product]:
     # Match names locally first, then request current prices only for the small
     # shortlist. The stored catalog price is never used as the current price.
     if PRODUCTS:
-        candidates = _search_local_products(query, None, limit=18)
-        refreshed: list[Product] = []
+        candidates = _search_local_products(query, None, limit=30)
+        within_budget: list[Product] = []
+        available: list[Product] = []
         for candidate in candidates:
             try:
                 current = _amazon_product_page(candidate)
@@ -421,12 +428,21 @@ def search_products(query: str, budget: float | None) -> list[Product]:
                 continue
             if not current:
                 continue
-            if budget and current.price > budget * (1 + BUDGET_TOLERANCE):
-                continue
-            refreshed.append(current)
-            if len(refreshed) >= RESULT_LIMIT:
+            available.append(current)
+            if not budget or current.price <= budget * (1 + BUDGET_TOLERANCE):
+                within_budget.append(current)
+            # With no budget, three relevant live products are enough. With a
+            # budget we keep checking if nothing fits, so we can return the
+            # cheapest real alternatives instead of an empty result.
+            if (not budget and len(within_budget) >= RESULT_LIMIT) or (
+                budget and len(within_budget) >= RESULT_LIMIT
+            ):
                 break
-        return refreshed
+        if within_budget:
+            within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
+            return within_budget[:RESULT_LIMIT]
+        available.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
+        return available[:RESULT_LIMIT]
     found: dict[str, Product] = {}
     for page in range(1, 4):
         for product in _amazon_search_page(query, page):
@@ -516,8 +532,15 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     context.user_data["last_query"] = text
     context.user_data["last_results"] = [p.asin for p in results]
     BY_ASIN.update({p.asin: p for p in results})
-    budget_line = f" في حدود {budget:,.0f} جنيه" if budget else ""
-    await update.effective_message.reply_text(f"لقيت لك {len(results)} اختيارات{budget_line} 👇")
+    over_budget = bool(budget and results and all(p.price > budget * (1 + BUDGET_TOLERANCE) for p in results))
+    if over_budget:
+        await update.effective_message.reply_text(
+            f"ملقتش «{query}» في حدود {budget:,.0f} جنيه، لكن دي أرخص "
+            f"{len(results)} اختيارات متاحة حاليًا 👇"
+        )
+    else:
+        budget_line = f" في حدود {budget:,.0f} جنيه" if budget else ""
+        await update.effective_message.reply_text(f"لقيت لك {len(results)} اختيارات{budget_line} 👇")
     for index, product in enumerate(results):
         await update.effective_message.reply_text(
             format_product(product, index), reply_markup=product_keyboard(product)
@@ -623,7 +646,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(callbacks, pattern=r"^(open|save|cheap):"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
     logger.info("Shopping pilot loaded %s allowed ASINs", len(ALLOWED_ASINS))
-    app.run_polling(drop_pending_updates=True)
+    # Keep messages sent during a short deployment/restart instead of silently
+    # deleting them when the bot comes back online.
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == "__main__":
