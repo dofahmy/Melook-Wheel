@@ -1,7 +1,8 @@
 """Standalone Telegram pilot for an Amazon Egypt shopping assistant.
 
 Run with:
-    SHOPPING_TEST_BOT_TOKEN=... AMAZON_ASSOCIATE_TAG=... python shopping_assistant_pilot.py
+    SHOPPING_TEST_BOT_TOKEN=... AMAZON_CLIENT_ID=... AMAZON_CLIENT_SECRET=... \
+    AMAZON_PARTNER_TAG=... python shopping_assistant_pilot.py
 
 This file deliberately does not import or modify the production bot, its database,
 wheel, rewards, or customer records.
@@ -14,6 +15,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -34,7 +36,13 @@ from telegram.ext import (
 
 
 BOT_TOKEN = os.getenv("SHOPPING_TEST_BOT_TOKEN", "").strip()
-ASSOCIATE_TAG = os.getenv("AMAZON_ASSOCIATE_TAG", "").strip()
+ASSOCIATE_TAG = os.getenv(
+    "AMAZON_ASSOCIATE_TAG", os.getenv("AMAZON_PARTNER_TAG", "")
+).strip()
+AMAZON_CLIENT_ID = os.getenv("AMAZON_CLIENT_ID", "").strip()
+AMAZON_CLIENT_SECRET = os.getenv("AMAZON_CLIENT_SECRET", "").strip()
+AMAZON_PARTNER_TAG = os.getenv("AMAZON_PARTNER_TAG", ASSOCIATE_TAG).strip()
+AMAZON_MARKETPLACE = os.getenv("AMAZON_MARKETPLACE", "www.amazon.eg").strip()
 CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_egypt_asin_catalog.json"))
 DB_PATH = Path(os.getenv("SHOPPING_PILOT_DB", "shopping_pilot.db"))
 RESULT_LIMIT = 3
@@ -45,6 +53,10 @@ logger = logging.getLogger("shopping-pilot")
 # httpx logs Telegram Bot API URLs at INFO level; those URLs contain the bot
 # token. Keep request details out of Railway logs.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+_AMAZON_TOKEN = ""
+_AMAZON_TOKEN_EXPIRES_AT = 0.0
+_AMAZON_TOKEN_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -476,52 +488,178 @@ def _amazon_product_page(seed: Product) -> Product | None:
     )
 
 
+def _amazon_access_token() -> str:
+    """Return a cached OAuth token for Amazon Creators API."""
+    global _AMAZON_TOKEN, _AMAZON_TOKEN_EXPIRES_AT
+    if not AMAZON_CLIENT_ID or not AMAZON_CLIENT_SECRET or not AMAZON_PARTNER_TAG:
+        raise RuntimeError(
+            "Amazon API variables are missing: AMAZON_CLIENT_ID, "
+            "AMAZON_CLIENT_SECRET, AMAZON_PARTNER_TAG"
+        )
+    now = time.time()
+    with _AMAZON_TOKEN_LOCK:
+        if _AMAZON_TOKEN and now < _AMAZON_TOKEN_EXPIRES_AT - 60:
+            return _AMAZON_TOKEN
+        response = requests.post(
+            "https://api.amazon.com/auth/o2/token",
+            headers={"Content-Type": "application/json"},
+            json={
+                "grant_type": "client_credentials",
+                "client_id": AMAZON_CLIENT_ID,
+                "client_secret": AMAZON_CLIENT_SECRET,
+                "scope": "creatorsapi::default",
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        body = response.json()
+        token = str(body.get("access_token") or "").strip()
+        if not token:
+            raise RuntimeError("Amazon API did not return an access token")
+        _AMAZON_TOKEN = token
+        _AMAZON_TOKEN_EXPIRES_AT = now + max(int(body.get("expires_in") or 3600), 300)
+        return token
+
+
+def _listing_is_available(listing: dict) -> bool:
+    """Use Creators API availability, never a historical catalog flag."""
+    availability = listing.get("availability") or {}
+    availability_type = availability.get("type")
+    if isinstance(availability_type, dict):
+        availability_type = availability_type.get("value") or availability_type.get("displayValue")
+    normalized_type = normalize(str(availability_type or ""))
+    message = normalize(str(availability.get("message") or availability.get("displayValue") or ""))
+    combined = f"{normalized_type} {message}".strip()
+    if any(marker in combined for marker in UNAVAILABLE_MARKERS):
+        return False
+    return normalized_type in {"now", "in stock", "instock", "available"} or any(
+        marker in combined for marker in AVAILABLE_MARKERS
+    )
+
+
+def _listing_amount(listing: dict) -> float:
+    return _number(((listing.get("price") or {}).get("money") or {}).get("amount"))
+
+
+def _listing_is_usable(listing: dict) -> bool:
+    condition = listing.get("condition")
+    if isinstance(condition, dict):
+        condition = condition.get("value") or condition.get("displayValue") or ""
+    condition = normalize(str(condition or ""))
+    if condition and condition not in {"new", "جديد"}:
+        return False
+    merchant = normalize(str((listing.get("merchantInfo") or {}).get("name") or ""))
+    listing_type = listing.get("type")
+    if isinstance(listing_type, dict):
+        listing_type = listing_type.get("value") or listing_type.get("displayValue") or ""
+    listing_type = normalize(str(listing_type or ""))
+    return (
+        _listing_amount(listing) > 0
+        and _listing_is_available(listing)
+        and "resale" not in merchant
+        and "subscribe" not in listing_type
+    )
+
+
+def _product_from_api_item(item: dict, seed: Product) -> Product | None:
+    listings = [
+        listing for listing in ((item.get("offersV2") or {}).get("listings") or [])
+        if isinstance(listing, dict) and _listing_is_usable(listing)
+    ]
+    if not listings:
+        return None
+    listing = min(listings, key=_listing_amount)
+    price_data = listing.get("price") or {}
+    price = _listing_amount(listing)
+    old_price = _number((((price_data.get("savingBasis") or {}).get("money") or {}).get("amount"))) or None
+    discount = _number((price_data.get("savings") or {}).get("percentage"))
+    if not discount and old_price and old_price > price:
+        discount = round((old_price - price) * 100 / old_price, 1)
+    title = str((((item.get("itemInfo") or {}).get("title") or {}).get("displayValue")) or seed.title).strip()
+    return Product(
+        asin=str(item.get("asin") or seed.asin).upper(),
+        title=title,
+        brand=seed.brand,
+        category=seed.category,
+        price=price,
+        old_price=old_price,
+        rating=None,
+        reviews=0,
+        discount=discount,
+        image_url=seed.image_url,
+    )
+
+
+def _amazon_api_verify(seeds: list[Product]) -> list[Product]:
+    """Verify up to ten candidate ASINs in one Creators API request."""
+    if not seeds:
+        return []
+    seeds = seeds[:10]
+    seed_by_asin = {seed.asin: seed for seed in seeds}
+    response = requests.post(
+        "https://creatorsapi.amazon/catalog/v1/getItems",
+        headers={
+            "Authorization": f"Bearer {_amazon_access_token()}",
+            "Content-Type": "application/json",
+            "x-marketplace": AMAZON_MARKETPLACE,
+        },
+        json={
+            "itemIds": list(seed_by_asin),
+            "itemIdType": "ASIN",
+            "partnerTag": AMAZON_PARTNER_TAG,
+            "partnerType": "Associates",
+            "marketplace": AMAZON_MARKETPLACE,
+            "languagesOfPreference": ["ar_AE"],
+            "resources": [
+                "itemInfo.title",
+                "offersV2.listings.price",
+                "offersV2.listings.availability",
+                "offersV2.listings.merchantInfo",
+                "offersV2.listings.type",
+                "offersV2.listings.condition",
+                "offersV2.listings.dealDetails",
+            ],
+        },
+        timeout=30,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Amazon Creators API failed {response.status_code}: {response.text[:400]}"
+        )
+    items = (response.json().get("itemsResult") or {}).get("items") or []
+    verified: list[Product] = []
+    for item in items:
+        asin = str(item.get("asin") or "").upper()
+        seed = seed_by_asin.get(asin)
+        if not seed:
+            continue
+        product = _product_from_api_item(item, seed)
+        if product:
+            verified.append(product)
+    return verified
+
+
 def search_products(query: str, budget: float | None) -> list[Product]:
-    # The catalog defines the allowed pool, but Amazon's current search decides
-    # which products to check first. Stored prices/availability are never used.
+    # The catalog supplies relevant candidate ASINs. Creators API is the sole
+    # source of current price and availability; Railway never scrapes pages.
     within_budget: list[Product] = []
     available: list[Product] = []
-    verified_asins: set[str] = set()
-
-    def verify(candidate: Product) -> None:
-        if candidate.asin in verified_asins:
-            return
-        verified_asins.add(candidate.asin)
-        try:
-            current = _amazon_product_page(candidate)
-        except (requests.RequestException, RuntimeError) as exc:
-            logger.info("Could not verify %s: %s", candidate.asin, exc)
-            return
-        if not current:
-            return
-        available.append(current)
-        if not budget or current.price <= budget * (1 + BUDGET_TOLERANCE):
-            within_budget.append(current)
-
-    # Current Amazon search comes first, avoiding dozens of expired historical
-    # catalog rows. _amazon_search_page already keeps only allowed ASINs.
-    for page in range(1, 4):
-        try:
-            live_seeds = _amazon_search_page(query, page)
-        except (requests.RequestException, RuntimeError) as exc:
-            logger.info("Amazon live search page %s failed: %s", page, exc)
-            break
-        for seed in live_seeds:
-            verify(seed)
-            if len(within_budget) >= RESULT_LIMIT:
-                break
+    candidates = _search_local_products(query, None, limit=100)
+    logger.info("Catalog matched %s candidates for query %r", len(candidates), query)
+    for start in range(0, len(candidates), 10):
+        verified = _amazon_api_verify(candidates[start:start + 10])
+        logger.info(
+            "Amazon API verified %s available products in candidate batch %s",
+            len(verified),
+            start // 10 + 1,
+        )
+        available.extend(verified)
+        within_budget.extend(
+            product for product in verified
+            if not budget or product.price <= budget * (1 + BUDGET_TOLERANCE)
+        )
         if len(within_budget) >= RESULT_LIMIT:
             break
-
-    # If live search did not supply three results (for example because Amazon
-    # throttled a page), supplement it from the best local title matches. Every
-    # exact ASIN is still verified live before being exposed.
-    if len(within_budget) < RESULT_LIMIT and PRODUCTS:
-        candidates = _search_local_products(query, None, limit=100)
-        for candidate in candidates:
-            verify(candidate)
-            if len(within_budget) >= RESULT_LIMIT:
-                break
 
     if within_budget:
         within_budget.sort(key=lambda p: (p.price, -(p.rating or 0), -p.reviews))
