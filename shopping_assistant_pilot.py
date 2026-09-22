@@ -8,6 +8,7 @@ wheel, rewards, or customer records.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -19,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlencode
 
+import requests
+from bs4 import BeautifulSoup
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -32,7 +35,7 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("SHOPPING_TEST_BOT_TOKEN", "").strip()
 ASSOCIATE_TAG = os.getenv("AMAZON_ASSOCIATE_TAG", "").strip()
-CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_all_accepted_products.json"))
+CATALOG_PATH = Path(os.getenv("SHOPPING_PRODUCTS_FILE", "amazon_egypt_asin_catalog.json"))
 DB_PATH = Path(os.getenv("SHOPPING_PILOT_DB", "shopping_pilot.db"))
 RESULT_LIMIT = 3
 BUDGET_TOLERANCE = 0.05
@@ -68,8 +71,24 @@ def _money_field(value) -> float:
     return _number(value)
 
 
-def load_catalog() -> list[Product]:
+def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
     raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    cached_links: dict[str, list[str]] = {}
+    # New combined catalog: it is an allow-list of ASINs. Product details are
+    # intentionally resolved from the current Amazon search results at runtime.
+    if isinstance(raw, dict) and isinstance(raw.get("products"), list):
+        allowed: set[str] = set()
+        for row in raw["products"]:
+            asin = str(row.get("asin") or "").strip().upper()
+            if re.fullmatch(r"[A-Z0-9]{10}", asin):
+                allowed.add(asin)
+                cached_links[asin] = [
+                    link for link in (row.get("cachedLinks") or [])
+                    if isinstance(link, str) and link.startswith(("https://", "http://"))
+                ]
+        if not allowed:
+            raise RuntimeError(f"No ASINs found in {CATALOG_PATH}")
+        return allowed, cached_links, []
     if isinstance(raw, dict):
         raw = next((v for v in raw.values() if isinstance(v, list)), [])
     products: list[Product] = []
@@ -104,10 +123,10 @@ def load_catalog() -> list[Product]:
         )
     if not products:
         raise RuntimeError(f"No usable products found in {CATALOG_PATH}")
-    return products
+    return {p.asin for p in products}, cached_links, products
 
 
-PRODUCTS = load_catalog()
+ALLOWED_ASINS, CACHED_LINKS, PRODUCTS = load_catalog()
 BY_ASIN = {p.asin: p for p in PRODUCTS}
 
 
@@ -225,7 +244,7 @@ def _text_score(query: str, product: Product) -> tuple[float, float]:
     return max((_variant_score(words, tokens) for words in _query_variants(query)), default=(0.0, 0.0))
 
 
-def search_products(query: str, budget: float | None) -> list[Product]:
+def _search_local_products(query: str, budget: float | None) -> list[Product]:
     ranked: list[tuple[float, Product]] = []
     for p in PRODUCTS:
         relevance, coverage = _text_score(query, p)
@@ -246,6 +265,108 @@ def search_products(query: str, budget: float | None) -> list[Product]:
         ranked.append((relevance * 10 + budget_score + quality + saving, p))
     ranked.sort(key=lambda item: (item[0], item[1].rating or 0, item[1].reviews), reverse=True)
     return [p for _, p in ranked[:RESULT_LIMIT]]
+
+
+def _western_digits(text: str) -> str:
+    return text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩٫٬", "0123456789.,"))
+
+
+def _parse_price_text(text: str | None) -> float:
+    if not text:
+        return 0.0
+    cleaned = _western_digits(text).replace("\u200f", "").replace("\xa0", " ")
+    match = re.search(r"(\d[\d,]*(?:\.\d+)?)", cleaned)
+    return _number(match.group(1).replace(",", "")) if match else 0.0
+
+
+def _parse_first_number(text: str | None) -> float:
+    if not text:
+        return 0.0
+    match = re.search(r"\d+(?:[.,]\d+)?", _western_digits(text))
+    return _number(match.group(0).replace(",", ".")) if match else 0.0
+
+
+def _amazon_search_page(query: str, page: int) -> list[Product]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+        ),
+        "Accept-Language": "ar-EG,ar;q=0.9,en;q=0.7",
+    }
+    response = requests.get(
+        "https://www.amazon.eg/s",
+        params={"k": query, "page": page},
+        headers=headers,
+        timeout=20,
+    )
+    response.raise_for_status()
+    if "captcha" in response.text.lower() or "أدخل الأحرف" in response.text:
+        raise RuntimeError("Amazon طلب تحققًا مؤقتًا من خدمة البحث")
+    soup = BeautifulSoup(response.text, "html.parser")
+    products: list[Product] = []
+    for card in soup.select('[data-component-type="s-search-result"][data-asin]'):
+        asin = str(card.get("data-asin") or "").strip().upper()
+        if asin not in ALLOWED_ASINS:
+            continue
+        title_node = card.select_one("h2 span") or card.select_one(".a-text-normal")
+        price_node = card.select_one(".a-price .a-offscreen")
+        if not title_node or not price_node:
+            continue
+        price = _parse_price_text(price_node.get_text(" ", strip=True))
+        if price <= 0:
+            continue
+        old_node = card.select_one(".a-text-price .a-offscreen")
+        rating_node = card.select_one(".a-icon-alt")
+        review_node = card.select_one('[aria-label$="ratings"]') or card.select_one(".s-underline-text")
+        image_node = card.select_one("img.s-image")
+        old_price = _parse_price_text(old_node.get_text(" ", strip=True)) if old_node else 0.0
+        discount = 0.0
+        if old_price > price:
+            discount = round((old_price - price) * 100 / old_price, 1)
+        products.append(Product(
+            asin=asin,
+            title=title_node.get_text(" ", strip=True),
+            brand="",
+            category="",
+            price=price,
+            old_price=old_price or None,
+            rating=(
+                _parse_first_number(rating_node.get_text(" ", strip=True)) or None
+                if rating_node else None
+            ),
+            reviews=int(_parse_first_number(review_node.get_text(" ", strip=True))) if review_node else 0,
+            discount=discount,
+            image_url=image_node.get("src") if image_node else None,
+        ))
+    return products
+
+
+def search_products(query: str, budget: float | None) -> list[Product]:
+    # Legacy rich catalogs can still be used for an offline smoke test, but the
+    # combined ASIN catalog always searches Amazon live and intersects results
+    # with the 41k allowed products.
+    if PRODUCTS:
+        return _search_local_products(query, budget)
+    found: dict[str, Product] = {}
+    for page in range(1, 4):
+        for product in _amazon_search_page(query, page):
+            if budget and product.price > budget * (1 + BUDGET_TOLERANCE):
+                continue
+            found.setdefault(product.asin, product)
+        if len(found) >= RESULT_LIMIT:
+            break
+    results = list(found.values())
+    results.sort(
+        key=lambda p: (
+            1 if not budget or p.price <= budget else 0,
+            p.rating or 0,
+            p.reviews,
+            -p.price,
+        ),
+        reverse=True,
+    )
+    return results[:RESULT_LIMIT]
 
 
 def amazon_url(asin: str) -> str:
@@ -293,7 +414,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not query:
         await update.effective_message.reply_text("اكتبي اسم المنتج، وممكن تضيفي ميزانيتك في نفس الرسالة.")
         return
-    results = search_products(query, budget)
+    try:
+        results = await asyncio.to_thread(search_products, query, budget)
+    except (requests.RequestException, RuntimeError) as exc:
+        logger.warning("Live Amazon search failed: %s", exc)
+        await update.effective_message.reply_text(
+            "البحث في Amazon مش متاح مؤقتًا. جرّبي تاني بعد دقيقة."
+        )
+        return
     if not results:
         budget_text = f" في حدود {budget:,.0f} جنيه" if budget else ""
         await update.effective_message.reply_text(
@@ -308,6 +436,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     context.user_data["last_query"] = text
     context.user_data["last_results"] = [p.asin for p in results]
+    BY_ASIN.update({p.asin: p for p in results})
     budget_line = f" في حدود {budget:,.0f} جنيه" if budget else ""
     await update.effective_message.reply_text(f"لقيت لك {len(results)} اختيارات{budget_line} 👇")
     for index, product in enumerate(results):
@@ -414,7 +543,7 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CallbackQueryHandler(callbacks, pattern=r"^(open|save|cheap):"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
-    logger.info("Shopping pilot loaded %s products", len(PRODUCTS))
+    logger.info("Shopping pilot loaded %s allowed ASINs", len(ALLOWED_ASINS))
     app.run_polling(drop_pending_updates=True)
 
 
