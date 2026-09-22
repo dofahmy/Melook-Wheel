@@ -74,10 +74,11 @@ def _money_field(value) -> float:
 def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
     raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     cached_links: dict[str, list[str]] = {}
-    # New combined catalog: it is an allow-list of ASINs. Product details are
-    # intentionally resolved from the current Amazon search results at runtime.
+    # The enriched catalog stores stable searchable metadata only. Prices are
+    # deliberately refreshed from the product page when the customer searches.
     if isinstance(raw, dict) and isinstance(raw.get("products"), list):
         allowed: set[str] = set()
+        products: list[Product] = []
         for row in raw["products"]:
             asin = str(row.get("asin") or "").strip().upper()
             if re.fullmatch(r"[A-Z0-9]{10}", asin):
@@ -86,9 +87,27 @@ def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
                     link for link in (row.get("cachedLinks") or [])
                     if isinstance(link, str) and link.startswith(("https://", "http://"))
                 ]
+                title = str(row.get("displayTitle") or row.get("title") or "").strip()
+                if title:
+                    aliases = " ".join(
+                        value for value in (row.get("aliases") or [])
+                        if isinstance(value, str)
+                    )
+                    products.append(Product(
+                        asin=asin,
+                        title=title,
+                        brand=str(row.get("brand") or row.get("asinBrand") or "").strip(),
+                        category=(str(row.get("category") or "") + " " + aliases).strip(),
+                        price=0.0,
+                        old_price=None,
+                        rating=None,
+                        reviews=0,
+                        discount=0.0,
+                        image_url=row.get("imageUrl") or row.get("image_url"),
+                    ))
         if not allowed:
             raise RuntimeError(f"No ASINs found in {CATALOG_PATH}")
-        return allowed, cached_links, []
+        return allowed, cached_links, products
     if isinstance(raw, dict):
         raw = next((v for v in raw.values() if isinstance(v, list)), [])
     products: list[Product] = []
@@ -96,7 +115,7 @@ def load_catalog() -> tuple[set[str], dict[str, list[str]], list[Product]]:
         asin = str(row.get("asin") or "").strip()
         title = str(row.get("displayTitle") or row.get("title") or "").strip()
         price = _money_field(row.get("buyingPrice") or row.get("price"))
-        if not asin or not title or price <= 0:
+        if not asin or not title:
             continue
         old_price = _money_field(row.get("listPrice") or row.get("oldPrice")) or None
         deal = row.get("dealMetadata") or {}
@@ -244,7 +263,7 @@ def _text_score(query: str, product: Product) -> tuple[float, float]:
     return max((_variant_score(words, tokens) for words in _query_variants(query)), default=(0.0, 0.0))
 
 
-def _search_local_products(query: str, budget: float | None) -> list[Product]:
+def _search_local_products(query: str, budget: float | None, limit: int = RESULT_LIMIT) -> list[Product]:
     ranked: list[tuple[float, Product]] = []
     for p in PRODUCTS:
         relevance, coverage = _text_score(query, p)
@@ -252,10 +271,10 @@ def _search_local_products(query: str, budget: float | None) -> list[Product]:
             continue
         # A stated budget is a real customer constraint. Never fill empty
         # results with unrelated or noticeably over-budget products.
-        if budget and p.price > budget * (1 + BUDGET_TOLERANCE):
+        if budget and p.price > 0 and p.price > budget * (1 + BUDGET_TOLERANCE):
             continue
         budget_score = 0.0
-        if budget:
+        if budget and p.price > 0:
             if p.price <= budget:
                 budget_score = 3 + min(p.price / budget, 1)
             else:
@@ -264,7 +283,7 @@ def _search_local_products(query: str, budget: float | None) -> list[Product]:
         saving = min(p.discount / 20, 2)
         ranked.append((relevance * 10 + budget_score + quality + saving, p))
     ranked.sort(key=lambda item: (item[0], item[1].rating or 0, item[1].reviews), reverse=True)
-    return [p for _, p in ranked[:RESULT_LIMIT]]
+    return [p for _, p in ranked[:limit]]
 
 
 def _western_digits(text: str) -> str:
@@ -342,12 +361,72 @@ def _amazon_search_page(query: str, page: int) -> list[Product]:
     return products
 
 
+def _amazon_product_page(seed: Product) -> Product | None:
+    """Refresh volatile fields for one locally matched ASIN."""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+        ),
+        "Accept-Language": "ar-EG,ar;q=0.9,en;q=0.7",
+    }
+    response = requests.get(
+        f"https://www.amazon.eg/dp/{seed.asin}", headers=headers, timeout=15
+    )
+    response.raise_for_status()
+    if "captcha" in response.text.lower() or "أدخل الأحرف" in response.text:
+        raise RuntimeError("Amazon طلب تحققًا مؤقتًا")
+    soup = BeautifulSoup(response.text, "html.parser")
+    price_node = (
+        soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen")
+        or soup.select_one("#corePrice_feature_div .a-price .a-offscreen")
+        or soup.select_one("#priceblock_ourprice")
+        or soup.select_one(".a-price .a-offscreen")
+    )
+    price = _parse_price_text(price_node.get_text(" ", strip=True)) if price_node else 0.0
+    if price <= 0:
+        return None
+    title_node = soup.select_one("#productTitle")
+    old_node = soup.select_one(".basisPrice .a-offscreen") or soup.select_one(".a-text-price .a-offscreen")
+    rating_node = soup.select_one("#acrPopover") or soup.select_one(".a-icon-alt")
+    review_node = soup.select_one("#acrCustomerReviewText")
+    image_node = soup.select_one("#landingImage") or soup.select_one("#imgBlkFront")
+    old_price = _parse_price_text(old_node.get_text(" ", strip=True)) if old_node else 0.0
+    discount = round((old_price - price) * 100 / old_price, 1) if old_price > price else 0.0
+    return Product(
+        asin=seed.asin,
+        title=(title_node.get_text(" ", strip=True) if title_node else seed.title),
+        brand=seed.brand,
+        category=seed.category,
+        price=price,
+        old_price=old_price or None,
+        rating=_parse_first_number(rating_node.get_text(" ", strip=True)) or None if rating_node else None,
+        reviews=int(_parse_first_number(review_node.get_text(" ", strip=True))) if review_node else 0,
+        discount=discount,
+        image_url=image_node.get("src") if image_node else seed.image_url,
+    )
+
+
 def search_products(query: str, budget: float | None) -> list[Product]:
-    # Legacy rich catalogs can still be used for an offline smoke test, but the
-    # combined ASIN catalog always searches Amazon live and intersects results
-    # with the 41k allowed products.
+    # Match names locally first, then request current prices only for the small
+    # shortlist. The stored catalog price is never used as the current price.
     if PRODUCTS:
-        return _search_local_products(query, budget)
+        candidates = _search_local_products(query, None, limit=18)
+        refreshed: list[Product] = []
+        for candidate in candidates:
+            try:
+                current = _amazon_product_page(candidate)
+            except (requests.RequestException, RuntimeError) as exc:
+                logger.info("Could not refresh %s: %s", candidate.asin, exc)
+                continue
+            if not current:
+                continue
+            if budget and current.price > budget * (1 + BUDGET_TOLERANCE):
+                continue
+            refreshed.append(current)
+            if len(refreshed) >= RESULT_LIMIT:
+                break
+        return refreshed
     found: dict[str, Product] = {}
     for page in range(1, 4):
         for product in _amazon_search_page(query, page):
