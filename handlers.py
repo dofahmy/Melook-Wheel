@@ -91,6 +91,25 @@ def _wheel_keyboard(spins_balance: int | None = None):
 
 ACCOUNT_BUTTON_TEXT = "📊 حسابي"
 GOLDEN_BUTTON_TEXT = "🏆 عجلة العروض الذهبية"
+WHEEL_TEMPORARILY_DISABLED = True
+AMAZON_OFFERS_CHANNEL_URL = "https://t.me/EgyptOffersHunter"
+
+
+def _wheel_unavailable_keyboard():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🛒 شوف خصومات أمازون", url=AMAZON_OFFERS_CHANNEL_URL)
+    ]])
+
+
+async def _send_wheel_unavailable(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "🎡 عروض العجلة غير متاحة حاليًا، ولكن خصومات أمازون "
+            "لا تزال موجودة. شوف بنفسك 👇"
+        ),
+        reply_markup=_wheel_unavailable_keyboard(),
+    )
 
 
 def _format_egp(amount: float) -> str:
@@ -202,7 +221,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎉 أهلاً بيك في وفر كاش! العروض والهدايا هتيجي لك لحد عندك ..\n\n"
         "اختار من القائمه آخر عروض أمازون، علشان تطلع لك آخر أحدث عروض نزلت في أمازون خلال الكام دقيقه اللي فاتت ..\n\n"
-        "أما بقه لو عاوز تدخل على بطاقات الهدايا مباشرة دوس على لف عجلة العروض 👇🏻👇🏻",
+        "ولو ضغطت على عجلة العروض هنعرّفك حالتها الحالية 👇🏻👇🏻",
         reply_markup=_egypt_customer_keyboard(user.id),
     )
 
@@ -526,6 +545,9 @@ async def wheel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         database.set_user_activity_now(update.effective_user.id)
     except Exception:
         pass
+    if WHEEL_TEMPORARILY_DISABLED:
+        await _send_wheel_unavailable(context, update.effective_chat.id)
+        return
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or not row["program"]:
@@ -563,6 +585,12 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         payload = json.loads(raw)
     except (ValueError, TypeError):
+        return
+
+    if WHEEL_TEMPORARILY_DISABLED and payload.get("type") in {
+        "golden_select", "golden_prize_result", "wheel_result"
+    }:
+        await _send_wheel_unavailable(context, update.effective_chat.id)
         return
 
     if payload.get("type") == "golden_select":
@@ -1113,6 +1141,11 @@ async def golden_wheel_entry(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """نقطة البداية: العميل بيدوس زرار/أمر عجلة بطاقات الهدايا - بتفتحله
     عجلة بصرية تلف وتقف الأول، وبعد ما تقف بيوصله سؤال العرض."""
     user = update.effective_user
+    if WHEEL_TEMPORARILY_DISABLED:
+        if update.callback_query:
+            await update.callback_query.answer()
+        await _send_wheel_unavailable(context, update.effective_chat.id)
+        return
     row = database.get_user(user.id)
     if not row or row["program"] != "egypt":
         if update.callback_query:
@@ -1147,6 +1180,9 @@ def _golden_button_row(user_id: int | None):
       يخسرها أو ياخد لفة زيادة).
     - لو مفيش لفة مستنية، الزرار يفتح عجلة اختيار عرض جديد على طول.
     """
+    if WHEEL_TEMPORARILY_DISABLED:
+        return [KeyboardButton(GOLDEN_BUTTON_TEXT)]
+
     if user_id is not None:
         pending = database.get_pending_lucky_spin(user_id)
         if pending:
@@ -1165,6 +1201,11 @@ def _golden_button_row(user_id: int | None):
 def _select_wheel_keyboard():
     """لوحة مفاتيح زرار عجلة الاختيار البصرية - بنعيد إرسالها في أي رسالة
     ممكن تسيب العميل من غيرها من غير طريقة يكمّل بيها."""
+    if WHEEL_TEMPORARILY_DISABLED:
+        return ReplyKeyboardMarkup(
+            [[KeyboardButton(GOLDEN_BUTTON_TEXT)]],
+            resize_keyboard=True, one_time_keyboard=False,
+        )
     if not config.WHEEL_URL:
         return None
     import time
@@ -1180,6 +1221,10 @@ async def _offer_golden_round(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     """بتعرض على العميل يلف عجلة الاختيار (البصرية) عشان تختارله عرض جديد،
     أو تفتحله عجلة بطاقات الهدايا على طول لو خلاص وصل لهدفه، أو تجيبله لفة
     مستنية استلام لو موجودة (زي لو كانت اتقفلت أو اتفوّتت قبل كده)."""
+    if WHEEL_TEMPORARILY_DISABLED:
+        await _send_wheel_unavailable(context, chat_id)
+        return
+
     pending = database.get_pending_lucky_spin(user_id)
     if pending:
         url = _build_lucky_wheel_url(pending["id"], pending["prize"])
@@ -1246,20 +1291,8 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     answered_count = row["golden_answered_count"] if row else 0
     correct_count = row["golden_opened_count"] if row else 0
     target = row["golden_target"] if row else config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
-    anchor_active = bool(row and int(row["anchor_round_active"] or 0) == 1)
-    required_asins_complete = True
-    if anchor_active:
-        correct_asins = database.list_current_round_correct_asins(
-            user_id, answered_count
-        )
-        required_asins_complete = set(product_catalog.FIRST_ROUND_ASINS).issubset(
-            correct_asins
-        )
 
-    # A round completes only after five correct answers. Every answered
-    # question already requires a verified product-link click first, so this
-    # also guarantees at least five clicks.
-    if correct_count >= target and required_asins_complete:
+    if answered_count >= target:
         pending = database.get_pending_lucky_spin(user_id)
         if pending:
             spin_id, prize = pending["id"], pending["prize"]
@@ -1277,7 +1310,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"🎉 خلّصت الجولة بـ {correct_count} إجابات صحيحة.\n"
+                f"🎉 خلّصت {target} أسئلة، منهم {correct_count} صح.\n"
                 "دوس عجلة بطاقات الهدايا، وبعد ما تقف افتح صندوق جائزتك:"
             ),
             reply_markup=keyboard,
@@ -1288,19 +1321,13 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         asked_asins = database.list_todays_quizzed_asins(user_id)
         all_seen_asins = database.list_all_quizzed_asins(user_id)
         used_question_types = database.list_used_product_question_types(user_id)
-        replacement = database.get_pending_replacement_pool(user_id)
-        replacement_pool = replacement["pool_type"] if replacement else None
-        replacement_epc = replacement["operational_epc"] if replacement else None
-        replacement_asin = replacement["source_asin"] if replacement else None
-        base_question_count = database.get_current_golden_base_count(
-            user_id, answered_count
-        )
+        replacement_pool = database.get_pending_replacement_pool(user_id)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
         anchor_round = database.ensure_anchor_round(user_id)
         product = product_catalog.choose_product(
             asked_asins,
-            question_index=base_question_count,
+            question_index=answered_count,
             user_id=user_id,
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
@@ -1310,8 +1337,6 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
             bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
             used_question_types=used_question_types,
             forced_pool_type=replacement_pool,
-            forced_operational_epc=replacement_epc,
-            forced_asin=replacement_asin,
         )
         question = product_catalog.question_for(
             product,
@@ -1342,7 +1367,6 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         prompt=question["prompt"],
         options=question["options"],
         requires_link_open=True,
-        is_replacement=bool(replacement),
     )
     if replacement_pool:
         database.consume_pending_replacement_pool(user_id)
@@ -1416,18 +1440,18 @@ async def golden_answer_callback(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"✅ إجابة صحيحة! تقدمك: "
-                f"{result['correct_count']} من {result['target']} منتجات مكتملة."
+                f"✅ إجابة صح! ({result['answered_count']}/{result['target']})\n"
+                f"الصح في الجولة: {result['correct_count']}"
             ),
         )
     else:
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "❌ الإجابة مش صحيحة، والسؤال ده مش هيتحسب في مكافأتك.\n"
-                "لازم تجاوب صح، هنبعت لك سؤالًا جديدًا.\n"
-                f"✅ تقدمك الحالي: {result['correct_count']} من "
-                f"{config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND} منتجات مكتملة."
+                "للأسف غلط! 😅\n"
+                "🎡 العجلة زعلت شوية وضافتلك سؤالين كمان 😂\n\n"
+                f"بقى عندك **{result['target']} أسئلة** بدل **{result['target'] - 2}** 🎯\n"
+                f"وهدفك الأساسي لسه **{config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND} إجابات صح**."
             ),
         )
 
