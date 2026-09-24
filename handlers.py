@@ -119,15 +119,16 @@ def _format_egp(amount: float) -> str:
 
 def _egypt_customer_keyboard(user_id: int | None = None):
     """
-    لوحة مفاتيح عميل مصر اللي معاه تاج شخصي: زرار "عجلة بطاقات الهدايا"
-    (بيفتح العجلة مباشرة بدوسة واحدة - أو يجيب لفة مستنية لو موجودة)،
-    وزرار "حسابي" ثابت.
+    عند تعطيل العجلة نخفي لوحة المفاتيح السفلية بالكامل، بما فيها زر حسابي.
+    وإذا عادت العجلة لاحقًا يظهر زرها وحده من غير زر حسابي.
     """
-    rows = []
-    if config.EGYPT_GOLDEN_PRODUCTS_FILE and not WHEEL_TEMPORARILY_DISABLED:
-        rows.append(_golden_button_row(user_id))
-    rows.append([KeyboardButton(ACCOUNT_BUTTON_TEXT)])
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False)
+    if WHEEL_TEMPORARILY_DISABLED or not config.EGYPT_GOLDEN_PRODUCTS_FILE:
+        return ReplyKeyboardRemove()
+    return ReplyKeyboardMarkup(
+        [_golden_button_row(user_id)],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
 
 
 def _prime_keyboard(keyword: str):
@@ -198,7 +199,7 @@ async def bot_membership_update(update: Update, context: ContextTypes.DEFAULT_TY
 # ---------------- /start وتفرّع البرنامج ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بداية البوت الحالية: مصر فقط — ترحيب ثم عجلة العروض الذهبية مباشرة."""
+    """بداية البوت الحالية: مصر فقط — رسالة الترحيب من غير أزرار إضافية."""
     user = update.effective_user
     database.upsert_user(user.id, user.username)
     database.set_user_activity_now(user.id)
@@ -221,10 +222,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "وهتلاقي أحدث خصومات أمازون من زر العروض 👇🏻👇🏻",
         reply_markup=_egypt_customer_keyboard(user.id),
     )
-
-    # افتح مسار العجلة الذهبية فورًا بعد الترحيب.
-    await _offer_golden_round(context, update.effective_chat.id, user.id)
-
 
 async def program_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
