@@ -97,17 +97,14 @@ AMAZON_OFFERS_CHANNEL_URL = "https://t.me/EgyptOffersHunter"
 
 def _wheel_unavailable_keyboard():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🛒 شوف خصومات أمازون", url=AMAZON_OFFERS_CHANNEL_URL)
+        InlineKeyboardButton(GOLDEN_BUTTON_TEXT, url=AMAZON_OFFERS_CHANNEL_URL)
     ]])
 
 
 async def _send_wheel_unavailable(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     await context.bot.send_message(
         chat_id=chat_id,
-        text=(
-            "🎡 عروض العجلة غير متاحة حاليًا، ولكن خصومات أمازون "
-            "لا تزال موجودة. شوف بنفسك 👇"
-        ),
+        text="🛒 شوف أحدث عروض وخصومات أمازون 👇",
         reply_markup=_wheel_unavailable_keyboard(),
     )
 
@@ -127,7 +124,7 @@ def _egypt_customer_keyboard(user_id: int | None = None):
     وزرار "حسابي" ثابت.
     """
     rows = []
-    if config.EGYPT_GOLDEN_PRODUCTS_FILE:
+    if config.EGYPT_GOLDEN_PRODUCTS_FILE and not WHEEL_TEMPORARILY_DISABLED:
         rows.append(_golden_button_row(user_id))
     rows.append([KeyboardButton(ACCOUNT_BUTTON_TEXT)])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False)
@@ -221,7 +218,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎉 أهلاً بيك في وفر كاش! العروض والهدايا هتيجي لك لحد عندك ..\n\n"
         "اختار من القائمه آخر عروض أمازون، علشان تطلع لك آخر أحدث عروض نزلت في أمازون خلال الكام دقيقه اللي فاتت ..\n\n"
-        "ولو ضغطت على عجلة العروض هنعرّفك حالتها الحالية 👇🏻👇🏻",
+        "وهتلاقي أحدث خصومات أمازون من زر العروض 👇🏻👇🏻",
         reply_markup=_egypt_customer_keyboard(user.id),
     )
 
