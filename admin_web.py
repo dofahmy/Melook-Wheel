@@ -525,36 +525,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_amazon_offers_redirect(self):
-        """Open the Amazon offers channel directly from Telegram's menu button."""
-        channel_url = "https://t.me/EgyptOffersHunter"
-        body = f"""<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>عروض أمازون الذهبية</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-</head>
-<body>
-  <script>
-    const channelUrl = {json.dumps(channel_url)};
-    if (window.Telegram && Telegram.WebApp) {{
-      Telegram.WebApp.ready();
-      Telegram.WebApp.openTelegramLink(channelUrl);
-      setTimeout(() => Telegram.WebApp.close(), 500);
-    }} else {{
-      window.location.replace(channelUrl);
-    }}
-  </script>
-</body>
-</html>""".encode("utf-8")
-        self.send_response(200)
+        """Redirect the Telegram menu button straight to the offers channel."""
+        self.send_response(302)
         self._security_headers()
-        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Location", "https://t.me/EgyptOffersHunter")
         self.end_headers()
-        self.wfile.write(body)
 
     def _read_json(self):
         length = int(self.headers.get("Content-Length", "0") or 0)
