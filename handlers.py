@@ -91,22 +91,6 @@ def _wheel_keyboard(spins_balance: int | None = None):
 
 ACCOUNT_BUTTON_TEXT = "📊 حسابي"
 GOLDEN_BUTTON_TEXT = "🏆 عجلة العروض الذهبية"
-WHEEL_TEMPORARILY_DISABLED = True
-AMAZON_OFFERS_CHANNEL_URL = "https://t.me/EgyptOffersHunter"
-
-
-def _wheel_unavailable_keyboard():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton(GOLDEN_BUTTON_TEXT, url=AMAZON_OFFERS_CHANNEL_URL)
-    ]])
-
-
-async def _send_wheel_unavailable(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="🛒 شوف أحدث عروض وخصومات أمازون 👇",
-        reply_markup=_wheel_unavailable_keyboard(),
-    )
 
 
 def _format_egp(amount: float) -> str:
@@ -119,16 +103,15 @@ def _format_egp(amount: float) -> str:
 
 def _egypt_customer_keyboard(user_id: int | None = None):
     """
-    عند تعطيل العجلة نخفي لوحة المفاتيح السفلية بالكامل، بما فيها زر حسابي.
-    وإذا عادت العجلة لاحقًا يظهر زرها وحده من غير زر حسابي.
+    لوحة مفاتيح عميل مصر اللي معاه تاج شخصي: زرار "عجلة بطاقات الهدايا"
+    (بيفتح العجلة مباشرة بدوسة واحدة - أو يجيب لفة مستنية لو موجودة)،
+    وزرار "حسابي" ثابت.
     """
-    if WHEEL_TEMPORARILY_DISABLED or not config.EGYPT_GOLDEN_PRODUCTS_FILE:
-        return ReplyKeyboardRemove()
-    return ReplyKeyboardMarkup(
-        [_golden_button_row(user_id)],
-        resize_keyboard=True,
-        one_time_keyboard=False,
-    )
+    rows = []
+    if config.EGYPT_GOLDEN_PRODUCTS_FILE:
+        rows.append(_golden_button_row(user_id))
+    rows.append([KeyboardButton(ACCOUNT_BUTTON_TEXT)])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False)
 
 
 def _prime_keyboard(keyword: str):
@@ -199,7 +182,7 @@ async def bot_membership_update(update: Update, context: ContextTypes.DEFAULT_TY
 # ---------------- /start وتفرّع البرنامج ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بداية البوت الحالية: مصر فقط — رسالة الترحيب من غير أزرار إضافية."""
+    """بداية البوت الحالية: مصر فقط — ترحيب ثم عجلة العروض الذهبية مباشرة."""
     user = update.effective_user
     database.upsert_user(user.id, user.username)
     database.set_user_activity_now(user.id)
@@ -219,9 +202,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎉 أهلاً بيك في وفر كاش! العروض والهدايا هتيجي لك لحد عندك ..\n\n"
         "اختار من القائمه آخر عروض أمازون، علشان تطلع لك آخر أحدث عروض نزلت في أمازون خلال الكام دقيقه اللي فاتت ..\n\n"
-        "وهتلاقي أحدث خصومات أمازون من زر العروض 👇🏻👇🏻",
+        "أما بقه لو عاوز تدخل على بطاقات الهدايا مباشرة دوس على لف عجلة العروض 👇🏻👇🏻",
         reply_markup=_egypt_customer_keyboard(user.id),
     )
+
+    # افتح مسار العجلة الذهبية فورًا بعد الترحيب.
+    await _offer_golden_round(context, update.effective_chat.id, user.id)
+
 
 async def program_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -539,9 +526,6 @@ async def wheel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         database.set_user_activity_now(update.effective_user.id)
     except Exception:
         pass
-    if WHEEL_TEMPORARILY_DISABLED:
-        await _send_wheel_unavailable(context, update.effective_chat.id)
-        return
     user = update.effective_user
     row = database.get_user(user.id)
     if not row or not row["program"]:
@@ -579,12 +563,6 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         payload = json.loads(raw)
     except (ValueError, TypeError):
-        return
-
-    if WHEEL_TEMPORARILY_DISABLED and payload.get("type") in {
-        "golden_select", "golden_prize_result", "wheel_result"
-    }:
-        await _send_wheel_unavailable(context, update.effective_chat.id)
         return
 
     if payload.get("type") == "golden_select":
@@ -1135,11 +1113,6 @@ async def golden_wheel_entry(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """نقطة البداية: العميل بيدوس زرار/أمر عجلة بطاقات الهدايا - بتفتحله
     عجلة بصرية تلف وتقف الأول، وبعد ما تقف بيوصله سؤال العرض."""
     user = update.effective_user
-    if WHEEL_TEMPORARILY_DISABLED:
-        if update.callback_query:
-            await update.callback_query.answer()
-        await _send_wheel_unavailable(context, update.effective_chat.id)
-        return
     row = database.get_user(user.id)
     if not row or row["program"] != "egypt":
         if update.callback_query:
@@ -1174,9 +1147,6 @@ def _golden_button_row(user_id: int | None):
       يخسرها أو ياخد لفة زيادة).
     - لو مفيش لفة مستنية، الزرار يفتح عجلة اختيار عرض جديد على طول.
     """
-    if WHEEL_TEMPORARILY_DISABLED:
-        return [KeyboardButton(GOLDEN_BUTTON_TEXT)]
-
     if user_id is not None:
         pending = database.get_pending_lucky_spin(user_id)
         if pending:
@@ -1195,11 +1165,6 @@ def _golden_button_row(user_id: int | None):
 def _select_wheel_keyboard():
     """لوحة مفاتيح زرار عجلة الاختيار البصرية - بنعيد إرسالها في أي رسالة
     ممكن تسيب العميل من غيرها من غير طريقة يكمّل بيها."""
-    if WHEEL_TEMPORARILY_DISABLED:
-        return ReplyKeyboardMarkup(
-            [[KeyboardButton(GOLDEN_BUTTON_TEXT)]],
-            resize_keyboard=True, one_time_keyboard=False,
-        )
     if not config.WHEEL_URL:
         return None
     import time
@@ -1215,10 +1180,6 @@ async def _offer_golden_round(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     """بتعرض على العميل يلف عجلة الاختيار (البصرية) عشان تختارله عرض جديد،
     أو تفتحله عجلة بطاقات الهدايا على طول لو خلاص وصل لهدفه، أو تجيبله لفة
     مستنية استلام لو موجودة (زي لو كانت اتقفلت أو اتفوّتت قبل كده)."""
-    if WHEEL_TEMPORARILY_DISABLED:
-        await _send_wheel_unavailable(context, chat_id)
-        return
-
     pending = database.get_pending_lucky_spin(user_id)
     if pending:
         url = _build_lucky_wheel_url(pending["id"], pending["prize"])
