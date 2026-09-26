@@ -206,8 +206,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_egypt_customer_keyboard(user.id),
     )
 
-    # افتح مسار العجلة الذهبية فورًا بعد الترحيب.
-    await _offer_golden_round(context, update.effective_chat.id, user.id)
+    # افتح مسار العجلة الذهبية فورًا بعد الترحيب. لو فشل تجهيز
+    # الاستكمال، أخبر العميل بدل أن يبقى الترحيب آخر رد ظاهر له.
+    try:
+        await _offer_golden_round(context, update.effective_chat.id, user.id)
+    except Exception:
+        logger.exception("Failed to resume golden round after /start for user %s", user.id)
+        await update.message.reply_text("حصلت مشكلة في استكمال الجولة. جرّب /goldenwheel تاني بعد شوية.")
 
 
 async def program_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -566,7 +571,14 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if payload.get("type") == "golden_select":
-        await _send_golden_question(context, update.effective_chat.id, user.id)
+        try:
+            await _send_golden_question(context, update.effective_chat.id, user.id)
+        except Exception:
+            logger.exception("Failed to continue golden round for user %s", user.id)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="حصلت مشكلة في تجهيز السؤال التالي. جرّب /goldenwheel تاني بعد شوية.",
+            )
         return
 
     if payload.get("type") == "golden_prize_result":
@@ -1124,7 +1136,14 @@ async def golden_wheel_entry(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.callback_query.answer()
     database.set_user_activity_now(user.id)
     chat_id = update.effective_chat.id
-    await _offer_golden_round(context, chat_id, user.id)
+    try:
+        await _offer_golden_round(context, chat_id, user.id)
+    except Exception:
+        logger.exception("Failed to open golden round for user %s", user.id)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="حصلت مشكلة في تجهيز الجولة. جرّب تاني بعد شوية.",
+        )
 
 
 def _build_lucky_wheel_url(spin_id: int, prize: float) -> str | None:
@@ -1246,8 +1265,22 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     answered_count = row["golden_answered_count"] if row else 0
     correct_count = row["golden_opened_count"] if row else 0
     target = row["golden_target"] if row else config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
+    anchor_active = bool(row and int(row["anchor_round_active"] or 0) == 1)
+    required_asins_complete = True
+    if anchor_active:
+        correct_asins = database.list_current_round_correct_asins(
+            user_id, answered_count
+        )
+        required_asins_complete = set(product_catalog.FIRST_ROUND_ASINS).issubset(
+            correct_asins
+        )
+    else:
+        correct_asins = set()
 
-    if answered_count >= target:
+    # A round completes only after five correct answers. Every answered
+    # question already requires a verified product-link click first, so this
+    # also guarantees at least five clicks.
+    if correct_count >= target and required_asins_complete:
         pending = database.get_pending_lucky_spin(user_id)
         if pending:
             spin_id, prize = pending["id"], pending["prize"]
@@ -1265,7 +1298,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"🎉 خلّصت {target} أسئلة، منهم {correct_count} صح.\n"
+                f"🎉 خلّصت الجولة بـ {correct_count} إجابات صحيحة.\n"
                 "دوس عجلة بطاقات الهدايا، وبعد ما تقف افتح صندوق جائزتك:"
             ),
             reply_markup=keyboard,
@@ -1280,7 +1313,16 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         replacement_pool = replacement["pool_type"] if replacement else None
         replacement_epc = replacement["operational_epc"] if replacement else None
         replacement_asin = replacement["source_asin"] if replacement else None
-        base_question_count = database.get_current_golden_base_count(user_id, answered_count)
+        base_question_count = database.get_current_golden_base_count(
+            user_id, answered_count
+        )
+        # A queue created by an older version may have been lost in migration.
+        # Retry a missing required product instead of stalling after question 5.
+        if anchor_active and base_question_count >= len(product_catalog.FIRST_ROUND_ASINS) and not replacement_asin:
+            replacement_asin = next(
+                (asin for asin in product_catalog.FIRST_ROUND_ASINS if asin not in correct_asins),
+                None,
+            )
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
         anchor_round = database.ensure_anchor_round(user_id)
@@ -1311,7 +1353,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         )
         return
 
-    effective_epc = product_catalog.reward_epc_for(product)
+    effective_epc = replacement_epc if replacement_epc is not None else product_catalog.reward_epc_for(product)
     pool_type = product_catalog.pool_type_for(product)
     reward_value = product_catalog.customer_reward_for_epc(effective_epc)
     if round_kind == "bonus":
@@ -1348,8 +1390,13 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         )
     else:
         bonus_label = ""
+    question_label = (
+        f"سؤال تعويضي — الصح {correct_count} من {target}"
+        if answered_count >= target else
+        f"سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}"
+    )
     caption = (
-        bonus_label + f"🏆 سؤال {answered_count + 1} من {target} — الصح حتى الآن: {correct_count}\n"
+        bonus_label + f"🏆 {question_label}\n"
         f"👇 افتح المنتج وشوف تفاصيله، وبعدها اختيارات الإجابة هتظهر هنا\n\n"
         f"{question['prompt']}"
     )
@@ -1402,18 +1449,18 @@ async def golden_answer_callback(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"✅ إجابة صح! ({result['answered_count']}/{result['target']})\n"
-                f"الصح في الجولة: {result['correct_count']}"
+                f"✅ إجابة صحيحة! تقدمك: "
+                f"{result['correct_count']} من {result['target']} منتجات مكتملة."
             ),
         )
     else:
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "للأسف غلط! 😅\n"
-                "🎡 العجلة زعلت شوية وضافتلك سؤالين كمان 😂\n\n"
-                f"بقى عندك **{result['target']} أسئلة** بدل **{result['target'] - 2}** 🎯\n"
-                f"وهدفك الأساسي لسه **{config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND} إجابات صح**."
+                "❌ الإجابة مش صحيحة، والسؤال ده مش هيتحسب في مكافأتك.\n"
+                "لازم تجاوب صح، هنبعت لك سؤالًا جديدًا.\n"
+                f"✅ تقدمك الحالي: {result['correct_count']} من "
+                f"{config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND} منتجات مكتملة."
             ),
         )
 
