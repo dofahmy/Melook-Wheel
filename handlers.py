@@ -1276,13 +1276,17 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         asked_asins = database.list_todays_quizzed_asins(user_id)
         all_seen_asins = database.list_all_quizzed_asins(user_id)
         used_question_types = database.list_used_product_question_types(user_id)
-        replacement_pool = database.get_pending_replacement_pool(user_id)
+        replacement = database.get_pending_replacement_pool(user_id)
+        replacement_pool = replacement["pool_type"] if replacement else None
+        replacement_epc = replacement["operational_epc"] if replacement else None
+        replacement_asin = replacement["source_asin"] if replacement else None
+        base_question_count = database.get_current_golden_base_count(user_id, answered_count)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
         anchor_round = database.ensure_anchor_round(user_id)
         product = product_catalog.choose_product(
             asked_asins,
-            question_index=answered_count,
+            question_index=base_question_count,
             user_id=user_id,
             current_round_epc=current_round_epc,
             all_seen_asins=all_seen_asins,
@@ -1292,6 +1296,8 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
             bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
             used_question_types=used_question_types,
             forced_pool_type=replacement_pool,
+            forced_operational_epc=replacement_epc,
+            forced_asin=replacement_asin,
         )
         question = product_catalog.question_for(
             product,
@@ -1322,6 +1328,7 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         prompt=question["prompt"],
         options=question["options"],
         requires_link_open=True,
+        is_replacement=bool(replacement),
     )
     if replacement_pool:
         database.consume_pending_replacement_pool(user_id)
