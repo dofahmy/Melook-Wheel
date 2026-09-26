@@ -308,6 +308,18 @@ def _product_meta_for_links(links: list[str]) -> dict:
     return {}
 
 
+def _golden_round_ready(user_id: int, row) -> bool:
+    """Prize needs five correct answers, including the required first-round ASINs."""
+    if int(row["golden_opened_count"] or 0) < int(row["golden_target"] or 5):
+        return False
+    if int(row["anchor_round_active"] or 0):
+        correct = database.list_current_round_correct_asins(
+            user_id, int(row["golden_answered_count"] or 0)
+        )
+        return set(product_catalog.FIRST_ROUND_ASINS).issubset(correct)
+    return True
+
+
 def _golden_question_payload(user_id: int, existing=None):
     """Create or restore one web golden question using the same rewards logic as Telegram."""
     if not product_catalog:
@@ -318,14 +330,14 @@ def _golden_question_payload(user_id: int, existing=None):
         raise RuntimeError("الحساب غير موجود")
 
     # لو الجولة خلصت، جهّز نفس لفة الجائزة الشخصية بدل سؤال جديد.
-    if int(row["golden_answered_count"] or 0) >= int(row["golden_target"] or 0):
-        pending = database.get_pending_lucky_spin(user_id)
-        if pending:
-            return {
-                "stage": "prize",
-                "spin_id": int(pending["id"]),
-                "prize": float(pending["prize"] or 0),
-            }
+    pending = database.get_pending_lucky_spin(user_id)
+    if pending:
+        return {
+            "stage": "prize",
+            "spin_id": int(pending["id"]),
+            "prize": float(pending["prize"] or 0),
+        }
+    if _golden_round_ready(user_id, row):
         spin_id, prize, _ = database.create_lucky_spin(
             user_id, float(row["golden_round_earnings"] or 0)
         )
@@ -342,7 +354,7 @@ def _golden_question_payload(user_id: int, existing=None):
             "question_id": int(qrow["id"]),
             "prompt": qrow.get("prompt") or "جاوبي السؤال",
             "options": qrow.get("options") or [],
-            "product_link": qrow.get("product_link") or product_catalog.build_affiliate_link(qrow["asin"]),
+            "product_link": f"/api/app/golden-open?question_id={int(qrow['id'])}",
             "progress": {
                 "answered": int(row["golden_answered_count"] or 0),
                 "correct": int(row["golden_opened_count"] or 0),
@@ -361,12 +373,14 @@ def _golden_question_payload(user_id: int, existing=None):
     all_seen_asins = database.list_all_quizzed_asins(user_id)
     used_question_types = database.list_used_product_question_types(user_id)
     current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
-    replacement_pool = database.get_pending_replacement_pool(user_id)
+    replacement = database.get_pending_replacement_pool(user_id)
+    replacement_pool = replacement["pool_type"] if replacement else None
+    base_question_count = database.get_current_golden_base_count(user_id, answered_count)
     round_kind = database.ensure_current_round_kind(user_id)
     anchor_round = database.ensure_anchor_round(user_id)
     product = product_catalog.choose_product(
         asked_asins,
-        question_index=answered_count,
+        question_index=base_question_count,
         user_id=user_id,
         current_round_epc=current_round_epc,
         all_seen_asins=all_seen_asins,
@@ -376,12 +390,14 @@ def _golden_question_payload(user_id: int, existing=None):
         bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
         used_question_types=used_question_types,
         forced_pool_type=replacement_pool,
+        forced_operational_epc=replacement["operational_epc"] if replacement else None,
+        forced_asin=replacement["source_asin"] if replacement else None,
     )
     question = product_catalog.question_for(
         product,
         excluded_types=used_question_types.get(product.asin, set()),
     )
-    effective_epc = product_catalog.reward_epc_for(product)
+    effective_epc = replacement["operational_epc"] if replacement else product_catalog.reward_epc_for(product)
     pool_type = product_catalog.pool_type_for(product)
     reward_value = product_catalog.customer_reward_for_epc(effective_epc)
     if round_kind == "bonus":
@@ -399,7 +415,8 @@ def _golden_question_payload(user_id: int, existing=None):
         product_link=product_link,
         raw_epc=product.expected_revenue_per_click,
         pool_type=pool_type,
-        requires_link_open=False,
+        requires_link_open=True,
+        is_replacement=bool(replacement),
     )
     if replacement_pool:
         database.consume_pending_replacement_pool(user_id)
@@ -411,7 +428,7 @@ def _golden_question_payload(user_id: int, existing=None):
         "question_id": int(question_id),
         "prompt": question["prompt"],
         "options": question["options"],
-        "product_link": product_link,
+        "product_link": f"/api/app/golden-open?question_id={int(question_id)}",
         "progress": {
             "answered": answered_count,
             "correct": int(row["golden_opened_count"] or 0),
@@ -673,6 +690,29 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        if parsed.path == "/api/app/golden-open":
+            account = self._auth_web()
+            if not account:
+                self._send_json(401, {"ok": False, "error": "محتاج تسجل دخول"})
+                return
+            user_id = int(account["user_id"])
+            try:
+                question_id = int(parse_qs(parsed.query).get("question_id", ["0"])[0])
+            except (TypeError, ValueError):
+                question_id = 0
+            qrow = database.get_golden_question_for_redirect(question_id, user_id)
+            if not qrow or int(qrow["answered"] or 0):
+                self._send_json(404, {"ok": False, "error": "السؤال غير متاح"})
+                return
+            database.mark_golden_link_opened(question_id, user_id)
+            target = product_catalog.build_affiliate_link(str(qrow["asin"]))
+            self.send_response(302)
+            self._security_headers()
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Location", target)
+            self.end_headers()
+            return
+
         # Public web-account API authenticated by session cookie.
         if parsed.path == "/api/app/me":
             account = self._auth_web()
@@ -828,7 +868,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if pending:
                 data = {"stage": "prize", "spin_id": int(pending["id"]), "prize": float(pending["prize"] or 0)}
-            elif int(row["golden_answered_count"] or 0) >= int(row["golden_target"] or 0):
+            elif _golden_round_ready(user_id, row):
                 spin_id, prize, _ = database.create_lucky_spin(user_id, float(row["golden_round_earnings"] or 0))
                 data = {"stage": "prize", "spin_id": spin_id, "prize": float(prize)}
             elif database.get_pending_web_golden_question(user_id):
@@ -1150,7 +1190,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             data = dict(result)
             data["ready_for_prize"] = False
-            if int(result["answered_count"]) >= int(result["target"]):
+            if _golden_round_ready(user_id, database.get_user(user_id)):
                 pending = database.get_pending_lucky_spin(user_id)
                 if pending:
                     spin_id, prize = int(pending["id"]), float(pending["prize"] or 0)
