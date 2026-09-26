@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS users (
     current_round_kind TEXT,
     anchor_round_used INTEGER DEFAULT 0,
     anchor_round_active INTEGER DEFAULT 0,
-    anchor_campaign_version INTEGER DEFAULT 0,
     pending_offer_to_id INTEGER,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
@@ -121,8 +120,6 @@ CREATE TABLE IF NOT EXISTS golden_replacement_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     pool_type TEXT NOT NULL,
-    operational_epc REAL,
-    source_asin TEXT,
     remaining INTEGER NOT NULL DEFAULT 2,
     created_at TEXT NOT NULL
 );
@@ -132,7 +129,6 @@ CREATE TABLE IF NOT EXISTS golden_questions (
     user_id INTEGER NOT NULL,
     asin TEXT NOT NULL,
     question_type TEXT NOT NULL,
-    is_replacement INTEGER DEFAULT 0,
     correct_index INTEGER NOT NULL,
     epc REAL NOT NULL,
     raw_epc REAL,
@@ -298,10 +294,6 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN current_round_kind TEXT",
     "ALTER TABLE users ADD COLUMN anchor_round_used INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN anchor_round_active INTEGER DEFAULT 0",
-    "ALTER TABLE users ADD COLUMN anchor_campaign_version INTEGER DEFAULT 0",
-    "ALTER TABLE golden_replacement_queue ADD COLUMN operational_epc REAL",
-    "ALTER TABLE golden_replacement_queue ADD COLUMN source_asin TEXT",
-    "ALTER TABLE golden_questions ADD COLUMN is_replacement INTEGER DEFAULT 0",
 ]
 @contextmanager
 def get_conn():
@@ -331,21 +323,6 @@ def init_db():
         conn.execute("PRAGMA wal_autocheckpoint = 1000")
         conn.execute("PRAGMA mmap_size = 268435456")
         existing_user_columns = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
-        existing_replacement_columns = {
-            r["name"] for r in conn.execute(
-                "PRAGMA table_info(golden_replacement_queue)"
-            ).fetchall()
-        }
-        starts_new_anchor_campaign = bool(
-            existing_user_columns and "anchor_campaign_version" not in existing_user_columns
-        )
-        starts_exact_replacement_epc = bool(
-            existing_replacement_columns
-            and (
-                "operational_epc" not in existing_replacement_columns
-                or "source_asin" not in existing_replacement_columns
-            )
-        )
         conn.executescript(SCHEMA)
         if existing_user_columns and "first_round_bonus_used" not in existing_user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN first_round_bonus_used INTEGER DEFAULT 0")
@@ -355,15 +332,6 @@ def init_db():
                 conn.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # العمود موجود بالفعل
-        if starts_new_anchor_campaign:
-            # Do this exactly once when campaign v2 is deployed. Anyone in the
-            # old anchor campaign starts the new five-product round only after
-            # reaching a clean round boundary.
-            conn.execute("UPDATE users SET anchor_round_active=0")
-        if starts_exact_replacement_epc:
-            # Legacy queue rows know only a broad brand pool, not the exact
-            # value owed. Drop only those pending replacements on migration.
-            conn.execute("DELETE FROM golden_replacement_queue")
         # أي مستخدمين أو تاجات قديمة من قبل دعم البرامج، اعتبريها ksa تلقائيًا
         conn.execute("UPDATE users SET program = 'egypt' WHERE program IS NULL")
         # تصحيح بيانات قديمة: أي حد ماسك تاج بالفعل بس معندوش تصنيف
@@ -1402,19 +1370,15 @@ def ensure_current_round_kind(user_id: int) -> str:
         conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
         return kind
 
-ANCHOR_CAMPAIGN_VERSION = 6
-
-
 def ensure_anchor_round(user_id: int) -> bool:
-    """Activate campaign v2 once for every old or new account at a boundary."""
+    """Activates the one-time rollout round only at a clean round boundary."""
     with get_conn() as conn:
         u = conn.execute(
-            """SELECT golden_answered_count, anchor_round_active,
-                      anchor_campaign_version
+            """SELECT golden_answered_count, anchor_round_used, anchor_round_active
                FROM users WHERE user_id=?""",
             (int(user_id),),
         ).fetchone()
-        if not u or int(u["anchor_campaign_version"] or 0) >= ANCHOR_CAMPAIGN_VERSION:
+        if not u or int(u["anchor_round_used"] or 0) == 1:
             return False
         if int(u["anchor_round_active"] or 0) == 1:
             return True
@@ -1437,10 +1401,9 @@ def get_bonus_target_epc() -> float:
 MAX_CACHED_GOLDEN_DEALS = 50
 GOLDEN_TARGET_COUNT = config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
 
-# ---------- عجلة الحظ (Lucky Wheel) - تثبيت جائزة الجولة المحسوبة ----------
-# القيم القديمة أدناه متروكة للتوافق مع جدول المخزون القديم فقط. الجائزة الجديدة
-# تؤخذ مباشرة من golden_round_earnings، والتي تُحسب باستخدام
-# EGYPT_CUSTOMER_REWARD_RATE ومن الإجابات الصحيحة فقط.
+# ---------- عجلة الحظ (Lucky Wheel) - اختيار الجايزة من الـ backend ----------
+# 20% of a 0.43 EGP operational round = exactly 0.086 EGP on average.
+# The 100-spin inventory makes that average deterministic, not merely likely.
 LUCKY_WHEEL_PRIZES = [0.04, 0.06, 0.08, 0.12, 0.20, 0.40]
 LUCKY_WHEEL_WEIGHTS = [30, 20, 25, 15, 8, 2]
 LUCKY_WHEEL_POOL_SIZE = 100
@@ -1448,12 +1411,12 @@ LUCKY_WHEEL_POOL_SIZE = 100
 
 def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, float, int]:
     """
-    تثبت جائزة العجلة على مكسب الجولة المحسوب فعليًا.
-    أول جولة تظل 2 جنيه لأن complete_golden_question يثبتها قبل إنشاء اللفة.
-    الجولة التحفيزية تصل هنا بعد تطبيق المضاعف على مكافآت أسئلتها، لذلك لا
-    نضربها مرة ثانية.
+    تختار جائزة Server-side من مخزون 100 جولة موزع بالنسب المتفق عليها.
+    أول جولة تظل 2 جنيه، والجولة التحفيزية تضرب الجائزة المسحوبة في المضاعف.
+    كل جائزة تقل من المخزون حتى ينتهي ثم يبدأ مخزون جديد تلقائيًا.
     بترجع (spin_id, prize, prize_index).
     """
+    import secrets
     with get_conn() as conn:
         existing = conn.execute(
             """SELECT * FROM lucky_spins WHERE user_id = ? AND status = 'pending'
@@ -1464,19 +1427,48 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
             return existing["id"], existing["prize"], existing["prize_index"]
 
         u = conn.execute(
-            """SELECT current_round_kind, normal_rounds_since_bonus,
-                      golden_round_earnings
-               FROM users WHERE user_id=?""",
+            "SELECT current_round_kind, normal_rounds_since_bonus FROM users WHERE user_id=?",
             (user_id,),
         ).fetchone()
         kind = str(u["current_round_kind"] or "normal") if u else "normal"
-        calculated_prize = (
-            prize
-            if prize is not None
-            else (u["golden_round_earnings"] if u else 0.0)
-        )
-        selected_prize = round(max(float(calculated_prize or 0), 0.0), 6)
-        prize_index = 0
+
+        # The one-time welcome round remains exactly 2 EGP and does not consume
+        # the normal 100-spin inventory.
+        if kind == "welcome":
+            selected_prize = round(max(float(prize if prize is not None else 2.0), 0), 6)
+            prize_index = 0
+        else:
+            pool = conn.execute(
+                "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
+            ).fetchall()
+            total_remaining = sum(int(p["remaining"] or 0) for p in pool)
+
+            if total_remaining <= 0:
+                conn.execute("UPDATE lucky_wheel_pool SET remaining = total")
+                pool = conn.execute(
+                    "SELECT * FROM lucky_wheel_pool ORDER BY prize_index"
+                ).fetchall()
+                total_remaining = sum(int(p["remaining"] or 0) for p in pool)
+
+            draw = secrets.randbelow(total_remaining)
+            cumulative = 0
+            chosen = pool[-1]
+            for pool_item in pool:
+                cumulative += int(pool_item["remaining"] or 0)
+                if draw < cumulative:
+                    chosen = pool_item
+                    break
+
+            conn.execute(
+                "UPDATE lucky_wheel_pool SET remaining = remaining - 1 WHERE prize_index = ?",
+                (chosen["prize_index"],),
+            )
+            base_prize = float(chosen["prize"] or 0)
+            selected_prize = round(
+                base_prize * (float(_setting_value(conn, "bonus_multiplier", "2.0")) if kind == "bonus" else 1.0),
+                6,
+            )
+            prize_index = int(chosen["prize_index"])
 
         cur = conn.execute(
             "INSERT INTO lucky_spins (user_id, prize, prize_index, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
@@ -1501,9 +1493,8 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
                golden_answered_count = 0, golden_round_earnings = 0,
                golden_target = ?, current_round_kind=NULL,
                anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
-               anchor_campaign_version = CASE WHEN anchor_round_active=1 THEN ? ELSE anchor_campaign_version END,
                anchor_round_active = 0 WHERE user_id = ?""",
-            (GOLDEN_TARGET_COUNT, ANCHOR_CAMPAIGN_VERSION, user_id),
+            (GOLDEN_TARGET_COUNT, user_id),
         )
         return cur.lastrowid, selected_prize, prize_index
 
@@ -1597,66 +1588,15 @@ def list_used_product_question_types(user_id: int) -> dict[str, set[str]]:
     return used
 
 
-def get_pending_replacement_pool(user_id: int) -> dict | None:
-    """Oldest replacement owed, including its exact operational EPC."""
+def get_pending_replacement_pool(user_id: int) -> str | None:
+    """Oldest wrong-answer replacement pool still owed to the customer."""
     with get_conn() as conn:
         row = conn.execute(
-            """SELECT pool_type, operational_epc, source_asin
-               FROM golden_replacement_queue
+            """SELECT pool_type FROM golden_replacement_queue
                WHERE user_id=? AND remaining>0 ORDER BY id LIMIT 1""",
             (int(user_id),),
         ).fetchone()
-    if not row:
-        return None
-    return {
-        "pool_type": str(row["pool_type"] or "other"),
-        "operational_epc": float(row["operational_epc"] or 0.0),
-        "source_asin": str(row["source_asin"] or "").strip().upper(),
-    }
-
-
-def list_current_round_correct_asins(user_id: int, answered_count: int | None = None) -> set[str]:
-    """Distinct ASINs answered correctly in the customer's current round."""
-    if answered_count is None:
-        user = get_user(user_id)
-        answered_count = int(user["golden_answered_count"] or 0) if user else 0
-    count = max(0, int(answered_count or 0))
-    if count == 0:
-        return set()
-    with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT asin, was_correct FROM (
-                   SELECT asin, was_correct FROM golden_questions
-                   WHERE user_id=? AND answered=1
-                   ORDER BY id DESC LIMIT ?
-               )""",
-            (int(user_id), count),
-        ).fetchall()
-    return {
-        str(row["asin"] or "").strip().upper()
-        for row in rows if int(row["was_correct"] or 0) == 1
-    }
-
-
-def get_current_golden_base_count(user_id: int, answered_count: int | None = None) -> int:
-    """Answered base questions in this round; replacements do not advance it."""
-    if answered_count is None:
-        user = get_user(user_id)
-        answered_count = int(user["golden_answered_count"] or 0) if user else 0
-    count = max(0, int(answered_count or 0))
-    if count == 0:
-        return 0
-    with get_conn() as conn:
-        row = conn.execute(
-            """SELECT COALESCE(SUM(CASE WHEN COALESCE(is_replacement,0)=0 THEN 1 ELSE 0 END),0) AS n
-               FROM (
-                   SELECT is_replacement FROM golden_questions
-                   WHERE user_id=? AND answered=1
-                   ORDER BY id DESC LIMIT ?
-               )""",
-            (int(user_id), count),
-        ).fetchone()
-    return int(row["n"] or 0)
+    return str(row["pool_type"]) if row else None
 
 
 def consume_pending_replacement_pool(user_id: int) -> None:
@@ -1731,9 +1671,8 @@ def reset_golden_progress(user_id: int):
             """UPDATE users SET golden_opened_count = 0, golden_answered_count = 0,
                golden_round_earnings = 0, golden_target = ?,
                anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
-               anchor_campaign_version = CASE WHEN anchor_round_active=1 THEN ? ELSE anchor_campaign_version END,
                anchor_round_active = 0 WHERE user_id = ?""",
-            (GOLDEN_TARGET_COUNT, ANCHOR_CAMPAIGN_VERSION, user_id),
+            (GOLDEN_TARGET_COUNT, user_id),
         )
 
 
@@ -1769,7 +1708,6 @@ def create_golden_question(
     raw_epc: float | None = None,
     pool_type: str = "main",
     requires_link_open: bool = False,
-    is_replacement: bool = False,
 ) -> int:
     """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل.
 
@@ -1781,8 +1719,8 @@ def create_golden_question(
             """INSERT INTO golden_questions
                (user_id, asin, question_type, correct_index, epc, reward_value,
                 prompt, options_json, product_link, raw_epc, pool_type,
-                requires_link_open, is_replacement, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                requires_link_open, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 asin,
@@ -1796,7 +1734,6 @@ def create_golden_question(
                 float(raw_epc if raw_epc is not None else epc),
                 str(pool_type or "main"),
                 1 if requires_link_open else 0,
-                1 if is_replacement else 0,
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -1844,29 +1781,28 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
             (is_correct, datetime.utcnow().isoformat(), question_id),
         )
         if not is_correct:
-            # A wrong answer earns zero and adds one replacement at the exact
-            # same operational EPC. The round ends only after five correct.
+            # Each wrong answer adds two questions from the same operational
+            # price pool. The question itself remains stored but earns nothing.
             conn.execute(
                 """INSERT INTO golden_replacement_queue
-                   (user_id, pool_type, operational_epc, source_asin, remaining, created_at)
-                   VALUES (?, ?, ?, ?, 1, ?)""",
+                   (user_id, pool_type, remaining, created_at) VALUES (?, ?, 2, ?)""",
                 (
                     int(user_id),
                     str(question["pool_type"] or "other"),
-                    float(question["epc"] or 0.0),
-                    str(question["asin"] or "").strip().upper(),
                     datetime.utcnow().isoformat(),
                 ),
             )
-        # golden_target is the required correct-answer count. Wrong answers do
-        # not increase it and do not move the customer closer to completion.
+        # golden_target = إجمالي عدد الأسئلة المطلوب إكمالها في الجولة.
+        # يبدأ بـ 5، وكل إجابة غلط تضيف سؤالين كعقوبة.
+        # عدد الإجابات الصح المطلوب لا يتغير؛ يظل الهدف الأساسي 5.
         conn.execute(
             """UPDATE users SET
                golden_answered_count = golden_answered_count + 1,
                golden_opened_count = golden_opened_count + ?,
-               golden_round_earnings = golden_round_earnings + ?
+               golden_round_earnings = golden_round_earnings + ?,
+               golden_target = golden_target + CASE WHEN ? = 0 THEN 2 ELSE 0 END
                WHERE user_id = ?""",
-            (is_correct, contribution, user_id),
+            (is_correct, contribution, is_correct, user_id),
         )
         progress = conn.execute(
             """SELECT golden_answered_count, golden_opened_count,
@@ -2329,24 +2265,20 @@ def normalize_golden_question_epc(priority_asins, customer_reward_rate: float):
 
 def get_admin_product_report(period: str = "all", date_from: str | None = None,
                              date_to: str | None = None) -> list[dict]:
-    """All product appearances grouped by ASIN; revenue still uses correct answers only."""
+    """Correct-answer clicks grouped by ASIN; wrong answers never contribute."""
     q_where, q_params = _period_where("created_at", period, date_from, date_to)
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT asin,
-                   COUNT(*) AS appearances,
-                   SUM(CASE WHEN link_opened_at IS NOT NULL THEN 1 ELSE 0 END) AS link_opens,
-                   SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS views,
-                   SUM(CASE WHEN answered=1 AND COALESCE(was_correct,0)=0 THEN 1 ELSE 0 END) AS wrong_views,
-                   SUM(CASE WHEN answered=0 THEN 1 ELSE 0 END) AS unanswered_views,
+                   COUNT(*) AS views,
                    COUNT(DISTINCT user_id) AS customers,
-                   COALESCE(AVG(CASE WHEN answered=1 AND was_correct=1 THEN raw_epc END),0) AS advertised_epc,
-                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN raw_epc ELSE 0 END),0) AS advertised_epc_total,
-                   COALESCE(AVG(CASE WHEN answered=1 AND was_correct=1 THEN epc END),0) AS calculated_epc,
-                   COALESCE(SUM(CASE WHEN answered=1 AND was_correct=1 THEN epc ELSE 0 END),0) AS calculated_total,
+                   COALESCE(AVG(raw_epc),0) AS advertised_epc,
+                   COALESCE(SUM(raw_epc),0) AS advertised_epc_total,
+                   COALESCE(AVG(epc),0) AS calculated_epc,
+                   COALESCE(SUM(epc),0) AS calculated_total,
                    MAX(created_at) AS last_seen_at
             FROM golden_questions
-            WHERE {q_where}
+            WHERE answered=1 AND was_correct=1 AND {q_where}
             GROUP BY asin
             ORDER BY calculated_total DESC, asin
         """, q_params).fetchall()
