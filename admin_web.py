@@ -1310,6 +1310,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "data": {"blocked": count}})
             return
 
+        if parsed.path == "/api/admin/channel-bans/unblock":
+            all_reviewed = payload.get("all") is True
+            expected = "UNBLOCK_ALL" if all_reviewed else "UNBLOCK_SELECTED"
+            if payload.get("confirm") != expected:
+                self._send_json(400, {"ok": False, "error": "يجب تأكيد فك الحظر"})
+                return
+            ids = payload.get("user_ids") if not all_reviewed else None
+            try:
+                count = database.unblock_reviewed_users(ids, all_reviewed=all_reviewed)
+            except (TypeError, ValueError) as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+                return
+            database.add_admin_audit(admin_id, "unblock_channel_bans", "customers", count,
+                                     {"all": all_reviewed, "source": "@EgyptOffersHunter"})
+            self._send_json(200, {"ok": True, "data": {"unblocked": count}})
+            return
+
         if parsed.path == "/api/admin/bonus-settings":
             try:
                 data = database.update_bonus_settings(

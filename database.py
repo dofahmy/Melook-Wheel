@@ -3759,6 +3759,28 @@ def block_reviewed_users(user_ids: list[int], admin_id: int) -> int:
         return cursor.rowcount
 
 
+def unblock_reviewed_users(user_ids: list[int] | None = None, all_reviewed: bool = False) -> int:
+    """Remove WafrCash restrictions without touching balances, accounts or channel bans."""
+    with get_conn() as conn:
+        if all_reviewed:
+            result = conn.execute("""UPDATE channel_ban_review
+                SET blocked_at=NULL, blocked_by=NULL WHERE blocked_at IS NOT NULL""")
+            return result.rowcount
+        if not isinstance(user_ids, list) or not 0 < len(user_ids) <= 10000:
+            raise ValueError("حددي عميلًا واحدًا على الأقل")
+        if any(isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0
+               for value in user_ids):
+            raise ValueError("فيه Telegram ID غير صحيح")
+        ids = sorted({int(value) for value in user_ids})
+        markers = ",".join("?" for _ in ids)
+        found = conn.execute(f"SELECT user_id FROM channel_ban_review WHERE user_id IN ({markers})", ids).fetchall()
+        if len(found) != len(ids):
+            raise ValueError("بعض العملاء مش موجودين في قائمة المراجعة")
+        result = conn.execute(f"""UPDATE channel_ban_review SET blocked_at=NULL, blocked_by=NULL
+            WHERE user_id IN ({markers}) AND blocked_at IS NOT NULL""", ids)
+        return result.rowcount
+
+
 def mark_welcome_check_sent(user_id: int):
     with get_conn() as conn:
         conn.execute("UPDATE users SET welcome_check_sent_at=? WHERE user_id=?",
