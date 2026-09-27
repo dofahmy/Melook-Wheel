@@ -61,6 +61,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS channel_ban_review (
+    user_id INTEGER PRIMARY KEY,
+    source TEXT NOT NULL,
+    channel_username TEXT,
+    display_name TEXT,
+    imported_at TEXT NOT NULL,
+    blocked_at TEXT,
+    blocked_by INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     keyword TEXT NOT NULL UNIQUE,
@@ -3678,6 +3688,71 @@ def set_telegram_delivery_status(user_id: int, status: str, error: str | None = 
         else:
             conn.execute("""UPDATE users SET last_message_status='failed', last_message_error=?,
                          last_message_at=? WHERE user_id=?""", ((error or "")[:500], now, int(user_id)))
+
+
+def import_channel_ban_review(rows: list[dict], source: str = "@EgyptOffersHunter") -> int:
+    """Stage channel bans for review; never block users during import."""
+    if not isinstance(rows, list) or len(rows) > 10000:
+        raise ValueError("قائمة المحظورين غير صالحة أو كبيرة جدًا")
+    unique = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("ملف المحظورين غير صحيح")
+        value = row.get("user_id")
+        if isinstance(value, bool) or not str(value).isdigit():
+            raise ValueError("فيه Telegram ID غير صحيح")
+        user_id = int(value)
+        if not 0 < user_id < 2**53:
+            raise ValueError("فيه Telegram ID غير صحيح")
+        unique[user_id] = (str(row.get("username") or "")[:100], str(row.get("name") or "")[:200])
+    if not unique:
+        raise ValueError("ملف المحظورين فاضي")
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.executemany("""INSERT INTO channel_ban_review
+            (user_id, source, channel_username, display_name, imported_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET source=excluded.source,
+            channel_username=excluded.channel_username,
+            display_name=excluded.display_name, imported_at=excluded.imported_at""",
+            [(uid, source, username, name, now) for uid, (username, name) in unique.items()])
+    return len(unique)
+
+
+def list_channel_ban_review() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute("""SELECT b.user_id, b.channel_username, b.display_name,
+            b.imported_at, b.blocked_at, u.username AS wafr_username,
+            u.joined_at, u.gift_balance,
+            CASE WHEN u.user_id IS NOT NULL THEN 1 ELSE 0 END AS in_wafr_cash
+            FROM channel_ban_review b LEFT JOIN users u ON u.user_id=b.user_id
+            ORDER BY (b.blocked_at IS NOT NULL), in_wafr_cash DESC, b.user_id""").fetchall()
+        return [dict(row) for row in rows]
+
+
+def is_user_blocked(user_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT 1 FROM channel_ban_review WHERE user_id=? AND blocked_at IS NOT NULL",
+                           (int(user_id),)).fetchone()
+        return row is not None
+
+
+def block_reviewed_users(user_ids: list[int], admin_id: int) -> int:
+    """Block only IDs already present in the staged review list."""
+    if not isinstance(user_ids, list) or not 0 < len(user_ids) <= 10000:
+        raise ValueError("حددي عميلًا واحدًا على الأقل")
+    ids = sorted(set(int(x) for x in user_ids if str(x).isdigit() and int(x) > 0))
+    if len(ids) != len(set(map(str, user_ids))):
+        raise ValueError("قائمة العملاء غير صحيحة")
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        markers = ",".join("?" for _ in ids)
+        found = conn.execute(f"SELECT user_id FROM channel_ban_review WHERE user_id IN ({markers})", ids).fetchall()
+        if len(found) != len(ids):
+            raise ValueError("بعض العملاء مش موجودين في قائمة المراجعة")
+        cursor = conn.execute(f"""UPDATE channel_ban_review SET blocked_at=?, blocked_by=?
+            WHERE user_id IN ({markers}) AND blocked_at IS NULL""", (now, int(admin_id), *ids))
+        return cursor.rowcount
 
 
 def mark_welcome_check_sent(user_id: int):

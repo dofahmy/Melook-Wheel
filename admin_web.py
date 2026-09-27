@@ -235,6 +235,9 @@ def _run_customer_campaign(campaign_id: int, customers: list[dict], message: str
                            mark_welcome: bool = False, button_web_app: bool = False):
     for customer in customers:
         user_id = int(customer["user_id"])
+        if database.is_user_blocked(user_id):
+            database.record_campaign_delivery(campaign_id, user_id, "blocked", "ممنوع من استخدام وفر كاش")
+            continue
         if str(customer.get("telegram_status") or "unknown") == "blocked":
             database.record_campaign_delivery(campaign_id, user_id, "blocked", "مستبعد: حاظر البوت")
             continue
@@ -606,6 +609,9 @@ class Handler(BaseHTTPRequestHandler):
         account = web_auth.get_account_from_session(self._session_token())
         if account and int(account.get("is_suspended") or 0):
             return None
+        if account and any(database.is_user_blocked(int(account.get(key) or 0))
+                           for key in ("user_id", "telegram_user_id") if account.get(key)):
+            return None
         # Any authenticated Web App request counts as current activity, exactly like
         # a Telegram interaction. This keeps the admin Online indicator unified.
         if account:
@@ -662,6 +668,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 user_id, question_id, supplied_sig = 0, 0, ""
             payload = f"{user_id}:{question_id}"
+            if user_id and database.is_user_blocked(user_id):
+                self._send_json(403, {"ok": False, "error": "الحساب غير متاح"})
+                return
             secret = str(getattr(config, "BOT_TOKEN", "") or "").encode("utf-8")
             expected_sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32] if secret else ""
             if not user_id or not question_id or not expected_sig or not hmac.compare_digest(supplied_sig, expected_sig):
@@ -1075,6 +1084,13 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/session":
             self._send_json(200, {"ok": True, "data": {"authenticated": True}})
             return
+        if parsed.path == "/api/admin/channel-bans":
+            rows = database.list_channel_ban_review()
+            admin_ids = {int(x) for x in (getattr(config, "ADMIN_IDS", []) or [])}
+            for row in rows:
+                row["is_admin"] = int(row["user_id"]) in admin_ids
+            self._send_json(200, {"ok": True, "data": rows})
+            return
         self._send_json(404, {"ok": False, "error": "Not found"})
 
     def do_POST(self):
@@ -1257,6 +1273,41 @@ class Handler(BaseHTTPRequestHandler):
         admin_id = self._auth_admin()
         if not admin_id:
             self._send_json(403, {"ok": False, "error": "غير مسموح"})
+            return
+
+        if parsed.path == "/api/admin/channel-bans/import":
+            if str(payload.get("channel") or "").lower() != "@egyptoffershunter":
+                self._send_json(400, {"ok": False, "error": "اختاري ملف محظوري @EgyptOffersHunter الصحيح"})
+                return
+            try:
+                count = database.import_channel_ban_review(payload.get("banned_users"), "@EgyptOffersHunter")
+            except (TypeError, ValueError) as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+                return
+            database.add_admin_audit(admin_id, "import_channel_bans", "customers", count,
+                                     {"channel": "@EgyptOffersHunter"})
+            self._send_json(200, {"ok": True, "data": {"imported": count}})
+            return
+
+        if parsed.path == "/api/admin/channel-bans/block":
+            ids = payload.get("user_ids")
+            if not isinstance(ids, list) or not ids:
+                self._send_json(400, {"ok": False, "error": "حددي العملاء المطلوب منعهم"})
+                return
+            if any(str(x).isdigit() and int(x) in set(getattr(config, "ADMIN_IDS", []) or []) for x in ids):
+                self._send_json(400, {"ok": False, "error": "لا يمكن منع أدمن البوت من هنا"})
+                return
+            if payload.get("confirm") != "BLOCK_SELECTED":
+                self._send_json(400, {"ok": False, "error": "يجب تأكيد الحظر"})
+                return
+            try:
+                count = database.block_reviewed_users(ids, admin_id)
+            except (TypeError, ValueError) as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
+                return
+            database.add_admin_audit(admin_id, "block_channel_bans", "customers", count,
+                                     {"selected": len(ids), "source": "@EgyptOffersHunter"})
+            self._send_json(200, {"ok": True, "data": {"blocked": count}})
             return
 
         if parsed.path == "/api/admin/bonus-settings":

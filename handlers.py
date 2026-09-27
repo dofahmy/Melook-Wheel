@@ -8,6 +8,7 @@
 مشترك: /stats /listusers /removeuser /broadcast /msg
 """
 import logging
+from functools import wraps
 import json
 import os
 import re
@@ -2152,3 +2153,30 @@ async def linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ " + message + "\nرصيدك ونشاطك بقوا على حساب واحد.")
     else:
         await update.message.reply_text("❌ " + message)
+
+
+def _guard_channel_ban(handler):
+    """Stop a reviewed banned account before any customer command or callback runs."""
+    @wraps(handler)
+    async def guarded(update, context):
+        user = getattr(update, "effective_user", None)
+        if user and database.is_user_blocked(user.id):
+            query = getattr(update, "callback_query", None)
+            if query:
+                await query.answer("حسابك غير متاح في وفر كاش", show_alert=True)
+            elif getattr(getattr(update, "message", None), "text", "") == "/start":
+                await update.message.reply_text("⛔ حسابك غير متاح في وفر كاش.")
+            return
+        return await handler(update, context)
+    return guarded
+
+
+# main.py registers functions from this module. Protect all incoming customer
+# handlers, including web-app data, without changing its polling configuration.
+import inspect as _inspect
+for _handler_name, _handler in list(globals().items()):
+    if (_inspect.iscoroutinefunction(_handler)
+            and not _handler_name.startswith("_")
+            and _handler_name not in ("bot_membership_update", "handle_new_golden_post", "handle_new_deal_post")
+            and getattr(_handler, "__module__", None) == __name__):
+        globals()[_handler_name] = _guard_channel_ban(_handler)
