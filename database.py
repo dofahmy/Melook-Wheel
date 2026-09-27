@@ -2369,6 +2369,43 @@ def get_admin_product_report(period: str = "all", date_from: str | None = None,
         return [dict(row) for row in rows]
 
 
+def get_admin_product_link_customers(asin: str, period: str = "all",
+                                     date_from: str | None = None,
+                                     date_to: str | None = None) -> list[dict]:
+    """One row per customer who opened this product link in the report period.
+
+    The IP is the customer's last recorded IP, not necessarily their IP at click time.
+    """
+    q_where, q_params = _period_where("q.created_at", period, date_from, date_to)
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            WITH clicked AS (
+                SELECT q.user_id, COUNT(*) AS link_opens,
+                       MIN(q.link_opened_at) AS first_opened_at,
+                       MAX(q.link_opened_at) AS last_opened_at
+                FROM golden_questions q
+                WHERE q.asin=? AND q.link_opened_at IS NOT NULL AND {q_where}
+                GROUP BY q.user_id
+            )
+            SELECT c.user_id, u.username, u.first_name, u.joined_at,
+                   c.link_opens, c.first_opened_at, c.last_opened_at,
+                   COALESCE(wa.last_ip,u.last_ip) AS last_ip,
+                   geo.city AS ip_city, geo.region AS ip_region,
+                   geo.country AS ip_country, geo.status AS ip_geo_status,
+                   COALESCE(s.spin_count,0) AS spin_count
+            FROM clicked c
+            LEFT JOIN users u ON u.user_id=c.user_id
+            LEFT JOIN web_accounts wa ON wa.user_id=c.user_id
+            LEFT JOIN ip_geolocation_cache geo ON geo.ip_address=COALESCE(wa.last_ip,u.last_ip)
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS spin_count
+                FROM lucky_spins GROUP BY user_id
+            ) s ON s.user_id=c.user_id
+            ORDER BY c.first_opened_at DESC, c.user_id
+        """, (asin, *q_params)).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_customer_reports(period: str = "all", search: str = "", limit: int = 200, offset: int = 0,
                           date_from: str | None = None, date_to: str | None = None,
                           sort_key: str = "online", sort_dir: str = "desc"):

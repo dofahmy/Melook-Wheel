@@ -941,6 +941,15 @@ class Handler(BaseHTTPRequestHandler):
                 row["title"] = product.title if product else ""
             self._send_json(200, {"ok": True, "data": rows})
             return
+        if parsed.path == "/api/admin/product-link-customers":
+            asin = (qs.get("asin", [""])[0] or "").strip().upper()
+            if len(asin) != 10 or not asin.isascii() or not asin.isalnum():
+                self._send_json(400, {"ok": False, "error": "ASIN غير صحيح"})
+                return
+            rows = database.get_admin_product_link_customers(asin, period, date_from, date_to)
+            _schedule_ip_locations(rows)
+            self._send_json(200, {"ok": True, "data": rows})
+            return
         if parsed.path == "/api/admin/bonus-settings":
             settings = database.get_bonus_settings()
             settings.update({
