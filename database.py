@@ -2377,6 +2377,7 @@ def get_admin_product_report(period: str = "all", date_from: str | None = None,
             SELECT asin,
                    COUNT(*) AS appearances,
                    SUM(CASE WHEN link_opened_at IS NOT NULL THEN 1 ELSE 0 END) AS link_opens,
+                   COUNT(DISTINCT CASE WHEN link_opened_at IS NOT NULL THEN user_id END) AS unique_link_customers,
                    SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS views,
                    SUM(CASE WHEN answered=1 AND COALESCE(was_correct,0)=0 THEN 1 ELSE 0 END) AS wrong_views,
                    SUM(CASE WHEN answered=0 THEN 1 ELSE 0 END) AS unanswered_views,
@@ -2391,6 +2392,43 @@ def get_admin_product_report(period: str = "all", date_from: str | None = None,
             GROUP BY asin
             ORDER BY calculated_total DESC, asin
         """, q_params).fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_admin_product_link_customers(asin: str, period: str = "all",
+                                     date_from: str | None = None,
+                                     date_to: str | None = None) -> list[dict]:
+    """One row per customer who opened a product link in the report period.
+
+    Last known IP may differ from the IP used for an individual link click.
+    """
+    q_where, q_params = _period_where("q.created_at", period, date_from, date_to)
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            WITH clicked AS (
+                SELECT q.user_id, COUNT(*) AS link_opens,
+                       MIN(q.link_opened_at) AS first_opened_at,
+                       MAX(q.link_opened_at) AS last_opened_at
+                FROM golden_questions q
+                WHERE q.asin=? AND q.link_opened_at IS NOT NULL AND {q_where}
+                GROUP BY q.user_id
+            )
+            SELECT c.user_id, u.username, u.first_name, u.joined_at,
+                   c.link_opens, c.first_opened_at, c.last_opened_at,
+                   COALESCE(wa.last_ip,u.last_ip) AS last_ip,
+                   geo.city AS ip_city, geo.region AS ip_region,
+                   geo.country AS ip_country, geo.status AS ip_geo_status,
+                   COALESCE(s.spin_count,0) AS spin_count
+            FROM clicked c
+            LEFT JOIN users u ON u.user_id=c.user_id
+            LEFT JOIN web_accounts wa ON wa.user_id=c.user_id
+            LEFT JOIN ip_geolocation_cache geo ON geo.ip_address=COALESCE(wa.last_ip,u.last_ip)
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS spin_count
+                FROM lucky_spins GROUP BY user_id
+            ) s ON s.user_id=c.user_id
+            ORDER BY c.first_opened_at DESC, c.user_id
+        """, (asin, *q_params)).fetchall()
         return [dict(row) for row in rows]
 
 
