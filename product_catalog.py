@@ -28,6 +28,7 @@ class CatalogProduct:
     expected_revenue_per_click: float
     operational_epc: float
     image_url: str | None
+    daily_priority: int | None = None
 
 
 _products: list[CatalogProduct] | None = None
@@ -50,11 +51,11 @@ NESCAFE_DENSE_ASINS = {
 # One new rollout round for every account, old or new.  Keep the order because
 # it is based on observed Amazon EPC rather than the catalog's advertised EPC.
 FIRST_ROUND_ASINS = (
-    "B08Z42WY7T",  # Nescafe Mix 2-in-1: 1.55 actual EPC
-    "B08WJPZJFH",  # Nescafe Gold 3-in-1: 1.40 actual EPC
-    "B0017IMON0",  # Nivea 3-in-1 shower gel: 1.00 historical actual EPC
-    "B0B2DPPLMW",  # Tide automatic gel: 0.30 actual EPC
-    "B09VFKCY35",  # Fairy liquid: 0.15 actual EPC
+    "B0B2DPPLMW",  # Tide, observed 16.00 EGP EPC in the supplied report
+    "B09VFKCY35",  # Fairy, observed 16.93 EGP EPC in the supplied report
+    "B08WJMZM7W",  # Sharp air conditioner, observed 19.35 EGP EPC
+    "B0BF5BVRZC",  # Pampers, newly listed with High budget
+    "B0BBG7W98Z",  # Sika, budget increased from Low to High
 )
 
 # Product-level evidence only: no brand is promoted as a whole.  Base questions
@@ -232,6 +233,10 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             discount = round((old_price - price) / old_price * 100, 2)
 
         brand = str(item.get("asinBrand") or "").strip()
+        selection = item.get("dailySelection") or {}
+        daily_priority = selection.get("rotationPriority")
+        if not isinstance(daily_priority, int) or daily_priority < 0:
+            daily_priority = None
         if asin in PRODUCT_OPERATIONAL_EPC:
             operational_epc = PRODUCT_OPERATIONAL_EPC[asin]
         elif _is_gillette(brand, title):
@@ -251,6 +256,7 @@ def load_products(force: bool = False) -> list[CatalogProduct]:
             expected_revenue_per_click=epc,
             operational_epc=operational_epc,
             image_url=item.get("imageUrl"),
+            daily_priority=daily_priority,
         ))
 
     loaded_asins = {product.asin for product in loaded}
@@ -411,8 +417,24 @@ def choose_product(
         best = [p for p in candidates if _remaining_type_count(p, used) == max_remaining]
         return random.choice(best)
 
-    # Permanent post-rollout policy: maximize expected total using only ASINs
-    # with observed results. Exhaust distinct question types before recycling.
+    # Today's high-budget, >=5 EGP expected EPC products, ordered by the
+    # comparison script. Give unseen products a turn before repeating a
+    # product with another question type. Wrong answers are handled above.
+    if forced_pool_type is None and any(p.daily_priority is not None for p in catalog):
+        candidates = [p for p in catalog if p.daily_priority is not None
+                      and _remaining_type_count(p, used) > 0]
+        if not candidates:
+            raise ValueError("انتهت أنواع الأسئلة المتاحة في قائمة منتجات اليوم")
+        excluded = set(excluded_asins or set())
+        fresh = [p for p in candidates if p.asin not in excluded]
+        if fresh:
+            candidates = fresh
+        unseen = [p for p in candidates if p.asin not in (all_seen_asins or set())]
+        if unseen:
+            candidates = unseen
+        return min(candidates, key=lambda p: (p.daily_priority, p.asin))
+
+    # Compatibility with catalogs created before daily selection was added.
     if forced_pool_type is None:
         candidates = [p for p in proven_products if _remaining_type_count(p, used) > 0]
         if not candidates:

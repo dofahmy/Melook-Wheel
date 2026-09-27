@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
     anchor_round_used INTEGER DEFAULT 0,
     anchor_round_active INTEGER DEFAULT 0,
     anchor_campaign_version INTEGER DEFAULT 0,
+    anchor_campaign_deferred INTEGER DEFAULT 0,
     pending_offer_to_id INTEGER,
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
@@ -299,6 +300,7 @@ _MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN anchor_round_used INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN anchor_round_active INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN anchor_campaign_version INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN anchor_campaign_deferred INTEGER DEFAULT 0",
     "ALTER TABLE golden_replacement_queue ADD COLUMN operational_epc REAL",
     "ALTER TABLE golden_replacement_queue ADD COLUMN source_asin TEXT",
     "ALTER TABLE golden_questions ADD COLUMN is_replacement INTEGER DEFAULT 0",
@@ -355,6 +357,25 @@ def init_db():
                 conn.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # العمود موجود بالفعل
+        # Start the new five-product campaign once per account.  An account
+        # already in a round keeps its current questions until the round ends.
+        # This setting makes the migration idempotent on Railway restarts.
+        installed_anchor_version = int(_setting_value(
+            conn, "first_round_campaign_config_version", "6"
+        ))
+        if installed_anchor_version < ANCHOR_CAMPAIGN_VERSION:
+            conn.execute(
+                """UPDATE users SET anchor_campaign_deferred=1,
+                   anchor_round_active=0 WHERE anchor_round_active=1"""
+            )
+            conn.execute(
+                """INSERT INTO app_settings(setting_key, setting_value, updated_at)
+                   VALUES('first_round_campaign_config_version', ?, ?)
+                   ON CONFLICT(setting_key) DO UPDATE SET
+                   setting_value=excluded.setting_value,
+                   updated_at=excluded.updated_at""",
+                (str(ANCHOR_CAMPAIGN_VERSION), datetime.utcnow().isoformat()),
+            )
         # Older code raised the target by two for every wrong answer.
         # The current rule is always five correct answers, even mid-round.
         conn.execute(
@@ -1408,14 +1429,15 @@ def ensure_current_round_kind(user_id: int) -> str:
         conn.execute("UPDATE users SET current_round_kind=? WHERE user_id=?", (kind, int(user_id)))
         return kind
 
-ANCHOR_CAMPAIGN_VERSION = 6
+ANCHOR_CAMPAIGN_VERSION = 7
 
 
 def ensure_anchor_round(user_id: int) -> bool:
-    """Activate campaign v2 once for every old or new account at a boundary."""
+    """Activate today's five-product campaign once for every account at a boundary."""
     with get_conn() as conn:
         u = conn.execute(
             """SELECT golden_answered_count, anchor_round_active,
+                      anchor_campaign_deferred,
                       anchor_campaign_version
                FROM users WHERE user_id=?""",
             (int(user_id),),
@@ -1424,6 +1446,8 @@ def ensure_anchor_round(user_id: int) -> bool:
             return False
         if int(u["anchor_round_active"] or 0) == 1:
             return True
+        if int(u["anchor_campaign_deferred"] or 0) == 1:
+            return False
         if int(u["golden_answered_count"] or 0) != 0:
             return False
         conn.execute(
@@ -1517,7 +1541,8 @@ def create_lucky_spin(user_id: int, prize: float | None = None) -> tuple[int, fl
                golden_target = ?, current_round_kind=NULL,
                anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
                anchor_campaign_version = CASE WHEN anchor_round_active=1 THEN ? ELSE anchor_campaign_version END,
-               anchor_round_active = 0 WHERE user_id = ?""",
+               anchor_round_active = 0, anchor_campaign_deferred = 0
+               WHERE user_id = ?""",
             (GOLDEN_TARGET_COUNT, ANCHOR_CAMPAIGN_VERSION, user_id),
         )
         return cur.lastrowid, selected_prize, prize_index
@@ -1747,7 +1772,8 @@ def reset_golden_progress(user_id: int):
                golden_round_earnings = 0, golden_target = ?,
                anchor_round_used = CASE WHEN anchor_round_active=1 THEN 1 ELSE anchor_round_used END,
                anchor_campaign_version = CASE WHEN anchor_round_active=1 THEN ? ELSE anchor_campaign_version END,
-               anchor_round_active = 0 WHERE user_id = ?""",
+               anchor_round_active = 0, anchor_campaign_deferred = 0
+               WHERE user_id = ?""",
             (GOLDEN_TARGET_COUNT, ANCHOR_CAMPAIGN_VERSION, user_id),
         )
 
@@ -2351,7 +2377,6 @@ def get_admin_product_report(period: str = "all", date_from: str | None = None,
             SELECT asin,
                    COUNT(*) AS appearances,
                    SUM(CASE WHEN link_opened_at IS NOT NULL THEN 1 ELSE 0 END) AS link_opens,
-                   COUNT(DISTINCT CASE WHEN link_opened_at IS NOT NULL THEN user_id END) AS unique_link_customers,
                    SUM(CASE WHEN answered=1 AND was_correct=1 THEN 1 ELSE 0 END) AS views,
                    SUM(CASE WHEN answered=1 AND COALESCE(was_correct,0)=0 THEN 1 ELSE 0 END) AS wrong_views,
                    SUM(CASE WHEN answered=0 THEN 1 ELSE 0 END) AS unanswered_views,
@@ -2366,43 +2391,6 @@ def get_admin_product_report(period: str = "all", date_from: str | None = None,
             GROUP BY asin
             ORDER BY calculated_total DESC, asin
         """, q_params).fetchall()
-        return [dict(row) for row in rows]
-
-
-def get_admin_product_link_customers(asin: str, period: str = "all",
-                                     date_from: str | None = None,
-                                     date_to: str | None = None) -> list[dict]:
-    """One row per customer who opened this product link in the report period.
-
-    The IP is the customer's last recorded IP, not necessarily their IP at click time.
-    """
-    q_where, q_params = _period_where("q.created_at", period, date_from, date_to)
-    with get_conn() as conn:
-        rows = conn.execute(f"""
-            WITH clicked AS (
-                SELECT q.user_id, COUNT(*) AS link_opens,
-                       MIN(q.link_opened_at) AS first_opened_at,
-                       MAX(q.link_opened_at) AS last_opened_at
-                FROM golden_questions q
-                WHERE q.asin=? AND q.link_opened_at IS NOT NULL AND {q_where}
-                GROUP BY q.user_id
-            )
-            SELECT c.user_id, u.username, u.first_name, u.joined_at,
-                   c.link_opens, c.first_opened_at, c.last_opened_at,
-                   COALESCE(wa.last_ip,u.last_ip) AS last_ip,
-                   geo.city AS ip_city, geo.region AS ip_region,
-                   geo.country AS ip_country, geo.status AS ip_geo_status,
-                   COALESCE(s.spin_count,0) AS spin_count
-            FROM clicked c
-            LEFT JOIN users u ON u.user_id=c.user_id
-            LEFT JOIN web_accounts wa ON wa.user_id=c.user_id
-            LEFT JOIN ip_geolocation_cache geo ON geo.ip_address=COALESCE(wa.last_ip,u.last_ip)
-            LEFT JOIN (
-                SELECT user_id, COUNT(*) AS spin_count
-                FROM lucky_spins GROUP BY user_id
-            ) s ON s.user_id=c.user_id
-            ORDER BY c.first_opened_at DESC, c.user_id
-        """, (asin, *q_params)).fetchall()
         return [dict(row) for row in rows]
 
 
