@@ -3723,9 +3723,13 @@ def list_channel_ban_review() -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute("""SELECT b.user_id, b.channel_username, b.display_name,
             b.imported_at, b.blocked_at, u.username AS wafr_username,
-            u.joined_at, u.gift_balance,
+            u.joined_at, COALESCE(u.gift_balance,0) AS gift_balance,
+            COALESCE(s.lifetime_claimed_prizes,0) AS lifetime_claimed_prizes,
             CASE WHEN u.user_id IS NOT NULL THEN 1 ELSE 0 END AS in_wafr_cash
             FROM channel_ban_review b LEFT JOIN users u ON u.user_id=b.user_id
+            LEFT JOIN (SELECT user_id, SUM(prize) AS lifetime_claimed_prizes
+                       FROM lucky_spins WHERE status='claimed' GROUP BY user_id) s
+                   ON s.user_id=b.user_id
             ORDER BY (b.blocked_at IS NOT NULL), in_wafr_cash DESC, b.user_id""").fetchall()
         return [dict(row) for row in rows]
 
