@@ -48,18 +48,8 @@ NESCAFE_DENSE_ASINS = {
     "B08Z42WY7T", "B0B5XHWN44", "B08WJPZJFH", "B0B5XGM32Z",
     "B08WJJ61WM", "B08WJKZ8M3", "B07Q3WSVYV",
 }
-# One new rollout round for every account, old or new.  Keep the order because
-# it is based on observed Amazon EPC rather than the catalog's advertised EPC.
-FIRST_ROUND_ASINS = (
-    "B0B2DPPLMW",  # Tide, observed 16.00 EGP EPC in the supplied report
-    "B09VFKCY35",  # Fairy, observed 16.93 EGP EPC in the supplied report
-    "B08WJMZM7W",  # Sharp air conditioner, observed 19.35 EGP EPC
-    "B0BF5BVRZC",  # Pampers, newly listed with High budget
-    "B0BBG7W98Z",  # Sika, budget increased from Low to High
-)
-
-# Product-level evidence only: no brand is promoted as a whole.  Base questions
-# after the rollout round are drawn from this pool in descending observed EPC.
+# Legacy EPC evidence remains for admin/history calculations. Today's ordered
+# file controls the questions in every round, including each user's first.
 PROVEN_ACTUAL_EPC = {
     "B08Z42WY7T": 1.55,
     "B08WJPZJFH": 1.40,
@@ -357,123 +347,21 @@ def choose_product(
     forced_operational_epc: float | None = None,
     forced_asin: str | None = None,
 ) -> CatalogProduct:
-    """Choose the one-time evidence-based rollout, then proven products.
+    """Choose the next eligible product in today's budget and EPC order.
 
-    The rollout round has five fixed, different ASINs ordered by observed EPC.
-    Every later base slot draws from the proven product-level pool, preferring
-    the highest observed EPC that still has an unused question type. A
-    wrong-answer replacement always stays in its original price pool.
+    The database supplies ASINs already used in this pass. Never relax that
+    exclusion: a wrong answer consumes its ASIN until the next full pass.
     """
-    catalog = load_products()
-    pools = {
-        name: [product for product in catalog if pool_type_for(product) == name]
-        for name in ("preferred_brand", "other")
-    }
-    if not pools["preferred_brand"]:
-        raise ValueError("لا توجد منتجات من Nivea/Pampers/Tide/L'Oreal Professionnel")
-    if not pools["other"]:
-        raise ValueError("لا توجد منتجات في المجموعة العامة")
-
-    proven_products = [p for p in catalog if p.asin in PROVEN_ACTUAL_EPC]
-    if not proven_products:
-        raise ValueError("لا توجد منتجات مثبتة بالأداء الفعلي في ملف المنتجات")
-
     used = used_question_types or {}
-    slot = int(question_index) % 5
-    if anchor_round and forced_pool_type is None and int(question_index) < len(FIRST_ROUND_ASINS):
-        asin = FIRST_ROUND_ASINS[int(question_index)]
-        product = _by_asin.get(asin)
-        if product is None:
-            raise ValueError(f"منتج الجولة الافتتاحية {asin} غير موجود في الملف")
-        return product
-
-    # During the fixed rollout, a wrong answer is retried with a different
-    # question about the very same ASIN. This guarantees that all five named
-    # products are opened and answered correctly, not merely any five products.
-    if forced_asin:
-        product = _by_asin.get(str(forced_asin).strip().upper())
-        if product is None:
-            raise ValueError(f"منتج السؤال البديل {forced_asin} غير موجود في الملف")
-        return product
-
-    # Fallback for non-rollout/legacy replacements: require exactly the same
-    # operational value; broad brand/pool labels are not precise enough.
-    if forced_operational_epc is not None:
-        wanted_epc = max(float(forced_operational_epc), 0.0)
-        same_value = [
-            p for p in catalog
-            if abs(reward_epc_for(p) - wanted_epc) < 1e-9
-        ]
-        candidates = [p for p in same_value if _remaining_type_count(p, used) > 0]
-        if not candidates:
-            candidates = same_value
-        if not candidates:
-            raise ValueError(f"لا توجد منتجات بديلة بقيمة EPC تشغيلية {wanted_epc:g}")
-        excluded = set(excluded_asins or set())
-        fresh = [p for p in candidates if p.asin not in excluded]
-        if fresh:
-            candidates = fresh
-        max_remaining = max(_remaining_type_count(p, used) for p in candidates)
-        best = [p for p in candidates if _remaining_type_count(p, used) == max_remaining]
-        return random.choice(best)
-
-    # Today's high-budget, >=5 EGP expected EPC products, ordered by the
-    # comparison script. Give unseen products a turn before repeating a
-    # product with another question type. Wrong answers are handled above.
-    if forced_pool_type is None and any(p.daily_priority is not None for p in catalog):
-        candidates = [p for p in catalog if p.daily_priority is not None
-                      and _remaining_type_count(p, used) > 0]
-        if not candidates:
-            raise ValueError("انتهت أنواع الأسئلة المتاحة في قائمة منتجات اليوم")
-        excluded = set(excluded_asins or set())
-        fresh = [p for p in candidates if p.asin not in excluded]
-        if fresh:
-            candidates = fresh
-        unseen = [p for p in candidates if p.asin not in (all_seen_asins or set())]
-        if unseen:
-            candidates = unseen
-        return min(candidates, key=lambda p: (p.daily_priority, p.asin))
-
-    # Compatibility with catalogs created before daily selection was added.
-    if forced_pool_type is None:
-        candidates = [p for p in proven_products if _remaining_type_count(p, used) > 0]
-        if not candidates:
-            candidates = list(proven_products)
-        excluded = set(excluded_asins or set())
-        fresh = [p for p in candidates if p.asin not in excluded]
-        if fresh:
-            candidates = fresh
-        best_epc = max(PROVEN_ACTUAL_EPC[p.asin] for p in candidates)
-        best = [p for p in candidates if PROVEN_ACTUAL_EPC[p.asin] == best_epc]
-        return random.choice(best)
-
-    desired = forced_pool_type or ("preferred_brand" if slot in (0, 1) else "other")
-    if desired not in pools:
-        desired = "other"
-
-    def unused_candidates(pool_name: str) -> list[CatalogProduct]:
-        return [p for p in pools[pool_name] if _remaining_type_count(p, used) > 0]
-
-    candidates = unused_candidates(desired)
-    if not candidates and desired == "preferred_brand":
-        # Preferred products are repeatable only after their available question
-        # types have been exhausted.
-        candidates = list(pools[desired])
-    elif not candidates:
-        candidates = list(pools["other"])
-
-    if not candidates:
-        raise ValueError("لا توجد أسئلة منتجات متاحة في أي شريحة")
-
-    # Avoid the same ASIN inside one round when possible, without preventing
-    # its other question types from being used in later rounds.
     excluded = set(excluded_asins or set())
-    fresh = [p for p in candidates if p.asin not in excluded]
-    if fresh:
-        candidates = fresh
-    max_remaining = max(_remaining_type_count(p, used) for p in candidates)
-    best = [p for p in candidates if _remaining_type_count(p, used) == max_remaining]
-    return random.choice(best)
+    candidates = [
+        p for p in load_products()
+        if p.daily_priority is not None and p.asin not in excluded
+        and _remaining_type_count(p, used) > 0
+    ]
+    if not candidates:
+        raise ValueError("لا توجد منتجات بأسئلة جديدة في المسار الحالي")
+    return min(candidates, key=lambda p: (p.daily_priority, p.asin))
 
 def _unique_timestamp_ms() -> int:
     global _last_link_timestamp
@@ -510,7 +398,7 @@ def question_for(product: CatalogProduct, excluded_types: set[str] | None = None
     ]
     all_types = available_question_types(product)
     excluded = set(excluded_types or set())
-    types = [kind for kind in all_types if kind not in excluded] or all_types
+    types = [kind for kind in all_types if kind not in excluded]
     if not types:
         raise ValueError(f"المنتج {product.asin} لا يحتوي على بيانات سؤال صالحة")
     qtype = random.choice(types)

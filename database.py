@@ -138,6 +138,12 @@ CREATE TABLE IF NOT EXISTS golden_replacement_queue (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS golden_product_rotation (
+    user_id INTEGER PRIMARY KEY,
+    pass_start_question_id INTEGER NOT NULL DEFAULT 0,
+    pass_number INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS golden_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -1630,6 +1636,67 @@ def list_all_quizzed_asins(user_id: int) -> set[str]:
     return {str(row["asin"]).strip().upper() for row in rows if row["asin"]}
 
 
+def list_current_product_pass_asins(user_id: int, eligible_asins: set[str]) -> set[str]:
+    """Persist the pass boundary; a pass restarts as soon as all usable ASINs run out.
+
+    Existing accounts keep products already asked in their unfinished round.
+    Question types are stored separately across *all* passes.
+    """
+    eligible = {a.upper() for a in eligible_asins}
+    if not eligible:
+        return set()
+    with get_conn() as conn:
+        state = conn.execute(
+            "SELECT pass_start_question_id FROM golden_product_rotation WHERE user_id=?",
+            (int(user_id),),
+        ).fetchone()
+        if state is None:
+            progress = conn.execute(
+                "SELECT golden_answered_count FROM users WHERE user_id=?", (int(user_id),)
+            ).fetchone()
+            n = int(progress["golden_answered_count"] or 0) if progress else 0
+            current = conn.execute(
+                "SELECT id FROM golden_questions WHERE user_id=? AND answered=1 ORDER BY id DESC LIMIT ?",
+                (int(user_id), n),
+            ).fetchall() if n else []
+            pending = conn.execute(
+                "SELECT id FROM golden_questions WHERE user_id=? AND answered=0 ORDER BY id DESC LIMIT 1",
+                (int(user_id),),
+            ).fetchone()
+            if pending:
+                current.append(pending)
+            last = conn.execute(
+                "SELECT COALESCE(MAX(id),0) AS id FROM golden_questions WHERE user_id=?",
+                (int(user_id),),
+            ).fetchone()["id"]
+            start = min(int(r["id"]) for r in current) - 1 if current else int(last)
+            conn.execute(
+                "INSERT INTO golden_product_rotation(user_id,pass_start_question_id) VALUES(?,?)",
+                (int(user_id), start),
+            )
+        else:
+            start = int(state["pass_start_question_id"])
+
+        rows = conn.execute(
+            """SELECT DISTINCT UPPER(asin) AS asin FROM golden_questions
+               WHERE user_id=? AND id>?""",
+            (int(user_id), start),
+        ).fetchall()
+        seen = {r["asin"] for r in rows} & eligible
+        if seen == eligible:
+            latest = conn.execute(
+                "SELECT COALESCE(MAX(id),0) AS id FROM golden_questions WHERE user_id=?",
+                (int(user_id),),
+            ).fetchone()["id"]
+            conn.execute(
+                """UPDATE golden_product_rotation SET pass_start_question_id=?,
+                   pass_number=pass_number+1 WHERE user_id=?""",
+                (int(latest), int(user_id)),
+            )
+            return set()
+        return seen
+
+
 def list_used_product_question_types(user_id: int) -> dict[str, set[str]]:
     """All distinct (ASIN, question type) pairs used for this customer."""
     with get_conn() as conn:
@@ -1894,21 +1961,8 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
                WHERE id = ?""",
             (is_correct, datetime.utcnow().isoformat(), question_id),
         )
-        if not is_correct:
-            # A wrong answer earns zero and adds one replacement at the exact
-            # same operational EPC. The round ends only after five correct.
-            conn.execute(
-                """INSERT INTO golden_replacement_queue
-                   (user_id, pool_type, operational_epc, source_asin, remaining, created_at)
-                   VALUES (?, ?, ?, ?, 1, ?)""",
-                (
-                    int(user_id),
-                    str(question["pool_type"] or "other"),
-                    float(question["epc"] or 0.0),
-                    str(question["asin"] or "").strip().upper(),
-                    datetime.utcnow().isoformat(),
-                ),
-            )
+        # A wrong answer still requires a new correct answer to complete the
+        # round, but its product is consumed for the current product pass.
         # golden_target is the required correct-answer count. Wrong answers do
         # not increase it and do not move the customer closer to completion.
         conn.execute(
@@ -1930,7 +1984,7 @@ def answer_golden_question(user_id: int, question_id: int, chosen_index: int):
         # is worth exactly 2.00 EGP, regardless of the per-question EPC reward.
         # Mark it used at completion; resets/reactivation never clear this flag.
         if (
-            int(progress["golden_answered_count"] or 0) >= int(progress["golden_target"] or 0)
+            int(progress["golden_opened_count"] or 0) >= int(progress["golden_target"] or 0)
             and int(progress["first_round_bonus_used"] or 0) == 0
         ):
             conn.execute(

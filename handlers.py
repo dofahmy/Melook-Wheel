@@ -1266,22 +1266,10 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
     answered_count = row["golden_answered_count"] if row else 0
     correct_count = row["golden_opened_count"] if row else 0
     target = row["golden_target"] if row else config.EGYPT_GOLDEN_QUESTIONS_PER_ROUND
-    anchor_active = bool(row and int(row["anchor_round_active"] or 0) == 1)
-    required_asins_complete = True
-    if anchor_active:
-        correct_asins = database.list_current_round_correct_asins(
-            user_id, answered_count
-        )
-        required_asins_complete = set(product_catalog.FIRST_ROUND_ASINS).issubset(
-            correct_asins
-        )
-    else:
-        correct_asins = set()
-
     # A round completes only after five correct answers. Every answered
     # question already requires a verified product-link click first, so this
     # also guarantees at least five clicks.
-    if correct_count >= target and required_asins_complete:
+    if correct_count >= target:
         pending = database.get_pending_lucky_spin(user_id)
         if pending:
             spin_id, prize = pending["id"], pending["prize"]
@@ -1307,40 +1295,27 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         return
 
     try:
-        asked_asins = database.list_todays_quizzed_asins(user_id)
-        all_seen_asins = database.list_all_quizzed_asins(user_id)
         used_question_types = database.list_used_product_question_types(user_id)
-        replacement = database.get_pending_replacement_pool(user_id)
-        replacement_pool = replacement["pool_type"] if replacement else None
-        replacement_epc = replacement["operational_epc"] if replacement else None
-        replacement_asin = replacement["source_asin"] if replacement else None
-        base_question_count = database.get_current_golden_base_count(
-            user_id, answered_count
-        )
-        # A queue created by an older version may have been lost in migration.
-        # Retry a missing required product instead of stalling after question 5.
-        if anchor_active and base_question_count >= len(product_catalog.FIRST_ROUND_ASINS) and not replacement_asin:
-            replacement_asin = next(
-                (asin for asin in product_catalog.FIRST_ROUND_ASINS if asin not in correct_asins),
-                None,
-            )
+        ranked = [p for p in product_catalog.load_products() if p.daily_priority is not None]
+        eligible = {
+            p.asin for p in ranked
+            if set(product_catalog.available_question_types(p)) - used_question_types.get(p.asin, set())
+        }
+        if not eligible:
+            raise ValueError("انتهت أنواع الأسئلة المختلفة لكل منتجات القائمة")
+        asked_asins = database.list_current_product_pass_asins(user_id, eligible)
+        base_question_count = database.get_current_golden_base_count(user_id, answered_count)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
-        anchor_round = database.ensure_anchor_round(user_id)
         product = product_catalog.choose_product(
             asked_asins,
             question_index=base_question_count,
             user_id=user_id,
             current_round_epc=current_round_epc,
-            all_seen_asins=all_seen_asins,
             first_round_bonus=(round_kind == "welcome"),
-            anchor_round=anchor_round,
             bonus_round=(round_kind == "bonus"),
             bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
             used_question_types=used_question_types,
-            forced_pool_type=replacement_pool,
-            forced_operational_epc=replacement_epc,
-            forced_asin=replacement_asin,
         )
         question = product_catalog.question_for(
             product,
@@ -1350,11 +1325,14 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         logger.exception("تعذر تجهيز سؤال من ملف المنتجات: %s", exc)
         await context.bot.send_message(
             chat_id=chat_id,
-            text="حصلت مشكلة مؤقتة في قراءة منتجات العجلة. جرّب تاني بعد شوية.",
+            text=("خلصت كل البنود المختلفة المتاحة في أسئلة المنتجات حاليًا. "
+                  "هنضيف بيانات جديدة للأسئلة قريبًا."
+                  if "انتهت أنواع الأسئلة" in str(exc) else
+                  "حصلت مشكلة مؤقتة في قراءة منتجات العجلة. جرّب تاني بعد شوية."),
         )
         return
 
-    effective_epc = replacement_epc if replacement_epc is not None else product_catalog.reward_epc_for(product)
+    effective_epc = product_catalog.reward_epc_for(product)
     pool_type = product_catalog.pool_type_for(product)
     reward_value = product_catalog.customer_reward_for_epc(effective_epc)
     if round_kind == "bonus":
@@ -1371,10 +1349,8 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         prompt=question["prompt"],
         options=question["options"],
         requires_link_open=True,
-        is_replacement=bool(replacement),
+        is_replacement=(answered_count > correct_count),
     )
-    if replacement_pool:
-        database.consume_pending_replacement_pool(user_id)
     database.log_quiz_asked(user_id, product.asin)
     product_link = product_catalog.build_affiliate_link(product.asin)
     # First Amazon click after an offline -> online return goes through Wafr once
