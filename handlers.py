@@ -1048,11 +1048,59 @@ def _inject_tag(url: str, tag: str) -> str:
     """بتحط تاج العميل في لينك أمازون (بتستبدل أي تاج موجود، أو تضيفه لو مفيش)."""
     from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
+    if not tag:
+        return url
     parts = urlsplit(url)
+    if (parts.hostname or "").lower() in {"amazon-eg.net", "www.amazon-eg.net"}:
+        target = _resolve_egypt_short_offer(url)
+        if not target:
+            logger.warning("تعذر فك رابط العرض المختصر لتخصيص التاج: %s", url)
+            return url
+        parts = urlsplit(target)
     query = dict(parse_qsl(parts.query))
     query["tag"] = tag
     new_query = urlencode(query)
     return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+
+
+_SHORT_OFFER_TARGETS: dict[str, str] = {}
+
+
+def _resolve_egypt_short_offer(url: str) -> str | None:
+    """Fetch the public redirect without counting a click (HEAD, no redirect)."""
+    import re
+    from urllib.error import HTTPError, URLError
+    from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https"
+            or (parsed.hostname or "").lower() not in {"amazon-eg.net", "www.amazon-eg.net"}
+            or not re.fullmatch(r"/[A-Za-z0-9_-]{8,32}/?", parsed.path)):
+        return None
+    if url in _SHORT_OFFER_TARGETS:
+        return _SHORT_OFFER_TARGETS[url]
+
+    class NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, request, fp, code, msg, headers, newurl):
+            return None
+
+    try:
+        response = build_opener(NoRedirect).open(Request(url, method="HEAD"), timeout=6)
+    except HTTPError as exc:
+        response = exc if exc.code in {301, 302, 303, 307, 308} else None
+    except (URLError, TimeoutError, OSError):
+        response = None
+    if response is None:
+        return None
+    with response:
+        target = response.headers.get("Location", "")
+    destination = urlsplit(target)
+    if (destination.scheme != "https"
+            or (destination.hostname or "").lower() not in {"amazon.eg", "www.amazon.eg"}
+            or not re.search(r"/(?:dp|gp/product)/[A-Z0-9]{10}(?:[/?]|$)", destination.path, re.I)):
+        return None
+    _SHORT_OFFER_TARGETS[url] = target
+    return target
 
 
 _AMAZON_LINK_RE = None
@@ -1261,6 +1309,21 @@ def _telegram_ip_capture_link(user_id: int, question_id: int, direct_url: str) -
     return f"https://{domain}/tg-go?{urlencode({'u': int(user_id), 'q': int(question_id), 's': sig})}"
 
 
+async def _notify_catalog_exhausted(context: ContextTypes.DEFAULT_TYPE, cairo_date: str, total: int):
+    if not database.mark_catalog_exhaustion_alert(cairo_date, total):
+        return
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=(f"🚨 منتجات أسئلة العجلة خلصت يوم {cairo_date} بتوقيت القاهرة. "
+                      f"تم استخدام {total} من {total} منتج. "
+                      "ارفعوا ملف منتجات جديد واعملوا Deploy."),
+            )
+        except Exception:
+            logger.exception("تعذر إرسال تنبيه نفاد المنتجات للأدمن %s", admin_id)
+
+
 async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int):
     row = database.get_user(user_id)
     answered_count = row["golden_answered_count"] if row else 0
@@ -1301,12 +1364,12 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         ranked = [p for p in product_catalog.load_products() if p.daily_priority is not None]
         eligible = {
             p.asin for p in ranked
-            if (p.expected_revenue_per_click < 0.25 or p.asin not in global_used)
+            if p.asin not in global_used
             if set(product_catalog.available_question_types(p)) - used_question_types.get(p.asin, set())
         }
         if not eligible:
-            raise ValueError("انتهت أنواع الأسئلة المختلفة لكل منتجات القائمة")
-        asked_asins = database.list_current_product_pass_asins(user_id, eligible)
+            raise ValueError("انتهت منتجات اليوم")
+        asked_asins = set()
         base_question_count = database.get_current_golden_base_count(user_id, answered_count)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
@@ -1348,23 +1411,36 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
                     options=question["options"],
                     requires_link_open=True,
                     is_replacement=(answered_count > correct_count),
-                    exclusive_cairo_date=(cairo_date if product.expected_revenue_per_click >= 0.25 else None),
+                    exclusive_cairo_date=cairo_date,
                 )
                 break
             except database.DailyAsinAlreadyUsed:
                 global_used.add(product.asin)
     except Exception as exc:
+        if isinstance(exc, ValueError) and (
+            "انتهت منتجات اليوم" in str(exc) or "لا توجد منتجات بأسئلة جديدة" in str(exc)
+        ):
+            catalog = [p for p in product_catalog.load_products() if p.daily_priority is not None]
+            day = datetime.now(ZoneInfo("Africa/Cairo")).date().isoformat()
+            used = database.list_daily_exclusive_asins(day)
+            if len({p.asin for p in catalog} - used) == 0:
+                await _notify_catalog_exhausted(context, day, len(catalog))
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="خلصت منتجات أسئلة العجلة المتاحة النهارده. ننتظرك بكرة مع منتجات جديدة 🛍️",
+            )
+            return
         logger.exception("تعذر تجهيز سؤال من ملف المنتجات: %s", exc)
         await context.bot.send_message(
             chat_id=chat_id,
-            text=("خلصت كل البنود المختلفة المتاحة في أسئلة المنتجات حاليًا. "
-                  "هنضيف بيانات جديدة للأسئلة قريبًا."
-                  if "انتهت أنواع الأسئلة" in str(exc) else
-                  "حصلت مشكلة مؤقتة في قراءة منتجات العجلة. جرّب تاني بعد شوية."),
+            text="حصلت مشكلة مؤقتة في قراءة منتجات العجلة. جرّب تاني بعد شوية.",
         )
         return
 
     database.log_quiz_asked(user_id, product.asin)
+    if len(global_used) >= len(ranked) - 1:
+        if not ({p.asin for p in ranked} - database.list_daily_exclusive_asins(cairo_date)):
+            await _notify_catalog_exhausted(context, cairo_date, len(ranked))
     product_link = product_catalog.build_affiliate_link(product.asin)
     # First Amazon click after an offline -> online return goes through Wafr once
     # so Railway can capture the current public IP. Later clicks stay direct.
@@ -1458,13 +1534,13 @@ async def golden_answer_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 def _extract_amazon_links(text: str) -> list[str]:
-    """بتدوّر على كل لينكات أمازون في نص البوست (amazon.eg / amzn.to / amazon.com)،
+    """بتدوّر على لينكات أمازون أو روابط الاختصار المصرية في نص البوست،
     وترجّعهم كلهم من غير تكرار وبنفس ترتيب ظهورهم."""
     global _AMAZON_LINK_RE
     if _AMAZON_LINK_RE is None:
         import re
         _AMAZON_LINK_RE = re.compile(
-            r"https?://(?:www\.)?(?:amazon\.[a-z.]+|amzn\.to)/\S+", re.IGNORECASE
+            r"https?://(?:www\.)?(?:amazon\.[a-z.]+|amzn\.to|amazon-eg\.net)/\S+", re.IGNORECASE
         )
     if not text:
         return []
