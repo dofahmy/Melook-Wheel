@@ -7,6 +7,7 @@
 أدمن مصر: /addpoints /closemonth
 مشترك: /stats /listusers /removeuser /broadcast /msg
 """
+import asyncio
 import logging
 from functools import wraps
 import json
@@ -1586,18 +1587,31 @@ async def handle_new_deal_post(update: Update, context: ContextTypes.DEFAULT_TYP
     # ثبتي نفس الـ10 عروض لكل عميل قبل إرسال الرسالة؛ حتى لو كان شاف بعضهم يدويًا قبلها.
     database.set_pending_offer_batch_for_active_egypt_users(batch_from_id, batch_to_id)
 
+    # نعلّم فقط لحد نهاية الدفعة دي، وأي عروض أحدث تفضل محسوبة للدفعة التالية.
+    database.mark_notified_up_to(batch_to_id)
+    # Broadcasting to many users (including users who blocked the bot) can
+    # take minutes. Keep processing /offers while notifications are sent.
     users = database.list_active_egypt_users()
+    context.application.create_task(
+        _send_deal_batch_notifications(context, users, batch_size),
+        name=f"offer-notifications-{batch_to_id}",
+    )
+
+
+async def _send_deal_batch_notifications(context, users, batch_size: int):
+    from telegram.error import Forbidden
+
     for u in users:
         try:
             await context.bot.send_message(
                 chat_id=u["user_id"],
                 text=f"🔥 عندك {batch_size} عروض جديدة! دوس /offers عشان تشوفهم.",
             )
-        except Exception:
-            pass
-
-    # نعلّم فقط لحد نهاية الدفعة دي، وأي عروض أحدث تفضل محسوبة للدفعة التالية.
-    database.mark_notified_up_to(batch_to_id)
+        except Forbidden:
+            # Telegram returns 403 when this customer has blocked the bot.
+            continue
+        except Exception as exc:
+            logger.warning("تعذر إرسال تنبيه العروض للعميل %s: %s", u["user_id"], exc)
 
 
 async def offers(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1721,6 +1735,23 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
     intro = await context.bot.send_message(chat_id=user_id, text=f"🔥 {len(deals)} عرض جديد:")
     database.record_sent_offer_message(user_id, intro.message_id)
 
+    # Resolve different short URLs concurrently off the event loop. One slow
+    # redirect must not delay all subsequent deals or other bot commands.
+    personal_links = {}
+    if tag:
+        distinct_links = list(dict.fromkeys(
+            link for deal in deals
+            for link in database.get_deal_links(deal["base_link"])
+        ))
+        limiter = asyncio.Semaphore(8)
+
+        async def personalize(link):
+            async with limiter:
+                return await asyncio.to_thread(_inject_tag, link, tag)
+
+        resolved_links = await asyncio.gather(*(personalize(link) for link in distinct_links))
+        personal_links = dict(zip(distinct_links, resolved_links))
+
     for deal in deals:
         original_links = database.get_deal_links(deal["base_link"])
         if not original_links:
@@ -1731,7 +1762,7 @@ async def _send_offers_flow(context: ContextTypes.DEFAULT_TYPE, user_id: int, us
         display_caption = deal["caption"]
         buttons = []
         for i, original_link in enumerate(original_links, start=1):
-            personal_link = _inject_tag(original_link, tag) if tag else original_link
+            personal_link = personal_links.get(original_link, original_link)
             display_caption = display_caption.replace(original_link, personal_link)
             label = "🛒 اشتري من هنا" if len(original_links) == 1 else f"🛒 المنتج {i}"
             buttons.append([InlineKeyboardButton(label, url=personal_link)])
