@@ -1296,9 +1296,12 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
 
     try:
         used_question_types = database.list_used_product_question_types(user_id)
+        cairo_date = datetime.now(ZoneInfo("Africa/Cairo")).date().isoformat()
+        global_used = database.list_daily_exclusive_asins(cairo_date)
         ranked = [p for p in product_catalog.load_products() if p.daily_priority is not None]
         eligible = {
             p.asin for p in ranked
+            if (p.expected_revenue_per_click < 0.25 or p.asin not in global_used)
             if set(product_catalog.available_question_types(p)) - used_question_types.get(p.asin, set())
         }
         if not eligible:
@@ -1307,20 +1310,49 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         base_question_count = database.get_current_golden_base_count(user_id, answered_count)
         current_round_epc = database.get_current_golden_round_epc(user_id, answered_count)
         round_kind = database.ensure_current_round_kind(user_id)
-        product = product_catalog.choose_product(
-            asked_asins,
-            question_index=base_question_count,
-            user_id=user_id,
-            current_round_epc=current_round_epc,
-            first_round_bonus=(round_kind == "welcome"),
-            bonus_round=(round_kind == "bonus"),
-            bonus_target_epc=(database.get_bonus_target_epc() if round_kind == "bonus" else None),
-            used_question_types=used_question_types,
-        )
-        question = product_catalog.question_for(
-            product,
-            excluded_types=used_question_types.get(product.asin, set()),
-        )
+        # A concurrent customer may claim the same ASIN between reading the
+        # pool and inserting the question. Retry against the remaining pool.
+        while True:
+            product = product_catalog.choose_product(
+                asked_asins,
+                question_index=base_question_count,
+                user_id=user_id,
+                current_round_epc=current_round_epc,
+                used_question_types=used_question_types,
+                globally_used_asins=global_used,
+            )
+            try:
+                question = product_catalog.question_for(
+                    product,
+                    excluded_types=used_question_types.get(product.asin, set()),
+                )
+            except ValueError:
+                asked_asins.add(product.asin)
+                continue
+            effective_epc = product_catalog.reward_epc_for(product)
+            pool_type = product_catalog.pool_type_for(product)
+            reward_value = product_catalog.customer_reward_for_epc(effective_epc)
+            if round_kind == "bonus":
+                reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
+            try:
+                question_id = database.create_golden_question(
+                    user_id=user_id,
+                    asin=product.asin,
+                    question_type=question["type"],
+                    correct_index=question["correct_index"],
+                    epc=effective_epc,
+                    reward_value=reward_value,
+                    raw_epc=product.expected_revenue_per_click,
+                    pool_type=pool_type,
+                    prompt=question["prompt"],
+                    options=question["options"],
+                    requires_link_open=True,
+                    is_replacement=(answered_count > correct_count),
+                    exclusive_cairo_date=(cairo_date if product.expected_revenue_per_click >= 0.25 else None),
+                )
+                break
+            except database.DailyAsinAlreadyUsed:
+                global_used.add(product.asin)
     except Exception as exc:
         logger.exception("تعذر تجهيز سؤال من ملف المنتجات: %s", exc)
         await context.bot.send_message(
@@ -1332,25 +1364,6 @@ async def _send_golden_question(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         )
         return
 
-    effective_epc = product_catalog.reward_epc_for(product)
-    pool_type = product_catalog.pool_type_for(product)
-    reward_value = product_catalog.customer_reward_for_epc(effective_epc)
-    if round_kind == "bonus":
-        reward_value = round(reward_value * database.get_bonus_multiplier(), 6)
-    question_id = database.create_golden_question(
-        user_id=user_id,
-        asin=product.asin,
-        question_type=question["type"],
-        correct_index=question["correct_index"],
-        epc=effective_epc,
-        reward_value=reward_value,
-        raw_epc=product.expected_revenue_per_click,
-        pool_type=pool_type,
-        prompt=question["prompt"],
-        options=question["options"],
-        requires_link_open=True,
-        is_replacement=(answered_count > correct_count),
-    )
     database.log_quiz_asked(user_id, product.asin)
     product_link = product_catalog.build_affiliate_link(product.asin)
     # First Amazon click after an offline -> online return goes through Wafr once

@@ -144,6 +144,14 @@ CREATE TABLE IF NOT EXISTS golden_product_rotation (
     pass_number INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS golden_daily_exclusive_asins (
+    cairo_date TEXT NOT NULL,
+    asin TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    question_id INTEGER NOT NULL,
+    PRIMARY KEY (cairo_date, asin)
+);
+
 CREATE TABLE IF NOT EXISTS golden_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -166,6 +174,11 @@ CREATE TABLE IF NOT EXISTS golden_questions (
     created_at TEXT NOT NULL,
     answered_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_golden_questions_created_asin
+    ON golden_questions(created_at, asin);
+CREATE INDEX IF NOT EXISTS idx_golden_questions_asin_created
+    ON golden_questions(asin, created_at);
 
 CREATE TABLE IF NOT EXISTS lucky_spins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1874,6 +1887,30 @@ def get_current_golden_round_epc(user_id: int, answered_count: int | None = None
     ))
 
 
+class DailyAsinAlreadyUsed(Exception):
+    """Another customer received this exclusive ASIN today."""
+
+
+def _cairo_utc_bounds(cairo_date: str) -> tuple[str, str]:
+    start = datetime.fromisoformat(cairo_date).replace(tzinfo=ZoneInfo("Africa/Cairo"))
+    end = start + timedelta(days=1)
+    return (start.astimezone(timezone.utc).replace(tzinfo=None).isoformat(),
+            end.astimezone(timezone.utc).replace(tzinfo=None).isoformat())
+
+
+def list_daily_exclusive_asins(cairo_date: str) -> set[str]:
+    """Include questions issued before deployment on the same Cairo day."""
+    start_utc, end_utc = _cairo_utc_bounds(cairo_date)
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT UPPER(asin) AS asin FROM golden_questions
+               WHERE created_at >= ? AND created_at < ?
+               UNION SELECT asin FROM golden_daily_exclusive_asins WHERE cairo_date=?""",
+            (start_utc, end_utc, cairo_date),
+        ).fetchall()
+    return {row["asin"] for row in rows}
+
+
 def create_golden_question(
     user_id: int,
     asin: str,
@@ -1888,6 +1925,7 @@ def create_golden_question(
     pool_type: str = "main",
     requires_link_open: bool = False,
     is_replacement: bool = False,
+    exclusive_cairo_date: str | None = None,
 ) -> int:
     """يسجّل السؤال وإجابته في السيرفر قبل إرساله للعميل.
 
@@ -1895,6 +1933,23 @@ def create_golden_question(
     Refresh، وفي نفس الوقت تفضل استدعاءات Telegram القديمة شغالة كما هي.
     """
     with get_conn() as conn:
+        if exclusive_cairo_date:
+            # Lock before checking the question history, so two workers cannot
+            # hand out the same ASIN to different customers simultaneously.
+            conn.execute("BEGIN IMMEDIATE")
+            start_utc, end_utc = _cairo_utc_bounds(exclusive_cairo_date)
+            owner = conn.execute(
+                """SELECT user_id FROM golden_questions
+                   WHERE asin=? AND created_at >= ? AND created_at < ?
+                   LIMIT 1""",
+                (asin.upper(), start_utc, end_utc),
+            ).fetchone()
+            claimed = conn.execute(
+                "SELECT 1 FROM golden_daily_exclusive_asins WHERE cairo_date=? AND asin=?",
+                (exclusive_cairo_date, asin.upper()),
+            ).fetchone()
+            if owner or claimed:
+                raise DailyAsinAlreadyUsed(asin)
         cur = conn.execute(
             """INSERT INTO golden_questions
                (user_id, asin, question_type, correct_index, epc, reward_value,
@@ -1918,6 +1973,12 @@ def create_golden_question(
                 datetime.utcnow().isoformat(),
             ),
         )
+        if exclusive_cairo_date:
+            conn.execute(
+                """INSERT INTO golden_daily_exclusive_asins
+                   (cairo_date, asin, user_id, question_id) VALUES(?,?,?,?)""",
+                (exclusive_cairo_date, asin.upper(), int(user_id), cur.lastrowid),
+            )
         return cur.lastrowid
 
 

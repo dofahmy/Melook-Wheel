@@ -22,17 +22,12 @@ def tier(item):
         epc = float(item.get("expectedRevenuePerClick") or 0)
     except (TypeError, ValueError):
         return None
-    if epc > 5:
-        band = 0
-    elif epc > 3:
-        band = 1
-    elif epc > 1:
-        band = 2
-    else:
+    if epc <= 0:
         return None
-    if budget == "Low" and band == 0:
-        band = 1  # Low budget: all products above 3 EGP come first.
-    return (BUDGETS.index(budget), band)
+    # High EPC ASINs are exclusive across customers for the Cairo day.
+    # Lower EPC ASINs are a reusable fallback across customers.
+    band = 0 if epc > 0.5 else 1 if epc >= 0.25 else 2
+    return (band, BUDGETS.index(budget))
 
 
 def build(old, new):
@@ -63,8 +58,8 @@ def build(old, new):
     for index, item in enumerate(ordered):
         item["dailySelection"] = {
             "rotationPriority": index,
-            "rotationTier": f"{item['budgetAvailabilityScore']}:"
-                            f"{'above_3' if tier(item) == (2, 1) else ('above_5', 'above_3', 'above_1')[tier(item)[1]]}",
+            "rotationTier": f"{('above_0_5', 'at_least_0_25', 'below_0_25')[tier(item)[0]]}:"
+                            f"{item['budgetAvailabilityScore']}",
             "newlyAdded": item["asin"].upper() not in previous,
         }
     return ordered
@@ -82,7 +77,7 @@ def main():
         parser.error("Both catalog files must contain JSON lists")
     products = build(old, new)
     if not products:
-        parser.error("No in-stock products with EPC > 1 and known budget were found")
+        parser.error("No in-stock products with EPC > 0 and known budget were found")
     args.out.write_text(json.dumps(products, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     from collections import Counter
     print(f"Saved {len(products)} products to {args.out}")

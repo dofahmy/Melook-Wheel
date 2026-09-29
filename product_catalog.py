@@ -42,12 +42,6 @@ MIN_MAIN_EPC = 1.0
 DEFAULT_OPERATIONAL_EPC = 0.01
 PREFERRED_OPERATIONAL_EPC = 0.20
 GILLETTE_OPERATIONAL_EPC = 0.05
-WELCOME_ANCHOR_ASIN = "B0017IMON0"
-NESCAFE_PRIORITY_ASINS = ("B08Z42WY7T", "B08WJPZJFH")
-NESCAFE_DENSE_ASINS = {
-    "B08Z42WY7T", "B0B5XHWN44", "B08WJPZJFH", "B0B5XGM32Z",
-    "B08WJJ61WM", "B08WJKZ8M3", "B07Q3WSVYV",
-}
 # Legacy EPC evidence remains for admin/history calculations. Today's ordered
 # file controls the questions in every round, including each user's first.
 PROVEN_ACTUAL_EPC = {
@@ -346,6 +340,7 @@ def choose_product(
     forced_pool_type: str | None = None,
     forced_operational_epc: float | None = None,
     forced_asin: str | None = None,
+    globally_used_asins: set[str] | None = None,
 ) -> CatalogProduct:
     """Choose the next eligible product in today's budget and EPC order.
 
@@ -354,9 +349,11 @@ def choose_product(
     """
     used = used_question_types or {}
     excluded = set(excluded_asins or set())
+    global_used = set(globally_used_asins or set())
     candidates = [
         p for p in load_products()
         if p.daily_priority is not None and p.asin not in excluded
+        and (p.expected_revenue_per_click < 0.25 or p.asin not in global_used)
         and _remaining_type_count(p, used) > 0
     ]
     if not candidates:
